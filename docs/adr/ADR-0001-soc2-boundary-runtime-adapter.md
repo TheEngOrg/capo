@@ -1,6 +1,6 @@
 # ADR-0001 — SOC2 V1 Boundary and Runtime Adapter Strategy
 
-**Status:** PROPOSED — pending Week 1 subprocess spike  
+**Status:** PROPOSED — stack verified via SPIKE-002 (bun build --define confirmed, ADR-0001 OQ-4 resolved). Advances to Week 1 live validation of CLI multi-turn coherence (OQ-1 through OQ-3 remain open).  
 **Date:** 2026-05-21  
 **Author:** CTO  
 **Deciders:** CTO, Sage (Step 0 planning), User  

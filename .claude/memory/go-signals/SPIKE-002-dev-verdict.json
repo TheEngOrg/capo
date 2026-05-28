@@ -1,0 +1,32 @@
+{
+  "schema_version": "1.0.0",
+  "workstream_id": "SPIKE-002",
+  "phase": "dev-spike-execution",
+  "from_agent": "dev",
+  "to_phase": "qa-validate",
+  "verdict": "GO",
+  "artifact_paths": [
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/docs/spikes/SPIKE-002.md",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/docs/spikes/SPIKE-002/sandbox/package.json",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/docs/spikes/SPIKE-002/sandbox/tsconfig.json",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/docs/spikes/SPIKE-002/sandbox/test1-render.tsx",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/docs/spikes/SPIKE-002/sandbox/test2-tty.tsx",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/docs/spikes/SPIKE-002/sandbox/test3-streaming.tsx",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/docs/spikes/SPIKE-002/sandbox/test6-define.tsx",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/docs/spikes/SPIKE-002/sandbox/dist/spike-render-arm64",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/docs/spikes/SPIKE-002/sandbox/dist/spike-render-darwin-arm64",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/docs/spikes/SPIKE-002/sandbox/dist/spike-render-linux-x64",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/docs/spikes/SPIKE-002/sandbox/dist/spike-define-arm64-a",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/docs/spikes/SPIKE-002/sandbox/dist/spike-define-arm64-b",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/docs/spikes/SPIKE-002/sandbox/dist/spike-define-arm64-c",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/docs/spikes/SPIKE-002/sandbox/dist/spike-define-arm64-d"
+  ],
+  "next_owner": "qa",
+  "timestamp": "2026-05-28T00:00:00Z",
+  "notes": {
+    "react_version_deviation": "React 19.2.0 used instead of QA-pinned 18.3.1. Ink 7.0.4 requires react>=19.2.0. Directed by Staff-Eng Round 4 memo.",
+    "react_devtools_core_workaround": "bun build --compile requires react-devtools-core installed as optional dep due to static import resolution in Ink's reconciler. Runtime behavior unchanged.",
+    "test2_manual_gap": "Test 2 TTY input not fully verified — subagent context lacks a real TTY. Bun implements setRawMode (no 'setRawMode is not a function' error). Manual verification of arrow keys, emoji, Ctrl+C required.",
+    "bun_not_system_installed": "Spike executed via npx bun@1.3.14. System install required for M1."
+  }
+}

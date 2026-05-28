@@ -1,0 +1,6 @@
+{
+  "phase": "adr-drafting",
+  "artifact_path": "docs/adr/ADR-0006-dispatch-classifier-first.md",
+  "next_owner": "cto",
+  "verdict": "DRAFTED"
+}

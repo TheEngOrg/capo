@@ -1,0 +1,10 @@
+{
+  "phase": "adr-edit-pass",
+  "verdict": "COMPLETE",
+  "artifact_paths": [
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/docs/adr/ADR-0005-stack-bun-ink-typescript.md",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/docs/adr/ADR-0006-dispatch-classifier-first.md",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/docs/adr/ADR-0001-soc2-boundary-runtime-adapter.md"
+  ],
+  "next_owner": "sage"
+}

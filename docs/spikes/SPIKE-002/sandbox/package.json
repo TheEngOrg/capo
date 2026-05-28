@@ -1,0 +1,24 @@
+{
+  "name": "spike-002-sandbox",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "test1": "bun run test1-render.tsx",
+    "test2": "bun run test2-tty.tsx",
+    "test3": "bun run test3-streaming.tsx",
+    "test6": "bun run test6-define.tsx"
+  },
+  "dependencies": {
+    "ink": "7.0.4",
+    "react": "19.2.0",
+    "ink-text-input": "6.0.0",
+    "ink-spinner": "5.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "19.1.0",
+    "typescript": "5.4.5"
+  },
+  "optionalDependencies": {
+    "react-devtools-core": "^7.0.1"
+  }
+}

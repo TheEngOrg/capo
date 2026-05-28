@@ -1,0 +1,12 @@
+{
+  "schema_version": "1.0.0",
+  "workstream_id": "SPIKE-002",
+  "phase": "qa-spec",
+  "from_agent": "qa",
+  "to_phase": "dev",
+  "artifact_paths": [
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/docs/spikes/SPIKE-002.md",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/docs/spikes/SPIKE-002/sandbox"
+  ],
+  "timestamp": "2026-05-28T22:22:27Z"
+}

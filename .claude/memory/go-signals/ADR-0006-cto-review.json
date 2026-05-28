@@ -1,0 +1,30 @@
+{
+  "phase": "adr-cto-review",
+  "artifact_path": "docs/adr/ADR-0006-dispatch-classifier-first.md",
+  "verdict": "ACCEPT-WITH-EDITS",
+  "next_owner": "technical-writer",
+  "reviewed_by": "cto",
+  "review_date": "2026-05-28",
+  "edits_required": [
+    {
+      "section": "Open Questions — OQ-2",
+      "action": "Add CTO ruling and PM consultation flag",
+      "detail": "CTO ruling: default UNKNOWN to ARCHITECTURAL as the safe fallback in M1. Rationale: in M1 both pipelines are stubs rendering 'not yet implemented'. A mis-route to ARCHITECTURAL costs no more than a mis-route to MECHANICAL — the user sees a stub either way. The risk of surfacing UNKNOWN to the user (prompting them to rephrase before anything renders) is higher friction than a wrong-but-visible stub route, especially since the routing decision is already displayed inline via [→ architectural]. However, this touches user-visible UX behavior, which is PM territory. Flag OQ-2 as requiring explicit PM sign-off before M1 spec is finalized. Update Status to: 'OPEN — CTO default: route UNKNOWN to ARCHITECTURAL; requires PM sign-off before M1 spec locks.'"
+    },
+    {
+      "section": "Open Questions — OQ-3",
+      "action": "Add CTO ruling — lock before M1 spec, not defer",
+      "detail": "CTO ruling: OQ-3 must be resolved before M1 implementation begins — technical-writer's 'lock before implementation' flag is correct. My call: use '<route>: <text>' format (colon-separated). Rationale: it mirrors the existing verb-prefix syntax that M2 Hybrid C will introduce, which means the history format is forward-compatible with the M2 power-user surface. The pipe-separated and bracket variants don't have that property. Staff-Engineer and PM should validate this choice is parseable for audit tooling before spec locks — but the default is '<route>: <text>' unless they surface a concrete parsing objection. Update Status to: 'CTO CALL: use <route>: <text> format. Staff-Engineer + PM validate parseability before M1 spec locks. Close this OQ in M1 spec — do not carry it open into implementation.'"
+    }
+  ],
+  "items_confirmed_accurate": [
+    "Classifier output is binary (MECHANICAL | ARCHITECTURAL | UNKNOWN) — correct per Round 3 user decision",
+    "Classifier is rule-based heuristic, no LLM in M1 — correct per Round 3+4 recommendation",
+    "Single-stage classifier (two-stage intent+depth proposal explicitly collapsed by user) — captured accurately",
+    "Inline routing display ([→ mechanical]) consistent with Round 3 panel design recommendation",
+    "Verb-prefix deferred to M2 Hybrid C — correct per Round 3 user decision",
+    "3-of-4 leader convergence on classifier-first accurately stated",
+    "Pipeline stubs in M1 correctly characterized",
+    "Dispatcher pattern reference to .claude/CLAUDE.md resolves correctly — Tier 1 + Tier 2 pattern match is the direct analogue"
+  ]
+}

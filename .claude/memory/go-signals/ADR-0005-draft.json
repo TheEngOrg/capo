@@ -1,0 +1,6 @@
+{
+  "phase": "adr-drafting",
+  "artifact_path": "docs/adr/ADR-0005-stack-bun-ink-typescript.md",
+  "next_owner": "cto",
+  "verdict": "DRAFTED"
+}

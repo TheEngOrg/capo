@@ -1,0 +1,133 @@
+#!/usr/bin/env bash
+# ============================================================================
+# teo-issue-identity-token - Issue an AGENT_IDENTITY_TOKEN for a spawn
+# ============================================================================
+# Called by Sage BEFORE invoking the Task tool or runtime.spawn(), to bind a
+# spawn-time identity (UUID v4 + role + workstream_id) that downstream
+# consumers (memory write wrapper, SendMessage envelope, security-events log)
+# can resolve without trusting agent-supplied input.
+#
+# Per ADR-017 Amendment 1 (dual-mechanism delivery):
+#   - Writes a record to .claude/memory/identity-tokens/<execution_id>.json
+#     (Task-tool path)
+#   - Prints the token string to stdout so the caller can inject it as the
+#     AGENT_IDENTITY_TOKEN env var (runtime.spawn path)
+#
+# IMPORTANT: the <execution_id> you pass MUST come from a non-agent-influenced
+# channel (e.g., a Sage-generated UUID). Passing agent-supplied input here
+# breaks the MINJA defense on the Task-tool surface (ADR-017 Amendment 1
+# execution_id-resolution invariant).
+#
+# Usage:
+#   teo-issue-identity-token <execution_id> <role> <workstream_id|->
+#
+# Pass "-" for workstream_id for ad-hoc (non-workstream) spawns.
+# Stdout: the token string (base64url encoded JSON payload).
+# Exit 0 = success, Exit 1 = error
+# ============================================================================
+
+set -euo pipefail
+
+# HMAC FORWARD CONSTRAINT (L7-09, AC-09-3):
+# If L7-08 (RAG retrieval MCP) is ever undeferred, this token MUST be upgraded
+# to HMAC-signed before MCP treats it as retrieval RBAC credential. Hard precondition — not a follow-up. Reference: ADR-044, Section 5.
+# Current format (base64url JSON) is NOT cryptographically non-forgeable; an
+# agent can decode and re-encode with forged role claims. For memory-provenance
+# (current use), the wrapper is authoritative and forgery is blocked. For
+# retrieval RBAC (future use), token signing becomes mandatory.
+
+error() {
+    echo "Error: $1" >&2
+    exit 1
+}
+
+show_help() {
+    sed -n '2,26p' "$0"
+    exit 0
+}
+
+if [[ "${1:-}" == "-h" ]] || [[ "${1:-}" == "--help" ]] || [[ $# -eq 0 ]]; then
+    show_help
+fi
+
+if [[ $# -ne 3 ]]; then
+    error "expected 3 args: execution_id role workstream_id|-"
+fi
+
+EXECUTION_ID="$1"
+ROLE="$2"
+WS_ID_ARG="$3"
+
+# Locate repo root — .claude/memory is the anchor
+REPO_ROOT="$(pwd)"
+while [[ "$REPO_ROOT" != "/" ]] && [[ ! -d "$REPO_ROOT/.claude/memory" ]]; do
+    REPO_ROOT="$(dirname "$REPO_ROOT")"
+done
+if [[ ! -d "$REPO_ROOT/.claude/memory" ]]; then
+    error "could not locate .claude/memory — run from inside a TEO repo"
+fi
+
+TOKENS_DIR="$REPO_ROOT/.claude/memory/identity-tokens"
+mkdir -p "$TOKENS_DIR"
+
+TOKEN_FILE="$TOKENS_DIR/${EXECUTION_ID}.json"
+if [[ -e "$TOKEN_FILE" ]]; then
+    error "identity token already exists for execution_id=$EXECUTION_ID (duplicate issuance refused)"
+fi
+
+JQ_PATH=$(command -v jq) || error "jq not found in PATH"
+ISSUED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+# Normalize workstream_id to JSON null or JSON string
+if [[ "$WS_ID_ARG" == "-" ]]; then
+    WS_JSON="null"
+else
+    WS_JSON=$("$JQ_PATH" -cn --arg v "$WS_ID_ARG" '$v')
+fi
+
+# Generate UUID v4 for agent_id — POSIX fallback: uuidgen, else /dev/urandom
+if command -v uuidgen > /dev/null; then
+    AGENT_ID=$(uuidgen | tr '[:upper:]' '[:lower:]')
+else
+    # Fallback: RFC 4122 v4 from /dev/urandom via awk
+    AGENT_ID=$(
+        awk 'BEGIN{
+            "od -An -N16 -tx1 /dev/urandom" | getline raw
+            gsub(/[^0-9a-f]/, "", raw)
+            # Set version (4) and variant (8,9,a,b) nibbles
+            printf "%s-%s-4%s-%s%s-%s\n",
+                substr(raw,1,8),
+                substr(raw,9,4),
+                substr(raw,14,3),
+                substr("89ab", int(rand()*4)+1, 1),
+                substr(raw,18,3),
+                substr(raw,21,12)
+        }'
+    )
+fi
+
+# Build token payload: base64url({"agent_id":..., "role":..., "workstream_id":...})
+PAYLOAD_JSON=$("$JQ_PATH" -cn \
+    --arg aid "$AGENT_ID" \
+    --arg r "$ROLE" \
+    --argjson ws "$WS_JSON" \
+    '{agent_id: $aid, role: $r, workstream_id: $ws}')
+
+# base64url: swap + → -, / → _, strip trailing =
+TOKEN=$(printf '%s' "$PAYLOAD_JSON" | base64 | tr '+/' '-_' | tr -d '=\n')
+
+# Write record file atomically (tmp + mv)
+TMP_FILE="${TOKEN_FILE}.tmp.$$"
+"$JQ_PATH" -n \
+    --arg eid "$EXECUTION_ID" \
+    --arg aid "$AGENT_ID" \
+    --arg r "$ROLE" \
+    --argjson ws "$WS_JSON" \
+    --arg tok "$TOKEN" \
+    --arg ts "$ISSUED_AT" \
+    '{execution_id: $eid, agent_id: $aid, role: $r, workstream_id: $ws, token: $tok, issued_at: $ts}' \
+    > "$TMP_FILE"
+mv "$TMP_FILE" "$TOKEN_FILE"
+
+# Emit token to stdout for env-var injection caller
+printf '%s\n' "$TOKEN"

@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck (project references)
+        run: pnpm typecheck
+
+      - name: Lint (boundary enforcement)
+        run: pnpm lint
+
+      - name: Test
+        run: pnpm test
+
+  spec-gate:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/greenfield/spec'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Spec exhaustiveness gate
+        # Validates that AgentIdentity, SpawnOptions, AuditEntry are exhaustively typed.
+        # See docs/adr/0002-greenfield-interfaces.md.
+        # The gate file (packages/core/src/__spec__/exhaustive.ts) intentionally fails
+        # to compile if any required field is optional, missing, or mis-typed.
+        run: pnpm --filter @teo/core exec tsc --noEmit

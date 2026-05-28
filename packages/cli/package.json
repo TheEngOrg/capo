@@ -1,0 +1,27 @@
+{
+  "name": "@teo/cli",
+  "version": "1.0.0-pre.0",
+  "description": "TEO CLI binary — REPL (teo) and daemon (teo serve) entry points",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "teo": "./dist/bin/teo.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@teo/core": "workspace:*"
+  },
+  "devDependencies": {}
+}

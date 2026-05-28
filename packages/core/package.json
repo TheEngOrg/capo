@@ -1,0 +1,22 @@
+{
+  "name": "@teo/core",
+  "version": "1.0.0-pre.0",
+  "description": "TEO core runtime — ControlPlane, spawn, PolicyEnforcement, GovernanceLogger, ProcessEngine, AgentRegistry, identity tokens",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}

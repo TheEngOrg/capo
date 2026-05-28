@@ -1,0 +1,27 @@
+{
+  "name": "@teo/mcp-server",
+  "version": "1.0.0-pre.0",
+  "description": "TEO MCP server — exposes TEO tooling to MCP-compatible clients (Claude Desktop, etc.)",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "teo-mcp-server": "./dist/bin/teo-mcp-server.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@teo/core": "workspace:*"
+  },
+  "devDependencies": {}
+}

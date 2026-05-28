@@ -21,6 +21,7 @@ bun.lockb
 # TEO session-local state — kept out of git
 .claude/memory/traces/
 .claude/memory/pipeline/
+.claude/agent-memory/
 
 # Spike sandbox compiled artifacts (derivable, large)
 docs/spikes/SPIKE-002/sandbox/dist/

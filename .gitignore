@@ -10,7 +10,7 @@ coverage/
 .vitest/
 
 # Bun output
-bun.lockb
+# bun.lockb is committed — required for bun install --frozen-lockfile in CI
 
 # Editor
 .vscode/

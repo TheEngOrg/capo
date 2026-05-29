@@ -1,0 +1,8 @@
+[install]
+# Install optional dependencies (react-devtools-core) by default.
+# Required for bun build --compile to resolve Ink's devtools conditional import.
+optional = true
+
+[install.lockfile]
+# Commit the lockfile — required for bun install --frozen-lockfile in CI.
+save = true

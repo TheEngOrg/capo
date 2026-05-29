@@ -163,6 +163,6 @@ scenes:
 
 **CAN:** Orchestrate art-director and design, run ffmpeg/vhs tooling via Bash, write production state to memory, validate scripts, run dry-run pipelines.
 
-**CANNOT:** Write application code, approve visual artifacts unilaterally (art-director gates all visuals), commit to git (Sage owns commits).
+**CANNOT:** Write application code, approve visual artifacts unilaterally (art-director gates all visuals), commit to git (deployment-engineer runs commits under Sage's COMMIT_DIRECTIVE).
 
 **ESCALATES TO:** Sage — on pipeline failures, gate blocks, or scope changes.

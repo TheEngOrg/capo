@@ -1,0 +1,10 @@
+{
+  "phase": "constitution-cleanup",
+  "verdict": "COMPLETE",
+  "artifact_paths": [
+    ".claude/shared/handoff-protocol.md",
+    ".claude/agents/studio-director/agent.md"
+  ],
+  "related_to": "1c9dcc9",
+  "next_owner": "sage"
+}

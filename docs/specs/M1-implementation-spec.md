@@ -83,9 +83,6 @@ the-eng-org/
   "name": "teo",
   "version": "0.1.0",
   "description": "TEO — Team Orchestration for Claude Code",
-  "bin": {
-    "teo": "./dist/teo"
-  },
   "engines": {
     "bun": ">=1.3.14"
   },
@@ -118,6 +115,7 @@ the-eng-org/
 ```
 
 **Notes:**
+- No `bin` field — M1 distributes as a tarball of compiled binaries (see Section 6), not an npm-installable package. `bin` isn't meaningful here and was removed to avoid confusion.
 - `commander@^12` for `--version`, `--help`, `--debug` flag parsing. Ink doesn't expose a CLI parsing layer; Commander handles the pre-render argument dispatch so `teo --version` exits without spinning up an Ink render loop.
 - `react-devtools-core` as `optionalDependencies` — the `bun build --compile` bundler requires it to resolve Ink 7.0.4's conditional `./devtools.js` import (SPIKE-002 Test 4 finding). Never executes at runtime unless `DEV=true`. Must be in `optionalDependencies`, not `devDependencies`, so it's present in the compile environment.
 - No `node` engine field — Bun is the runtime. Node isn't required on user machines.

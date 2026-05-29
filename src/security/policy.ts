@@ -1,7 +1,8 @@
 // src/security/policy.ts
 //
-// Pass 1: PolicyEnforcement.preflight() validates token is non-null with non-empty token_id.
-// Pass 2: No additional business logic needed in M1 — this is the full M1 spec.
+// PolicyEnforcement.preflight() validates that the identity token is non-null with a non-empty token_id.
+// This is the complete M1 implementation per M1-implementation-spec.md Section 5.
+// Additional policy checks land in a future milestone when the spec evolves beyond the SOC2 baseline.
 
 import type { IdentityToken } from './identity.js';
 
@@ -10,6 +11,5 @@ export class PolicyEnforcement {
     if (!token || !token.token_id) {
       throw new Error('preflight failed: invalid or missing identity token');
     }
-    // Pass 2: additional policy checks as spec evolves.
   }
 }

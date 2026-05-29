@@ -4,9 +4,6 @@
   "description": "TEO — Team Orchestration for Claude Code",
   "license": "MIT",
   "type": "module",
-  "bin": {
-    "teo": "./dist/teo"
-  },
   "engines": {
     "bun": ">=1.3.14"
   },

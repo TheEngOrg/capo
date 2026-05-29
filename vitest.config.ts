@@ -27,6 +27,7 @@ export default defineConfig({
         'src/ui/**',
         'src/cli/**',
         'node_modules/**',
+        '**/keys.ts',
       ],
       thresholds: {
         // Global floor — safety net, not primary gate (D-003).

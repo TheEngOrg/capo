@@ -1,16 +1,28 @@
 // src/ui/Prompt.tsx
 //
-// Pass 1: Stub — renders "teo> " prefix only, no real TextInput.
-// Pass 2: Wire ink-text-input and onSubmit callback.
+// Pass 2: Renders "teo> " prefix + ink-text-input TextInput.
+// Calls onSubmit on Enter and clears the input field.
 
-import React from 'react';
-import { Text } from 'ink';
+import React, { useState } from 'react';
+import { Box, Text } from 'ink';
+import TextInput from 'ink-text-input';
 
 export interface PromptProps {
   onSubmit: (value: string) => void;
 }
 
-export function Prompt(_props: PromptProps): React.ReactElement {
-  // Pass 2: render TextInput with "teo> " prefix via ink-text-input.
-  return <Text>teo&gt; (stub)</Text>;
+export function Prompt({ onSubmit }: PromptProps): React.ReactElement {
+  const [value, setValue] = useState('');
+
+  const handleSubmit = (submitted: string): void => {
+    setValue('');
+    onSubmit(submitted);
+  };
+
+  return (
+    <Box>
+      <Text>teo&gt; </Text>
+      <TextInput value={value} onChange={setValue} onSubmit={handleSubmit} />
+    </Box>
+  );
 }

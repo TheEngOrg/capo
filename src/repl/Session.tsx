@@ -1,16 +1,32 @@
 // src/repl/Session.tsx
 //
-// Pass 1: Stub component — renders placeholder only.
-// Pass 2: Implement full REPL loop per staff-eng Section 5.
+// Pass 2: Full REPL loop — owns history state, wires useSubmit, renders Output + Prompt.
 
-import React from 'react';
-import { Text } from 'ink';
+import React, { useState, useCallback } from 'react';
+import { Box } from 'ink';
+import { Output } from '../ui/Output.js';
+import { Prompt } from '../ui/Prompt.js';
+import { useSubmit } from './useSubmit.js';
+import type { HistoryItem } from './types.js';
 
 export interface SessionProps {
   debug: boolean;
+  token_id?: string;
 }
 
-export function Session(_props: SessionProps): React.ReactElement {
-  // Pass 2: render <Output items={history} /> and <Prompt onSubmit={handleSubmit} />.
-  return <Text>teo session (stub)</Text>;
+export function Session({ debug, token_id = '' }: SessionProps): React.ReactElement {
+  const [history, setHistory] = useState<HistoryItem[]>([]);
+
+  const onHistory = useCallback((item: HistoryItem) => {
+    setHistory(prev => [...prev, item]);
+  }, []);
+
+  const handleSubmit = useSubmit({ token_id, debug, onHistory });
+
+  return (
+    <Box flexDirection="column">
+      <Output items={history} />
+      <Prompt onSubmit={handleSubmit} />
+    </Box>
+  );
 }

@@ -5,6 +5,10 @@
 // Pass 1: stub declaration. Pass 2: no change needed — this is the M1 spec.
 //
 // ADR-0005 OQ-3: verify long-PEM --define behavior before M1 release build is cut.
+//
+// Coverage: this file is excluded from Vitest coverage (vitest.config.ts **/keys.ts).
+// RELEASE_PUBLIC_KEY is a compile-time --define inject that cannot be set under
+// Vitest/Node, making the try/catch branches impossible to exercise headlessly.
 
 declare const RELEASE_PUBLIC_KEY: string;
 

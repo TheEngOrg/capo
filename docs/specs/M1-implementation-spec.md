@@ -373,7 +373,11 @@ export function classify(input: string): RouteDecision {
 
 **Identity token**
 
-`issueIdentityToken()` is called once in `<App />` on mount via `useEffect([], ...)`. It generates a UUID v4 `token_id`, a UUID v4 `session_id`, current timestamp, and computes HMAC-SHA256 over `${token_id}:${session_id}:${issued_at}` using a session-local secret (random 32 bytes generated at startup). The token is stored in `App` state and passed down as a prop. If `--debug`, `writeAuditEvent({ type: 'token_issued', token_id, timestamp })` is called immediately after issuance.
+`issueIdentityToken()` is called once in `<AppInner />`, synchronously during the render phase, guarded by a `useRef<IdentityToken | null>(null)`. The guard checks `if (tokenRef.current === null)` before calling `issueIdentityToken()` — this ensures issuance runs exactly once per session and is skipped on all subsequent renders. It generates a UUID v4 `token_id`, a UUID v4 `session_id`, current timestamp, and computes HMAC-SHA256 over `${token_id}:${session_id}:${issued_at}` using a session-local secret (random 32 bytes generated at startup). The token is read from the ref after issuance and passed down as a prop. If `--debug`, `writeAuditEvent({ type: 'token_issued', token_id, timestamp })` is called immediately after issuance, still within the guard block.
+
+**Why synchronous render-time issuance, not `useEffect`.** React's `ErrorBoundary.getDerivedStateFromError` only catches errors thrown during the render phase. Errors thrown inside `useEffect` callbacks bypass `ErrorBoundary` entirely and crash raw. T-34 (PM floor) requires that identity-token issuance failure surfaces to the user as a human-readable message. That requirement can only be satisfied if the throw happens during render, where `<ErrorBoundary />` can intercept it. Issuing inside `useEffect` would silently drop the error past the boundary.
+
+*Correction note: the original spec prescribed `useEffect([], ...)` for token issuance. This was discovered to be incorrect during Pass 2b implementation. The `useRef`-during-render pattern above is the correct prescription. qa-validate independently confirmed the once-only invariant holds across rerenders via test T-37.*
 
 **PolicyEnforcement.preflight()**
 

@@ -27,3 +27,7 @@ coverage/
 # Spike sandbox compiled artifacts (derivable, large)
 docs/spikes/SPIKE-002/sandbox/dist/
 docs/spikes/SPIKE-002/sandbox/node_modules/
+
+# OQ-3 / spike probe binaries (derivable, large)
+/oq3-probe
+/oq3-case-*

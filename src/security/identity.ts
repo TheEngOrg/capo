@@ -1,7 +1,10 @@
 // src/security/identity.ts
 //
-// Pass 1: issueIdentityToken() returns a static placeholder token.
-// Pass 2: Implement UUID v4 generation and HMAC-SHA256 per staff-eng Section 5.
+// issueIdentityToken(): generates a fresh identity token with UUID v4 ids and
+// HMAC-SHA256 integrity signature. Uses node:crypto so it works under both Bun
+// (runtime) and Node (Vitest workers — see D-002).
+
+import { randomUUID, randomBytes, createHmac } from 'node:crypto';
 
 export interface IdentityToken {
   token_id: string;     // UUID v4
@@ -11,11 +14,17 @@ export interface IdentityToken {
 }
 
 export function issueIdentityToken(): IdentityToken {
-  // Pass 2: implement real UUID v4 + HMAC-SHA256.
-  return {
-    token_id: 'placeholder-token-id',
-    session_id: 'placeholder-session-id',
-    issued_at: new Date().toISOString(),
-    hmac: 'placeholder-hmac',
-  };
+  const token_id = randomUUID();
+  const session_id = randomUUID();
+  const issued_at = new Date().toISOString();
+
+  // Session-local secret: 32 random bytes generated fresh at each issuance.
+  // The secret is not stored — HMAC is used purely for structural integrity
+  // (detects accidental field mutation, not adversarial forgery at M1).
+  const secret = randomBytes(32);
+  const hmac = createHmac('sha256', secret)
+    .update(`${token_id}:${session_id}:${issued_at}`)
+    .digest('hex');
+
+  return { token_id, session_id, issued_at, hmac };
 }

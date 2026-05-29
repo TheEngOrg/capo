@@ -1,15 +1,29 @@
 // src/audit/log.ts
 //
-// Pass 1: writeAuditEvent() is a stub — no-op.
-// Pass 2: Implement XDG-compliant JSONL append per staff-eng Section 5.
+// writeAuditEvent(): appends a JSONL record to the XDG-compliant audit log.
+// Uses node:fs / node:os / node:path — works under both Bun and Node (D-002).
+//
+// IMPORTANT: The caller is responsible for hashing raw input to SHA-256 before
+// building the AuditEvent. Plaintext input MUST NOT appear in the log — only
+// the input_hash field (see AuditEvent type). This module does not re-hash;
+// it writes whatever is on the event object verbatim. The test contract confirms:
+// plaintext is never in the written line, only input_hash.
 
-import type { AuditEvent } from './types.js';
+import { appendFileSync, mkdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { homedir } from 'node:os';
 
 export type { AuditEvent, AuditEventType } from './types.js';
+import type { AuditEvent } from './types.js';
 
-export function writeAuditEvent(_event: AuditEvent): void {
-  // Pass 2: implement fs.appendFileSync writing ${JSON.stringify(event)}\n
-  // Path: ${XDG_STATE_HOME ?? ~/.local/state}/teo/audit.log
-  // Input is hashed (SHA-256) before inclusion — plaintext never written.
-  return;
+export function auditLogPath(): string {
+  const stateDir = process.env.XDG_STATE_HOME ?? join(homedir(), '.local', 'state');
+  return join(stateDir, 'teo', 'audit.log');
+}
+
+export function writeAuditEvent(event: AuditEvent): void {
+  const logPath = auditLogPath();
+  const dir = join(logPath, '..');
+  mkdirSync(dir, { recursive: true });
+  appendFileSync(logPath, `${JSON.stringify(event)}\n`, 'utf8');
 }

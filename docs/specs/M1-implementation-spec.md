@@ -212,7 +212,7 @@ export const MECHANICAL_PATTERNS: RegExp[] = [
   /\bshow\s+(me\s+)?(the\s+)?/i,
   /\b(get|fetch|retrieve)\b/i,
   /\b(check|validate|verify)\b/i,
-  /\b(install|uninstall|add|remove)\s+\w/i,
+  /\b(install|uninstall|add|remove)\s+the\s+\w/i,
   /\b(build|compile)\b/i,
   /\b(deploy|ship|release)\b/i,
   /\bopen\s+(file|the\s+file)/i,
@@ -220,13 +220,19 @@ export const MECHANICAL_PATTERNS: RegExp[] = [
   /\bwrite\s+(to\s+)?(file|the\s+file)/i,
   /\bdelete\s+(file|the\s+file|this)/i,
   /\bcurrent\s+directory\b/i,
-  /\bwhat\s+is\s+the\s+/i,
-  /\bwhat'?s\s+(in|the)\s+/i,
+  /\bwhat\s+is\s+the\s+(?!best\b)/i,
+  /\bwhat('?s|\s+is)\s+(in|the)\s+(?!best\b)/i,
   /\bprint\s+(the\s+)?\w/i,
   /\bgit\s+(status|log|diff|add|commit|push|pull)\b/i,
   /\b(start|stop|restart)\s+\w/i,
 ];
 ```
+
+**Pass 2a corrections (entries 6, 14, 15):** Three patterns were tightened after T-19/T-20 caught real routing bugs and qa-validate confirmed them as REAL_SPEC_BUG. The original patterns fired on architectural-intent inputs before ARCHITECTURAL_PATTERNS could be evaluated:
+
+- Entry 6 (`add/remove`): narrowed from `\s+\w` to `\s+the\s+\w` — the verbatim form routed `what if we add caching` and `should we add support for oauth` as MECHANICAL, silencing the `what if` / `should we` ARCHITECTURAL patterns.
+- Entry 14 (`what is the`): added `(?!best\b)` negative lookahead — the verbatim form routed `what is the best way to handle auth` as MECHANICAL, silencing the `best (approach|way|...)` ARCHITECTURAL pattern.
+- Entry 15 (`what's in/the`): two fixes — extended alternation to `('?s|\s+is)` to also catch the full-word form `what is in the folder` (verbatim only matched the contraction `what's`), and added the same `(?!best\b)` lookahead so `what's the best way` routes ARCHITECTURAL.
 
 **ARCHITECTURAL_PATTERNS** — design, planning, multi-step reasoning:
 

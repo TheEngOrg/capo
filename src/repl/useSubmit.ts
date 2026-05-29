@@ -53,6 +53,8 @@ export function useSubmit({ token_id, debug, onHistory }: UseSubmitOptions): (in
     // Step 4: audit log if debug.
     if (debug) {
       writeAuditEvent({ type: 'preflight_called', token_id, timestamp: new Date().toISOString() });
+      process.stderr.write('[debug] preflight_called: ' + token_id + '\n');
+      process.stderr.write('[debug] classify: matched_pattern=' + String(decision.matched_pattern) + ' route=' + decision.route + '\n');
     }
 
     // Step 5: append to history state via callback.

@@ -16,6 +16,23 @@
 // Manual-TTY cases in this file:
 //   Step 2 timing (<2000ms cold start): T-06 is marked manual-TTY; we automate
 //   the exit-code assertion (T-14) but not the timing assertion (T-52/T-53).
+//
+// ============================================================================
+// FIDELITY NOTE (FIX cycle, 2026-05-29) — Steps 2 and 6
+// ============================================================================
+//
+// Steps 2 and 6 spawn the binary with `input: ''` (piped empty stdin). This tests
+// the PIPED EOF code path: empty stdin → OS delivers EOF on the pipe → App.tsx's
+// `stdin.on('end')` useEffect fires → exit(0).
+//
+// This is NOT a test of interactive Ctrl+D behavior. Piped EOF and raw-mode Ctrl+D
+// are different code paths. The interactive Ctrl+D path (\x04 byte in raw mode)
+// has a BUG: it inserts 'd' into the TextInput instead of exiting. That bug is
+// tested and documented in tests/repl/keys.test.tsx (BUG-2).
+//
+// Labels on Steps 2 and 6 have been updated to say "piped EOF" rather than "Ctrl+D"
+// to avoid the false implication of interactive key coverage.
+// ============================================================================
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render } from 'ink-testing-library';
@@ -115,10 +132,13 @@ describe('Golden path: PM Section 7 smoke scenario (Pass 2)', () => {
     expect(result.stdout.trim()).toBe(pkg.version);
   });
 
-  // Step 2: teo opens REPL with "teo> " prompt, and exits cleanly on EOF.
+  // Step 2: teo opens REPL with "teo> " prompt, and exits cleanly on piped EOF.
   // T-06 timing (<2000ms) is MANUAL-TTY — see todo below.
   // T-14 exit-code is automated.
-  it('Step 2 — teo opens REPL: exits cleanly on EOF (Ctrl+D), no stack trace', () => {
+  //
+  // FIDELITY NOTE: `input: ''` triggers piped EOF (stdin 'end' event in App.tsx).
+  // This does NOT test interactive Ctrl+D (\x04 keystroke in raw mode). See keys.test.tsx BUG-2.
+  it('Step 2 — teo opens REPL: exits cleanly on piped EOF (NOT interactive Ctrl+D), no stack trace', () => {
     const result = spawnSync(bunExec, [entryPoint], {
       cwd: rootDir,
       encoding: 'utf8',
@@ -211,8 +231,10 @@ describe('Golden path: PM Section 7 smoke scenario (Pass 2)', () => {
     expect(stubOutput).toContain(input);
   });
 
-  // Step 6: Ctrl+D → exit 0 (also covered in session.test.tsx T-14)
-  it('Step 6 — Ctrl+D (EOF) exits with code 0, no stack trace in stderr', () => {
+  // Step 6: piped EOF → exit 0 (also covered in session.test.tsx T-14).
+  // FIDELITY NOTE: `input: ''` tests piped EOF, NOT interactive Ctrl+D (\x04 byte).
+  // The interactive Ctrl+D bug is covered in tests/repl/keys.test.tsx BUG-2.
+  it('Step 6 — piped EOF (NOT interactive Ctrl+D) exits with code 0, no stack trace in stderr', () => {
     const result = spawnSync(bunExec, [entryPoint], {
       cwd: rootDir,
       encoding: 'utf8',

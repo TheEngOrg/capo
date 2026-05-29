@@ -9,6 +9,27 @@
 // Manual-TTY cases marked with it.todo() — cannot be automated without a real TTY:
 //   T-13 key-event half: actual Ctrl+C signal delivery requires a real TTY.
 //   T-06: cold-start timing requires a real TTY.
+//
+// ============================================================================
+// FIDELITY NOTE (FIX cycle, 2026-05-29)
+// ============================================================================
+//
+// T-14 here tests PIPED EOF (stdin receives EOF from `input: ''` → `stdin.on('end')`
+// fires → App.tsx useEffect calls exit()). This is NOT the same as an interactive
+// Ctrl+D keypress in raw mode:
+//   - Piped EOF:      stdin 'end' event  → App.tsx useEffect → exit(). TESTED HERE.
+//   - Interactive Ctrl+D: raw \x04 byte → parseKeypress → useInput handler → exit().
+//     NOT tested here. Covered by tests/repl/keys.test.tsx BUG-2.
+//
+// The two tests that spawn a binary with `input: ''` (T-07, T-14 / Step 2 / Step 6)
+// are valid — they test the piped-EOF exit path. They are NOT tests of interactive
+// Ctrl+D behavior. They were previously mislabeled as "Ctrl+D (EOF)" which implied
+// coverage of the interactive key path. Labels corrected below.
+//
+// T-13 here tests that Session renders without calling process.exit on MOUNT.
+// It does NOT deliver a Ctrl+C key event. The interactive Ctrl+C handler contract
+// is tested in tests/repl/keys.test.tsx BUG-1.
+// ============================================================================
 
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -119,7 +140,11 @@ describe('Session — REPL lifecycle (Pass 2)', () => {
   // and the component must continue accepting input.
   //
   // Automated portion: Session renders without crashing (component exists for hook wiring).
-  it('T-13 (automated logic portion) — Session renders without calling process.exit on mount', () => {
+  //
+  // FIDELITY NOTE: This test does NOT deliver a Ctrl+C key event. It only verifies
+  // that mounting Session does not call process.exit. Interactive Ctrl+C key-handler
+  // logic is tested in tests/repl/keys.test.tsx (BUG-1 tests).
+  it('T-13 (automated: mount only — does NOT test Ctrl+C key event) — Session renders without calling process.exit on mount', () => {
     const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {
       throw new Error('process.exit called unexpectedly');
     }) as (code?: number | string | null) => never);
@@ -132,15 +157,22 @@ describe('Session — REPL lifecycle (Pass 2)', () => {
   });
 
   // T-13 manual-TTY portion — real Ctrl+C key event requires a real TTY.
-  it.todo('T-13 (manual-TTY) — Ctrl+C during classifier: key event delivery requires a real TTY; verify in live session');
+  // Key-handler logic (useInput, no exit called) is covered in keys.test.tsx BUG-1.
+  it.todo('T-13 (manual-TTY) — Ctrl+C during classifier: key event delivery requires a real TTY; verify in live session. See also keys.test.tsx BUG-1 for handler-logic coverage.');
 
   // ============================================================================
   // GOLDEN — clean exit on EOF
   // ============================================================================
 
-  // T-14: Ctrl+D exits with code 0.
-  // Automated via subprocess — send EOF to stdin, assert exit code 0.
-  it('T-14 — Ctrl+D (EOF): exits with code 0, no stack trace in stderr', () => {
+  // T-14: Piped EOF exits with code 0.
+  // Automated via subprocess — send empty piped stdin (EOF), assert exit code 0.
+  //
+  // FIDELITY NOTE: This tests the PIPED EOF code path (`stdin.on('end')` in App.tsx),
+  // NOT the interactive Ctrl+D key event (\x04 byte in raw mode). These are distinct:
+  //   - Piped EOF (tested here): `input: ''` → stdin 'end' event → App.tsx useEffect → exit(0).
+  //   - Interactive Ctrl+D (NOT tested here): raw \x04 keystroke → useInput handler needed.
+  // The interactive Ctrl+D path has a BUG (inserts 'd', does not exit). See keys.test.tsx BUG-2.
+  it('T-14 — piped EOF (NOT interactive Ctrl+D): exits with code 0, no stack trace in stderr', () => {
     const result = spawnSync(bunExec, [entryPoint], {
       cwd: rootDir,
       encoding: 'utf8',

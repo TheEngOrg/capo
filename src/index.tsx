@@ -40,7 +40,7 @@ try {
     }
   }
 
-  render(<App debug={args.debug} />);
+  render(<App debug={args.debug} />, { exitOnCtrlC: false });
 } catch (err) {
   const message = err instanceof Error ? err.message : String(err);
   process.stderr.write(`teo: fatal error: ${message}\n`);

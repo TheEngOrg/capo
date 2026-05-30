@@ -907,19 +907,15 @@ describe('Classifier M2 tightening — FU-2..FU-5 over-broadening regressions', 
     expect(classify('how many is 3 plus 4').route).toBe('MECHANICAL');
   });
 
-  it('FU-BOUNDARY-11 — "how many services should we run" routes MECHANICAL via /run/ keyword (NOT a FU-5 case)', () => {
-    // DEBATABLE — flagged for Sage/staff-eng review.
-    // This input does NOT match /\bhow\s+(much|many)\s+(is|are)\b/i (no "is"/"are" after "many").
-    // It IS caught by /\b(run|exec|execute)\b/i (MECHANICAL first-match wins).
-    // Architectural read: "how many services should we run" is a design question —
-    //   "should we" is an architectural frame and "it depends on your SLA/cost/redundancy"
-    //   is a valid answer. The `run` match is a false positive from the M1 seed patterns.
-    // Mechanical read: "run" is unambiguously operational, and a dev could interpret
-    //   "how many services should we run" as "how many to run right now" (a config question).
-    // Decision needed: is /run/ too greedy here, or is the input genuinely MECHANICAL?
-    // For now: assert the ACTUAL current behavior (MECHANICAL via run-pattern) so this
-    // test passes before tightening and stays green after — it is NOT a FU-5 regression.
-    expect(classify('how many services should we run').route).toBe('MECHANICAL');
+  it('FU-BOUNDARY-11 — "how many services should we run" routes ARCHITECTURAL (FU-6 formally resolved)', () => {
+    // RESOLVED by FU-6 (D-005). Previously asserted MECHANICAL as "current behavior /
+    // debatable." FU-6 formally resolves this as ARCHITECTURAL: "how many services should
+    // we run" is a capacity/design question — "it depends on your SLA, cost, and redundancy
+    // model" is a legitimate answer. The tightened run-pattern (FU-6) no longer fires on
+    // judgment frames with "should we" preceding the verb; /\bshould\s+we\b/ in
+    // ARCHITECTURAL_PATTERNS catches this correctly.
+    // Updated by dev at gate 2 per CONFLICT NOTE in the FU-6 QA spec.
+    expect(classify('how many services should we run').route).toBe('ARCHITECTURAL');
   });
 
   it('FU-BOUNDARY-12 — "add 2+2" stays MECHANICAL (inline arithmetic expression as operand)', () => {
@@ -1246,6 +1242,412 @@ describe('Classifier M2 refinement — FU-7 noun gaps + greedy edges', () => {
       'convert the 5 files',
       'calculate the best architecture',
       'compute the optimal strategy',
+    ];
+    for (const input of inputs) {
+      const start = performance.now();
+      const result = classify(input);
+      const elapsed = performance.now() - start;
+      expect(elapsed).toBeLessThan(100);
+      assertValidDecision(result);
+    }
+  });
+});
+
+// =============================================================================
+// FU-6 — M1 seed pattern over-breadth
+//
+// PRINCIPLE (D-005): MECHANICAL = single deterministic operation with exactly
+// one correct result. ARCHITECTURAL = requires judgment ("it depends" is
+// legitimate). The two M1 seed patterns below are too greedy:
+//
+//   1. /\b(run|exec|execute)\b/i  — bare verb match fires on architectural
+//      frames ("should we run our own infrastructure", "why run kubernetes")
+//      where the correct answer depends on context, cost, and team preferences.
+//
+//   2. /\bwhat\s+is\s+the\s+(?!best\b)/i  — negative lookahead blocks "best"
+//      but allows other judgment-laden phrasings after "what is the":
+//      strategy, approach, recommended, ideal, right — none of which have a
+//      single deterministic answer.
+//
+// RED (false positives, currently MECHANICAL — must flip to ARCHITECTURAL):
+//   These tests will FAIL against the current patterns.ts. Dev must tighten
+//   the two M1 seed patterns so these architectural framings no longer fire
+//   MECHANICAL.
+//
+// GREEN guards (must STAY MECHANICAL after tightening):
+//   Operational "run" targets (run the tests, execute the script, etc.) and
+//   factual "what is the" lookups (version, status, file size) must remain
+//   MECHANICAL. The fix must split at framing, not at word choice.
+//
+// CONFLICT NOTE for dev: FU-BOUNDARY-11 in the tightening suite currently
+// asserts `how many services should we run` → MECHANICAL as the documented
+// "current behavior." FU-6 formalises this as a defect. After the fix, dev
+// must update FU-BOUNDARY-11 to assert ARCHITECTURAL (or UNKNOWN) consistent
+// with the corrected behavior. Do not leave two contradicting assertions.
+//
+// Order: MISUSE (false-positives RED) → BOUNDARY (edge cases) → GOLDEN (green guards).
+// =============================================================================
+
+describe('Classifier FU-6 — M1 seed over-breadth', () => {
+  // ===========================================================================
+  // MISUSE — false positives that are RED now and MUST flip after the fix.
+  // These inputs currently route MECHANICAL via one of the two M1 seed patterns.
+  // The correct route is ARCHITECTURAL (judgment required, "it depends" is valid).
+  // ===========================================================================
+
+  // --- Defect 1: /\b(run|exec|execute)\b/i fires on architectural frames ---
+  //
+  // PRINCIPLE: "run" in these inputs is inside a design-philosophy or strategy
+  // frame. The question is HOW MANY, WHETHER, or WHY — not WHICH COMMAND. A
+  // correct answer depends on SLA, cost, team skill, and tradeoff preferences.
+  // No single deterministic answer exists.
+
+  it('FU6-D1-MISUSE-01 — "how many services should we run" must route ARCHITECTURAL (capacity/design decision) [RED]', () => {
+    // "how many ... should we run" is a design-philosophy question: "it depends on
+    // your SLA, cost, and redundancy model" is a legitimate answer.
+    // Currently routes MECHANICAL via /\b(run|exec|execute)\b/i.
+    // CONFLICT: FU-BOUNDARY-11 in the tightening suite asserts MECHANICAL (current behavior).
+    // Dev must update FU-BOUNDARY-11 after fixing this pattern.
+    expect(classify('how many services should we run').route).toBe('ARCHITECTURAL');
+  });
+
+  it('FU6-D1-MISUSE-02 — "should we run our own infrastructure" must route ARCHITECTURAL (infra strategy decision) [RED]', () => {
+    // "should we run" is a vendor/build/buy decision — judgment required, no single correct answer.
+    // Currently routes MECHANICAL (run-pattern fires before /\bshould\s+we\b/ in ARCHITECTURAL).
+    expect(classify('should we run our own infrastructure').route).toBe('ARCHITECTURAL');
+  });
+
+  it('FU6-D1-MISUSE-03 — "why run kubernetes instead of ECS" must route ARCHITECTURAL (platform tradeoff question) [RED]', () => {
+    // "why run X instead of Y" is a comparative tradeoff question — it depends on
+    // team expertise, cost, portability requirements. No single correct answer.
+    // "why run" does NOT match /\bwhy\s+(does|is|do|did|would)\b/i (run is not in that list),
+    // so /\b(run|exec|execute)\b/i fires first → MECHANICAL today.
+    expect(classify('why run kubernetes instead of ECS').route).toBe('ARCHITECTURAL');
+  });
+
+  it('FU6-D1-MISUSE-04 — "how should we run our deployments" must route ARCHITECTURAL (deployment strategy) [RED]', () => {
+    // "how should we" is an architectural frame — /\bhow\s+should\s+(we|i|the)\b/i is
+    // ARCHITECTURAL, but MECHANICAL evaluates first and /\brun\b/ fires.
+    // Deployment approach (blue/green, canary, rolling) requires judgment.
+    expect(classify('how should we run our deployments').route).toBe('ARCHITECTURAL');
+  });
+
+  it('FU6-D1-MISUSE-05 — "should we run a monolith or microservices" must route ARCHITECTURAL (architecture decision) [RED]', () => {
+    // Classic architectural tradeoff: "it depends on team size, coupling, scalability needs."
+    // Currently routes MECHANICAL via /\brun\b/ before /\bshould\s+we\b/ is evaluated.
+    expect(classify('should we run a monolith or microservices').route).toBe('ARCHITECTURAL');
+  });
+
+  it('FU6-D1-MISUSE-06 — "is it worth running our own database" routes UNKNOWN today (gerund; run pattern does not fire) [COVERAGE GAP]', () => {
+    // NOTE: "running" (gerund) does NOT match /\b(run|exec|execute)\b/i — word boundary
+    // after "run" fails inside "running". This input is therefore NOT a D1 false positive.
+    // It falls through to UNKNOWN (no pattern fires). UNKNOWN display_route is "architectural"
+    // per PM AC Section 3, so the user sees the same UI as ARCHITECTURAL.
+    // This is a separate coverage gap (ARCHITECTURAL patterns don't cover "is it worth X-ing"):
+    // fix scope is outside FU-6. Asserting actual behavior so dev is not misled.
+    const result = classify('is it worth running our own database');
+    expect(result.route).toBe('UNKNOWN');
+    expect(result.display_route).toBe('architectural');
+  });
+
+  it('FU6-D1-MISUSE-07 — "should we run containers or VMs" must route ARCHITECTURAL (infrastructure tradeoff) [RED]', () => {
+    // Containers vs VMs is a platform-selection decision — isolation, overhead, tooling all vary.
+    // Phrasing variety to prevent a blocklist fix on specific strings.
+    expect(classify('should we run containers or VMs').route).toBe('ARCHITECTURAL');
+  });
+
+  // --- FU-8 regression fix: instruction-form "how to/do/can run X" must route MECHANICAL ---
+  //
+  // The FU-6 lookbehind window included "how" and blocked instruction forms ("how to run
+  // the tests", "how do I run the tests") — they incorrectly routed UNKNOWN. These are
+  // procedural requests for the mechanical action, not judgment frames.
+  // FU-8 replaces the lookbehind with a positive sentence-start / instruction-form anchor.
+  //
+  // Asserted RED before fix, GREEN after.
+
+  it('FU6-FU8-01 — "how to run the tests" routes MECHANICAL (instruction form, not judgment) [FU-8 fix]', () => {
+    // "how to run X" is a request for the procedure — deterministic, one correct action.
+    // Was incorrectly routed UNKNOWN by the FU-6 lookbehind (regression).
+    expect(classify('how to run the tests').route).toBe('MECHANICAL');
+  });
+
+  it('FU6-FU8-02 — "how do I run the tests" routes MECHANICAL (instruction form) [FU-8 fix]', () => {
+    // Same principle: "how do I run X" asks for the mechanical procedure.
+    expect(classify('how do I run the tests').route).toBe('MECHANICAL');
+  });
+
+  it('FU6-FU8-03 — "how exactly do I run the tests" routes MECHANICAL (adverb between how and do) [FU-8 fix]', () => {
+    // Phrasing variety with an adverb modifier — still an instruction form.
+    expect(classify('how exactly do I run the tests').route).toBe('MECHANICAL');
+  });
+
+  it('FU6-FU8-04 — "explain why then run npm test" routes MECHANICAL (chained command) [FU-8 fix]', () => {
+    // "then run X" is a chained command clause — the run is the execution target.
+    expect(classify('explain why then run npm test').route).toBe('MECHANICAL');
+  });
+
+  it('FU6-FU8-05 — "how should we run our deployments" stays ARCHITECTURAL after FU-8 fix [FU-8 guard]', () => {
+    // "how should we run" is a judgment frame — NOT caught by the new instruction-form
+    // anchor. Must remain ARCHITECTURAL. Phrasing variety from the D1-MISUSE block.
+    expect(classify('how should we run our deployments').route).toBe('ARCHITECTURAL');
+  });
+
+  it('FU6-FU8-06 — "how should we even consider letting the team run the migration" stays ARCHITECTURAL [FU-8 guard]', () => {
+    // Long lead-in judgment frame. SE confirmed this was leaking to MECHANICAL under
+    // the lookbehind. The new pattern correctly does not fire on "how should we" forms.
+    expect(classify('how should we even consider letting the team run the migration').route).toBe('ARCHITECTURAL');
+  });
+
+  // --- Defect 2: /\bwhat\s+is\s+the\s+(?!best\b)/i fires on judgment phrasings ---
+  //
+  // PRINCIPLE: "what is the X" is ARCHITECTURAL when X names a strategy, approach,
+  // recommendation, or design choice — because "it depends" is a legitimate answer.
+  // The negative lookahead only excludes "best"; every other judgment word slips through.
+
+  it('FU6-D2-MISUSE-01 — "what is the deployment strategy" must route ARCHITECTURAL (strategy = judgment) [RED]', () => {
+    // "deployment strategy" depends on team, environment, and SLA — blue/green, rolling,
+    // canary are all legitimate answers. No single correct result.
+    // Currently routes MECHANICAL via /\bwhat\s+is\s+the\s+(?!best\b)/i.
+    expect(classify('what is the deployment strategy').route).toBe('ARCHITECTURAL');
+  });
+
+  it('FU6-D2-MISUSE-02 — "what is the exchange rate strategy" must route ARCHITECTURAL (strategy = judgment) [RED]', () => {
+    // Exchange rate handling (at-request, cached, hedged) requires business judgment.
+    // "strategy" after "what is the" signals a design choice, not a lookup.
+    expect(classify('what is the exchange rate strategy').route).toBe('ARCHITECTURAL');
+  });
+
+  it('FU6-D2-MISUSE-03 — "what is the right approach for caching" must route ARCHITECTURAL ("right approach" = judgment) [RED]', () => {
+    // "right approach" has no single answer — write-through, write-back, TTL choices
+    // depend on consistency/latency tradeoffs.
+    expect(classify('what is the right approach for caching').route).toBe('ARCHITECTURAL');
+  });
+
+  it('FU6-D2-MISUSE-04 — "what is the recommended pattern" must route ARCHITECTURAL ("recommended" = opinion/judgment) [RED]', () => {
+    // "recommended" is a judgment qualifier — recommendations depend on context.
+    // Phrasing variety: "recommended" is not "best" but is equally judgment-laden.
+    expect(classify('what is the recommended pattern').route).toBe('ARCHITECTURAL');
+  });
+
+  it('FU6-D2-MISUSE-05 — "what is the ideal architecture" must route ARCHITECTURAL ("ideal" = judgment) [RED]', () => {
+    // "ideal architecture" has no single correct answer — it depends on scale, team, domain.
+    // MECHANICAL evaluates first; the ARCHITECTURAL /\b(design|architect)\b/i would catch
+    // "architecture" but never fires because MECHANICAL wins today.
+    expect(classify('what is the ideal architecture').route).toBe('ARCHITECTURAL');
+  });
+
+  it('FU6-D2-MISUSE-06 — "what is the correct approach to database design" must route ARCHITECTURAL (design judgment) [RED]', () => {
+    // "correct approach" is equivalent to "right approach" — still judgment-dependent.
+    // Phrasing variety to prevent blocklisting only the listed D-005 strings.
+    expect(classify('what is the correct approach to database design').route).toBe('ARCHITECTURAL');
+  });
+
+  it('FU6-D2-MISUSE-07 — "what is the best practice for error handling" stays ARCHITECTURAL (negative lookahead guard) [GREEN]', () => {
+    // "best practice" — "best" IS in the negative lookahead so this already works.
+    // Included as a boundary guard confirming the existing lookahead still fires.
+    expect(classify('what is the best practice for error handling').route).toBe('ARCHITECTURAL');
+  });
+
+  it('FU6-D2-MISUSE-08 — "what is the scalability approach" must route ARCHITECTURAL (approach = judgment) [RED]', () => {
+    // "approach" after "what is the" names a design choice. Phrasing variety.
+    expect(classify('what is the scalability approach').route).toBe('ARCHITECTURAL');
+  });
+
+  // ===========================================================================
+  // BOUNDARY — inputs that sit near the mechanical/architectural split.
+  // Some confirm the tightened pattern STILL fires for true operational inputs.
+  // Others probe the exact edge between framing that is MECHANICAL vs ARCHITECTURAL.
+  // ===========================================================================
+
+  it('FU6-BOUNDARY-01 — "run the tests" stays MECHANICAL (explicit execution target, no judgment) [GREEN]', () => {
+    // "run the tests" has exactly one correct interpretation: execute the test suite.
+    // This is the canonical MECHANICAL case for the run pattern. Must not regress.
+    expect(classify('run the tests').route).toBe('MECHANICAL');
+  });
+
+  it('FU6-BOUNDARY-02 — "run the build" stays MECHANICAL (explicit build-step execution) [GREEN]', () => {
+    // "run the build" = "execute the build pipeline." Deterministic operational command.
+    expect(classify('run the build').route).toBe('MECHANICAL');
+  });
+
+  it('FU6-BOUNDARY-03 — "run npm install" stays MECHANICAL (specific command with named tool) [GREEN]', () => {
+    // Named tool + command = specific execution target. No judgment involved.
+    expect(classify('run npm install').route).toBe('MECHANICAL');
+  });
+
+  it('FU6-BOUNDARY-04 — "execute the script" stays MECHANICAL (explicit execution target) [GREEN]', () => {
+    // "execute the script" names a target object — deterministic operational command.
+    expect(classify('execute the script').route).toBe('MECHANICAL');
+  });
+
+  it('FU6-BOUNDARY-05 — "run the migration" stays MECHANICAL (explicit step execution) [GREEN]', () => {
+    // "run the migration" = execute a specific migration step. One correct result.
+    // Distinct from "should we run migrations" or "how should we run migrations"
+    // which would be judgment questions.
+    expect(classify('run the migration').route).toBe('MECHANICAL');
+  });
+
+  it('FU6-BOUNDARY-06 — "restart the server" stays MECHANICAL (explicit operational command) [GREEN]', () => {
+    // "restart the server" is covered by /\b(start|stop|restart)\s+\w/i, not the run pattern.
+    // Included here as a boundary guard confirming no regression on related M1 patterns.
+    expect(classify('restart the server').route).toBe('MECHANICAL');
+  });
+
+  it('FU6-BOUNDARY-07 — "run the linter" stays MECHANICAL (specific tool execution) [GREEN]', () => {
+    // Phrasing variety for golden "run" cases: linter is a named tool, deterministic.
+    expect(classify('run the linter').route).toBe('MECHANICAL');
+  });
+
+  it('FU6-BOUNDARY-08 — "what is the current directory" stays MECHANICAL (factual lookup, one answer) [GREEN]', () => {
+    // "current directory" is a deterministic lookup — also covered by /\bcurrent\s+directory\b/i.
+    // Guards the "what is the" MECHANICAL path specifically.
+    expect(classify('what is the current directory').route).toBe('MECHANICAL');
+  });
+
+  it('FU6-BOUNDARY-09 — "what is the version" stays MECHANICAL (factual lookup, one answer) [GREEN]', () => {
+    // "version" is a deterministic property — exactly one correct answer.
+    // This is the core green guard for the "what is the" pattern after tightening.
+    expect(classify('what is the version').route).toBe('MECHANICAL');
+  });
+
+  it('FU6-BOUNDARY-10 — "what is the status" stays MECHANICAL (factual state lookup) [GREEN]', () => {
+    // Status is a deterministic observable fact at a point in time — one correct answer.
+    expect(classify('what is the status').route).toBe('MECHANICAL');
+  });
+
+  it('FU6-BOUNDARY-11 — "what is the file size" stays MECHANICAL (factual filesystem property) [GREEN]', () => {
+    // File size is a deterministic property — exactly one correct numeric answer.
+    expect(classify('what is the file size').route).toBe('MECHANICAL');
+  });
+
+  it('FU6-BOUNDARY-12 — "what is the error message" stays MECHANICAL (factual lookup of string value) [GREEN]', () => {
+    // The error message is a specific string property — one correct answer.
+    // Phrasing variety beyond T-19 to prevent narrow fix that only passes listed strings.
+    expect(classify('what is the error message').route).toBe('MECHANICAL');
+  });
+
+  it('FU6-BOUNDARY-13 — "what is the output" stays MECHANICAL (deterministic result lookup) [GREEN]', () => {
+    // "what is the output" of a command or function = one correct answer.
+    expect(classify('what is the output').route).toBe('MECHANICAL');
+  });
+
+  // --- Genuinely debatable inputs — documented as comments, not asserted ---
+  //
+  // These inputs cannot be cleanly resolved as MECHANICAL or ARCHITECTURAL without
+  // additional context. They are documented here for Sage/staff-engineer review.
+  // Do NOT add assertions for these until a staff position is issued.
+  //
+  //   "run kubernetes" — bare object with no frame. Could be "run the kubernetes
+  //   command" (MECHANICAL) or part of "should we run kubernetes" (ARCHITECTURAL).
+  //   Without framing, defaults to MECHANICAL via current pattern. Unclear whether
+  //   a tightened pattern should force UNKNOWN or leave MECHANICAL here.
+  //
+  //   "what is the approach" — "approach" alone (without "for" or "to") is a
+  //   gray-area noun. "/\b(strategy|approach|pattern)\s+for\b/i" requires "for",
+  //   so "what is the approach" today routes MECHANICAL. After tightening, if dev
+  //   excludes "approach" from allowed nouns, it would flip to UNKNOWN or ARCHITECTURAL.
+  //   Both are defensible. Flag before asserting a direction.
+  //
+  //   "what is the architecture" — RESOLVED by C3 (gate-3 staff-engineer ruling).
+  //   "architecture" is the canonical judgment noun per D-005. See FU6-C3-01/02 below.
+
+  // --- C3 fix assertions — architecture is a judgment noun, must route ARCHITECTURAL ---
+  //
+  // Staff-engineer gate-3 ruling: "architecture" must never route MECHANICAL.
+  // C3 adds architecture to both the leading-noun and tail-noun exclusions in the
+  // two tightened "what is the" MECHANICAL patterns, and to the ARCHITECTURAL
+  // tail-noun alternation so these inputs affirmatively land ARCHITECTURAL (not UNKNOWN).
+
+  it('FU6-C3-01 — "what is the architecture" routes ARCHITECTURAL (canonical judgment noun) [C3 fix]', () => {
+    // "architecture" has no single correct answer — it depends on scale, team, and domain.
+    // C3 adds it to both the MECHANICAL exclusions and the ARCHITECTURAL tail-noun list.
+    expect(classify('what is the architecture').route).toBe('ARCHITECTURAL');
+  });
+
+  it('FU6-C3-02 — "what is the current architecture" routes ARCHITECTURAL (judgment noun in tail) [C3 fix]', () => {
+    // "current" is a modifier, not a factual property — the tail noun is still "architecture"
+    // which is a design choice noun, not a deterministic system property.
+    expect(classify('what is the current architecture').route).toBe('ARCHITECTURAL');
+  });
+
+  it('FU6-C3-03 — "what is the current directory" stays MECHANICAL (factual property, not architecture) [C3 guard]', () => {
+    // Guard: "current directory" must not be caught by the architecture exclusion.
+    expect(classify('what is the current directory').route).toBe('MECHANICAL');
+  });
+
+  it('FU6-C3-04 — "what is the version" stays MECHANICAL after C3 [C3 guard]', () => {
+    expect(classify('what is the version').route).toBe('MECHANICAL');
+  });
+
+  it('FU6-C3-05 — "what is the status" stays MECHANICAL after C3 [C3 guard]', () => {
+    expect(classify('what is the status').route).toBe('MECHANICAL');
+  });
+
+  // ===========================================================================
+  // GOLDEN — RouteDecision shape and latency for FU-6 inputs.
+  // These confirm correct RouteDecision structure after the fix, not just route.
+  // ===========================================================================
+
+  it('FU6-GOLDEN-01 — MECHANICAL "run" operational result has correct RouteDecision shape [GREEN guard]', () => {
+    // After tightening, true-positive MECHANICAL run inputs must still return a
+    // fully-formed RouteDecision with a populated matched_pattern.
+    const result = classify('run the tests');
+    expect(result.route).toBe('MECHANICAL');
+    expect(result.display_route).toBe('mechanical');
+    expect(result.raw_input).toBe('run the tests');
+    expect(typeof result.matched_pattern).toBe('string');
+    expect(result.matched_pattern!.length).toBeGreaterThan(0);
+  });
+
+  it('FU6-GOLDEN-02 — MECHANICAL "what is the" factual result has correct RouteDecision shape [GREEN guard]', () => {
+    const result = classify('what is the version');
+    expect(result.route).toBe('MECHANICAL');
+    expect(result.display_route).toBe('mechanical');
+    expect(result.raw_input).toBe('what is the version');
+    expect(typeof result.matched_pattern).toBe('string');
+    expect(result.matched_pattern!.length).toBeGreaterThan(0);
+  });
+
+  it('FU6-GOLDEN-03 — ARCHITECTURAL false-positive flip has correct RouteDecision shape [RED→GREEN after fix]', () => {
+    // After the fix: FU-6 false positives must return a fully-formed ARCHITECTURAL
+    // RouteDecision, not just any truthy result.
+    const result = classify('should we run our own infrastructure');
+    expect(result.route).toBe('ARCHITECTURAL');
+    expect(result.display_route).toBe('architectural');
+    expect(result.raw_input).toBe('should we run our own infrastructure');
+  });
+
+  it('FU6-GOLDEN-04 — ARCHITECTURAL "what is the strategy" flip has correct RouteDecision shape [RED→GREEN after fix]', () => {
+    const result = classify('what is the deployment strategy');
+    expect(result.route).toBe('ARCHITECTURAL');
+    expect(result.display_route).toBe('architectural');
+    expect(result.raw_input).toBe('what is the deployment strategy');
+  });
+
+  it('FU6-GOLDEN-05 — classifier latency < 100ms for all FU-6 inputs', () => {
+    const inputs = [
+      // RED (false positives — will route architectural after fix)
+      'how many services should we run',
+      'should we run our own infrastructure',
+      'why run kubernetes instead of ECS',
+      'how should we run our deployments',
+      'should we run a monolith or microservices',
+      // NOTE: 'is it worth running our own database' routes UNKNOWN (gerund, not D1 false positive)
+      'what is the deployment strategy',
+      'what is the exchange rate strategy',
+      'what is the right approach for caching',
+      'what is the recommended pattern',
+      'what is the ideal architecture',
+      // GREEN guards (must stay mechanical)
+      'run the tests',
+      'run the build',
+      'run npm install',
+      'execute the script',
+      'run the migration',
+      'what is the current directory',
+      'what is the version',
+      'what is the status',
+      'what is the file size',
     ];
     for (const input of inputs) {
       const start = performance.now();

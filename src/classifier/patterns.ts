@@ -32,9 +32,51 @@
 //   approach, architecture) — these require "it depends" reasoning, not computation.
 //   Future additions: add to one of the four sub-categories above and verify no
 //   judgment-frame near-miss passes the pattern (test adversarially per D-005 Step 3).
+//
+// FU-6 seed tightening (D-005 FU-6) + FU-8 lookbehind regression fix:
+//   (1) /\b(run|exec|execute)\b/i — fired on architectural judgment frames
+//       ("should we run kubernetes", "how should we run our deployments").
+//       Tightened (FU-6): required absence of judgment lead-ins via lookbehind.
+//       Reworked (FU-8): lookbehind window was too broad — "how to run the tests" /
+//       "how do I run the tests" were incorrectly blocked (UNKNOWN regression).
+//       Replaced with positive sentence-start / instruction-form anchor: fires only
+//       when the verb is in an imperative, "how to/do/can", or "to/then" clause.
+//       Principle: MECHANICAL "run" names a specific execution target as a command
+//       or procedure. Judgment frames don't start with "how to/do/can" or "to/then".
+//   (2) /\bwhat\s+is\s+the\s+(?!best\b)/i — negative lookahead only excluded "best";
+//       other judgment qualifiers (right, ideal, recommended, correct, optimal, preferred)
+//       and judgment nouns (strategy, approach) slipped through.
+//       Tightened: extended negative lookaheads to exclude the full judgment-qualifier
+//       family and judgment nouns in tail position.
+//       Principle: "what is the X" is MECHANICAL when X is a factual system property
+//       (version, status, file size). It is ARCHITECTURAL when X is a judgment term or
+//       names a design choice with no single correct answer.
 
 export const MECHANICAL_PATTERNS: RegExp[] = [
-  /\b(run|exec|execute)\b/i,
+  // FU-6 tightened (D-005) + FU-8 rework: sentence-start / instruction-form anchor.
+  //
+  // The FU-6 lookbehind approach blocked too aggressively: "how to run the tests" and
+  // "how do I run the tests" have "how" in the lookbehind window and were incorrectly
+  // excluded (FU-8 regression — both routed UNKNOWN instead of MECHANICAL).
+  //
+  // PRINCIPLE (D-005): MECHANICAL "run" names a specific execution target in a direct
+  // command or procedure. ARCHITECTURAL "run" is the subject of a judgment question
+  // ("should we", "how should we", "why run X vs Y") where "it depends" is valid.
+  //
+  // This pattern fires when the verb appears in one of three MECHANICAL forms:
+  //   (a) Sentence-start imperative: at start of input or after a sentence boundary
+  //       → "run the tests", "execute the script", "run npm install"
+  //   (b) Instruction-form: "how to/do/does/can [adverb] [subject] run X"
+  //       → "how to run the tests", "how do I run the tests",
+  //          "how exactly do I run the tests", "how do we run the build"
+  //   (c) Chained command: "to run X" or "then run X"
+  //       → "need to run the linter", "explain why then run npm test"
+  //
+  // Judgment frames ("should we run", "how should we run", "why run", "how many …
+  // should … run") do NOT match any of these three forms — they fall through to
+  // ARCHITECTURAL_PATTERNS (should we / how should we / why + operational-verb / etc.).
+  // The {0,2} word slots allow for adverbs: "how exactly do I run" is still matched.
+  /(?:(?:^|\.\s*)\s*|\bto\s+|\bthen\s+|\bhow\s+(?:\w+\s+){0,2}(?:do|does|can)\s+(?:\w+\s+){0,2})(run|exec|execute)\s+\S/i,
   /\b(list|ls)\b/i,
   /\bshow\s+(me\s+)?(the\s+)?/i,
   /\b(get|fetch|retrieve)\b/i,
@@ -49,11 +91,21 @@ export const MECHANICAL_PATTERNS: RegExp[] = [
   /\bwrite\s+(to\s+)?(file|the\s+file)/i,
   /\bdelete\s+(file|the\s+file|this)/i,
   /\bcurrent\s+directory\b/i,
-  // Negative lookahead: "what is the best way" routes ARCHITECTURAL, not MECHANICAL.
-  /\bwhat\s+is\s+the\s+(?!best\b)/i,
+  // FU-6 tightened (D-005): extended negative lookaheads beyond "best".
+  // Excludes judgment qualifiers (right|ideal|recommended|correct|optimal|preferred)
+  // that directly follow "the" AND judgment nouns (strategy|approach|architecture) in
+  // tail position OR bare "architecture" at any position after "the".
+  // C3 fix: added `architecture` to both the bare-noun exclusion and the tail-noun
+  // alternation — "architecture" is THE canonical judgment noun per D-005 and must
+  // never route MECHANICAL regardless of what precedes it ("what is the architecture",
+  // "what is the current architecture").
+  // MECHANICAL when X is a factual system property (version, status, file size, output).
+  // ARCHITECTURAL when X names a design choice or carries a "it depends" qualifier.
+  /\bwhat\s+is\s+the\s+(?!(?:best|right|ideal|recommended|correct|optimal|preferred|architecture)\b)(?!\w+(?:\s+\w+)*\s+(?:strategy|approach|architecture)\b)/i,
   // Extended from spec: also catches "what is in X" (not just "what's in X").
-  // Negative lookahead: "what's the best way" routes ARCHITECTURAL.
-  /\bwhat('?s|\s+is)\s+(in|the)\s+(?!best\b)/i,
+  // FU-6 tightened (D-005) + C3: same judgment-qualifier and judgment-noun exclusions
+  // applied, including architecture in both the leading and tail-noun exclusion sets.
+  /\bwhat('?s|\s+is)\s+(in|the)\s+(?!(?:best|right|ideal|recommended|correct|optimal|preferred|architecture)\b)(?!\w+(?:\s+\w+)*\s+(?:strategy|approach|architecture)\b)/i,
   /\bprint\s+(the\s+)?\w/i,
   /\bgit\s+(status|log|diff|add|commit|push|pull)\b/i,
   /\b(start|stop|restart)\s+\w/i,
@@ -142,12 +194,24 @@ export const ARCHITECTURAL_PATTERNS: RegExp[] = [
   // Negative lookahead (?!\s+\d) excludes arithmetic ("how many is 3 plus 4" routes
   // MECHANICAL first via the tightened FU-5 pattern).
   /\bshould\s+we\b|\bhow\s+many\s+is\b(?!\s+\d)/i,
-  /\bwhy\s+(does|is|do|did|would)\b/i,
+  // FU-6 extended (D-005): "why + operational-verb" is always an architectural question
+  // (asking for justification/rationale = judgment required). The original pattern only
+  // covered "why does/is/do/did/would". "why run X instead of Y" (platform tradeoff) and
+  // similar comparative-rationale questions were missing.
+  /\bwhy\s+(?:does|is|do|did|would|run|exec|execute|use|choose|pick|adopt|build|deploy|implement|start|stop)\b/i,
   /\bhelp\s+me\s+(design|plan|think|figure|decide)\b/i,
   /\bbest\s+(approach|way|practice|pattern)\b/i,
   /\btrade(-|\s*)off(s)?\b/i,
   /\barchitecture\s+(of|for|decision)\b/i,
-  /\b(strategy|approach|pattern)\s+for\b/i,
+  // FU-6 extended (D-005): judgment nouns (strategy|approach|architecture) in tail
+  // position after "what is the <modifier(s)>" are architectural — no single
+  // deterministic answer exists. Also catches judgment qualifiers directly after
+  // "what is the". Original pattern required "for" after the noun; these two
+  // alternations cover the noun-at-end and qualifier-at-position cases.
+  // C3 fix: added `architecture` to the tail-noun alternation — it is the canonical
+  // judgment noun per D-005. "what is the architecture" and "what is the current
+  // architecture" must affirmatively route ARCHITECTURAL, not fall through to UNKNOWN.
+  /\b(strategy|approach|pattern)\s+for\b|\bwhat\s+is\s+the\s+(?:\w+\s+)*(?:strategy|approach|architecture)\b|\bwhat\s+is\s+the\s+(?:recommended|ideal|correct|right|optimal|preferred)\b/i,
   /\bwhat'?s\s+the\s+best\s+way\b/i,
   /\bpros?\s+(and\s+)?cons?\b/i,
   // Extended: also catches "convert/calculate/compute the/our/a <architectural-noun>" —

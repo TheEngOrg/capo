@@ -19,8 +19,10 @@ describe('Patterns (Pass 2)', () => {
 
   // --- BOUNDARY ---
 
-  it('MECHANICAL_PATTERNS has exactly 18 entries per spec Section 4.1', () => {
-    expect(MECHANICAL_PATTERNS).toHaveLength(18);
+  it('MECHANICAL_PATTERNS has exactly 26 entries (18 M1 seed + 8 M2 compute expansion)', () => {
+    // M1 seed: 18 patterns per Section 4.1.
+    // M2 expansion: 8 compute/arithmetic patterns derived from staff-engineer ground-truth.
+    expect(MECHANICAL_PATTERNS).toHaveLength(26);
   });
 
   it('ARCHITECTURAL_PATTERNS has exactly 18 entries per spec Section 4.1', () => {

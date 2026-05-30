@@ -385,3 +385,275 @@ describe('Classifier (Pass 2)', () => {
     expect(result.raw_input).toBe(input);
   });
 });
+
+// =============================================================================
+// M2 — Compute / Arithmetic Ground-Truth Expansion
+//
+// PRINCIPLE (staff-engineer): MECHANICAL = single deterministic operation with
+// exactly one correct result. Arithmetic and deterministic compute are MECHANICAL.
+// ARCHITECTURAL = requires judgment ("it depends" is legitimate).
+//
+// Tests are ordered: MISUSE → BOUNDARY → GOLDEN.
+// All new assertions in this block must be RED against the current patterns.ts
+// (no numeric/compute patterns exist yet). Existing tests above stay GREEN.
+// =============================================================================
+
+describe('Classifier M2 — compute/arithmetic ground-truth', () => {
+  // ===========================================================================
+  // MISUSE — inputs the compute path must survive AND route correctly under
+  // adversarial or unexpected forms. These also serve as regression guards for
+  // boundaries that must NOT change.
+  // ===========================================================================
+
+  // --- Regression guard: UNKNOWN→architectural display collapse is PM-locked ---
+
+  it('M2-MISUSE-01 — "test a thing" stays UNKNOWN→architectural (genuinely ambiguous, not mechanical)', () => {
+    // Staff-eng confirmed: "test" without context could mean many things.
+    // This must NOT become MECHANICAL after M2 numeric patterns are added.
+    const result = classify('test a thing');
+    expect(result.route).toBe('UNKNOWN');
+    expect(result.display_route).toBe('architectural');
+  });
+
+  it('M2-MISUSE-02 — UNKNOWN display_route is still "architectural" not "unknown" after M2', () => {
+    // PM AC Section 3 lock: display_route for UNKNOWN is always 'architectural'.
+    const result = classify('blorp 42');
+    expect(result.display_route).toBe('architectural');
+    expect(result.display_route).not.toBe('unknown');
+  });
+
+  // --- Regression guard: architectural inputs must NOT be swallowed by a too-greedy numeric pattern ---
+
+  it('M2-MISUSE-03 — "what is the best way to handle auth" stays ARCHITECTURAL (what-is-the + best exemption)', () => {
+    expect(classify('what is the best way to handle auth').route).toBe('ARCHITECTURAL');
+  });
+
+  it("M2-MISUSE-04 — \"what's the best way to compute X\" stays ARCHITECTURAL (judgment, not deterministic)", () => {
+    // "compute X" here is a design question about HOW to compute, not a compute request.
+    expect(classify("what's the best way to compute X").route).toBe('ARCHITECTURAL');
+  });
+
+  it('M2-MISUSE-05 — "should we add caching" stays ARCHITECTURAL (not a compute request)', () => {
+    expect(classify('should we add caching').route).toBe('ARCHITECTURAL');
+  });
+
+  it('M2-MISUSE-06 — "design a system" stays ARCHITECTURAL', () => {
+    expect(classify('design a system').route).toBe('ARCHITECTURAL');
+  });
+
+  it('M2-MISUSE-07 — "how should we structure this" stays ARCHITECTURAL', () => {
+    expect(classify('how should we structure this').route).toBe('ARCHITECTURAL');
+  });
+
+  // --- Dangerous near-misses: compute-adjacent phrasing that is ARCHITECTURAL, NOT mechanical ---
+
+  it('M2-MISUSE-08 — "how should we calculate pricing" is ARCHITECTURAL (judgment about approach, not a calculation)', () => {
+    // PRINCIPLE: "it depends" is a legitimate answer — pricing strategy requires judgment.
+    expect(classify('how should we calculate pricing').route).toBe('ARCHITECTURAL');
+  });
+
+  it('M2-MISUSE-09 — "how should we compute the hash function" is ARCHITECTURAL (design question)', () => {
+    expect(classify('how should we compute the hash function').route).toBe('ARCHITECTURAL');
+  });
+
+  it('M2-MISUSE-10 — "help me decide how to calculate the rate" is ARCHITECTURAL (explicit design/decide verb)', () => {
+    expect(classify('help me decide how to calculate the rate').route).toBe('ARCHITECTURAL');
+  });
+
+  it('M2-MISUSE-11 — "what is the best approach to compute throughput" is ARCHITECTURAL (best approach = judgment)', () => {
+    expect(classify('what is the best approach to compute throughput').route).toBe('ARCHITECTURAL');
+  });
+
+  // ===========================================================================
+  // BOUNDARY — the mechanical/architectural border for compute inputs.
+  // Tests cover: bare arithmetic, varied operators, spacing, compute verbs,
+  // verb+number combos, phrasing variety. Each group uses multiple distinct
+  // phrasings so a dev cannot hard-code specific strings to pass.
+  // ===========================================================================
+
+  // --- Bare arithmetic expressions ---
+
+  it('M2-BOUNDARY-01 — bare arithmetic "2+2" routes MECHANICAL', () => {
+    // Canonical example from M2 gap report. Single deterministic operation.
+    expect(classify('2+2').route).toBe('MECHANICAL');
+    expect(classify('2+2').display_route).toBe('mechanical');
+  });
+
+  it('M2-BOUNDARY-02 — arithmetic with spaces "2 + 2" routes MECHANICAL', () => {
+    expect(classify('2 + 2').route).toBe('MECHANICAL');
+  });
+
+  it('M2-BOUNDARY-03 — multiplication "3 * 4" routes MECHANICAL', () => {
+    expect(classify('3 * 4').route).toBe('MECHANICAL');
+  });
+
+  it('M2-BOUNDARY-04 — division "100 / 5" routes MECHANICAL', () => {
+    expect(classify('100 / 5').route).toBe('MECHANICAL');
+  });
+
+  it('M2-BOUNDARY-05 — subtraction "7-3" routes MECHANICAL', () => {
+    expect(classify('7-3').route).toBe('MECHANICAL');
+  });
+
+  it('M2-BOUNDARY-06 — arithmetic phrasing variety: floats and decimals route MECHANICAL', () => {
+    // Verifies the pattern handles non-integer operands — principle, not literal strings.
+    expect(classify('3.14 * 2').route).toBe('MECHANICAL');
+    expect(classify('100.5 / 4.2').route).toBe('MECHANICAL');
+  });
+
+  it('M2-BOUNDARY-07 — large numbers in arithmetic route MECHANICAL', () => {
+    // Tests that the pattern is not limited to single-digit operands.
+    expect(classify('1000 + 2500').route).toBe('MECHANICAL');
+    expect(classify('99999 * 12').route).toBe('MECHANICAL');
+  });
+
+  // --- Compute verbs (deterministic operation, single result) ---
+
+  it('M2-BOUNDARY-08 — "calculate the total" routes MECHANICAL', () => {
+    // Deterministic: given a set of values, there is exactly one correct total.
+    expect(classify('calculate the total').route).toBe('MECHANICAL');
+  });
+
+  it('M2-BOUNDARY-09 — "calculate 5 percent of 200" routes MECHANICAL', () => {
+    expect(classify('calculate 5 percent of 200').route).toBe('MECHANICAL');
+  });
+
+  it('M2-BOUNDARY-10 — "compute the sum" routes MECHANICAL', () => {
+    expect(classify('compute the sum').route).toBe('MECHANICAL');
+  });
+
+  it('M2-BOUNDARY-11 — "compute 15 squared" routes MECHANICAL', () => {
+    expect(classify('compute 15 squared').route).toBe('MECHANICAL');
+  });
+
+  it('M2-BOUNDARY-12 — "convert 5km to miles" routes MECHANICAL', () => {
+    // Unit conversion: single deterministic result, no judgment involved.
+    expect(classify('convert 5km to miles').route).toBe('MECHANICAL');
+  });
+
+  it('M2-BOUNDARY-13 — "convert 100 fahrenheit to celsius" routes MECHANICAL', () => {
+    expect(classify('convert 100 fahrenheit to celsius').route).toBe('MECHANICAL');
+  });
+
+  // --- Verb + number combos ---
+
+  it('M2-BOUNDARY-14 — "add 2+2" routes MECHANICAL', () => {
+    // Verb + arithmetic expression — unambiguously deterministic.
+    expect(classify('add 2+2').route).toBe('MECHANICAL');
+  });
+
+  it('M2-BOUNDARY-15 — "add 5 and 3" routes MECHANICAL', () => {
+    expect(classify('add 5 and 3').route).toBe('MECHANICAL');
+  });
+
+  it('M2-BOUNDARY-16 — "multiply 6 by 7" routes MECHANICAL', () => {
+    expect(classify('multiply 6 by 7').route).toBe('MECHANICAL');
+  });
+
+  it('M2-BOUNDARY-17 — "sum these numbers" routes MECHANICAL', () => {
+    expect(classify('sum these numbers').route).toBe('MECHANICAL');
+  });
+
+  it('M2-BOUNDARY-18 — "divide 81 by 9" routes MECHANICAL', () => {
+    expect(classify('divide 81 by 9').route).toBe('MECHANICAL');
+  });
+
+  it('M2-BOUNDARY-19 — "subtract 12 from 50" routes MECHANICAL', () => {
+    expect(classify('subtract 12 from 50').route).toBe('MECHANICAL');
+  });
+
+  // --- Phrasing variety: "what is" and "what's" with compute content ---
+
+  it('M2-BOUNDARY-20 — "what is 2+2" routes MECHANICAL', () => {
+    // Note: existing pattern /what\s+is\s+the\s+(?!best\b)/ requires "the" after "is".
+    // "what is 2+2" has no "the" — this MUST be a new pattern, not the existing one.
+    expect(classify('what is 2+2').route).toBe('MECHANICAL');
+  });
+
+  it("M2-BOUNDARY-21 — \"what's 17 times 3\" routes MECHANICAL", () => {
+    // Existing /what('?s|\s+is)\s+(in|the)\s+/ requires "in" or "the" — "what's 17" doesn't match.
+    // This requires new pattern coverage.
+    expect(classify("what's 17 times 3").route).toBe('MECHANICAL');
+  });
+
+  it('M2-BOUNDARY-22 — "what is 100 divided by 4" routes MECHANICAL', () => {
+    expect(classify('what is 100 divided by 4').route).toBe('MECHANICAL');
+  });
+
+  it("M2-BOUNDARY-23 — \"what's the square root of 144\" routes MECHANICAL", () => {
+    // Deterministic: one correct answer.
+    expect(classify("what's the square root of 144").route).toBe('MECHANICAL');
+  });
+
+  it('M2-BOUNDARY-24 — phrasing variety: "how much is 8 times 9" routes MECHANICAL', () => {
+    // "how much is" with arithmetic — deterministic, not opinion-seeking.
+    expect(classify('how much is 8 times 9').route).toBe('MECHANICAL');
+  });
+
+  it('M2-BOUNDARY-25 — phrasing variety: "how many is 3 plus 4" routes MECHANICAL', () => {
+    expect(classify('how many is 3 plus 4').route).toBe('MECHANICAL');
+  });
+
+  // --- "solve" — flagged as BORDERLINE; testing both ends of the boundary ---
+  // Per the M2 spec: "solve for x" is borderline; a deterministic solve like
+  // "solve 2x=4" is mechanical. We test both and flag the ambiguous case below.
+
+  it('M2-BOUNDARY-26 — "solve 2x=4" routes MECHANICAL (deterministic, single result)', () => {
+    // Single linear equation: exactly one solution.
+    expect(classify('solve 2x=4').route).toBe('MECHANICAL');
+  });
+
+  // ===========================================================================
+  // GOLDEN — RouteDecision structural correctness for M2 compute paths
+  // ===========================================================================
+
+  it('M2-GOLDEN-01 — MECHANICAL compute result has correct RouteDecision shape', () => {
+    const result = classify('2+2');
+    expect(result.route).toBe('MECHANICAL');
+    expect(result.display_route).toBe('mechanical');
+    expect(result.raw_input).toBe('2+2');
+    expect(typeof result.matched_pattern).toBe('string');
+    expect(result.matched_pattern!.length).toBeGreaterThan(0);
+  });
+
+  it('M2-GOLDEN-02 — MECHANICAL compute result: display_route is "mechanical" not "arithmetic"', () => {
+    // Classifier has only two display labels. Compute maps to "mechanical".
+    const result = classify('calculate the total');
+    expect(result.display_route).toBe('mechanical');
+    expect(result.display_route).not.toBe('arithmetic');
+    expect(result.display_route).not.toBe('compute');
+  });
+
+  it('M2-GOLDEN-03 — raw_input preserved verbatim for arithmetic input', () => {
+    const input = '3 * 4';
+    const result = classify(input);
+    expect(result.raw_input).toBe(input);
+  });
+
+  it('M2-GOLDEN-04 — raw_input preserved verbatim for compute-verb input', () => {
+    const input = 'calculate the total';
+    const result = classify(input);
+    expect(result.raw_input).toBe(input);
+  });
+
+  it('M2-GOLDEN-05 — classifier latency for compute inputs < 100ms', () => {
+    const computeInputs = [
+      '2+2',
+      '100 / 5',
+      'calculate the total',
+      'compute the sum',
+      'convert 5km to miles',
+      'what is 2+2',
+      "what's 17 times 3",
+      'multiply 6 by 7',
+      'add 5 and 3',
+      'solve 2x=4',
+    ];
+    for (const input of computeInputs) {
+      const start = performance.now();
+      classify(input);
+      const elapsed = performance.now() - start;
+      expect(elapsed).toBeLessThan(100);
+    }
+  });
+});

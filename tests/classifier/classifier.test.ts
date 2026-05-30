@@ -657,3 +657,602 @@ describe('Classifier M2 — compute/arithmetic ground-truth', () => {
     }
   });
 });
+
+// =============================================================================
+// M2 Tightening — FU-2..FU-5 Over-Broadening Regressions
+//
+// PRINCIPLE (D-005): The fix for M2 over-broadening is to require STRUCTURAL
+// SIGNAL of a deterministic operation (numeric operand/operator/unit), not to
+// blocklist specific example strings. Tests therefore include varied phrasings
+// beyond the D-005 literal table rows, so a dev who blocklists only those
+// eight strings still fails this suite.
+//
+// Order: MISUSE (false-positives that must flip) → BOUNDARY (edge cases) →
+// GOLDEN (true-positives that must remain MECHANICAL after tightening).
+//
+// RED = currently routes MECHANICAL but must route ARCHITECTURAL or UNKNOWN.
+// GREEN guard = already routes correctly and must STAY that way after tightening.
+// =============================================================================
+
+describe('Classifier M2 tightening — FU-2..FU-5 over-broadening regressions', () => {
+  // ===========================================================================
+  // MISUSE — false positives that are RED right now and MUST flip after tightening.
+  // These are the defects the fix must resolve.
+  // ===========================================================================
+
+  // --- FU-2: /\badd\s+\d/i is too loose — "add N <non-numeric-noun>" is not arithmetic ---
+  //
+  // PRINCIPLE: "add 10 engineers" is a capacity or org decision — reasonable engineers
+  // could answer it differently (hire vs contract, team split, etc.). The digit in these
+  // inputs is modifying an ORGANIZATIONAL noun, not an arithmetic operand. A tightened
+  // pattern must require that the digit is part of a pure arithmetic expression, not an
+  // adjective quantifying a human/temporal/project noun.
+
+  it('FU-2-MISUSE-01 — "add 10 engineers to the team" must route ARCHITECTURAL (capacity decision, not arithmetic)', () => {
+    // RED: currently matches /\badd\s+\d/i and routes MECHANICAL.
+    // The digit "10" quantifies an organizational noun. This is a staffing/capacity judgment.
+    expect(classify('add 10 engineers to the team').route).toBe('ARCHITECTURAL');
+  });
+
+  it('FU-2-MISUSE-02 — "add 3 more requirements to the spec" must route ARCHITECTURAL (scope decision)', () => {
+    // RED: digit gates on "3" but "requirements" is a project-management noun.
+    expect(classify('add 3 more requirements to the spec').route).toBe('ARCHITECTURAL');
+  });
+
+  it('FU-2-MISUSE-03 — "add 5 people to the project" must route ARCHITECTURAL (resourcing judgment)', () => {
+    // RED: varied phrasing — "people" instead of "engineers". Blocklisting "engineers"
+    // alone would not fix this.
+    expect(classify('add 5 people to the project').route).toBe('ARCHITECTURAL');
+  });
+
+  it('FU-2-MISUSE-04 — "add 2 weeks to the timeline" must route ARCHITECTURAL (schedule/planning decision)', () => {
+    // RED: "weeks" is a temporal planning noun, not an arithmetic operand.
+    // A correct fix must distinguish "add N <quantity-noun>" from "add N <and|to N>".
+    expect(classify('add 2 weeks to the timeline').route).toBe('ARCHITECTURAL');
+  });
+
+  it('FU-2-MISUSE-05 — "add 4 developers to the sprint" must route ARCHITECTURAL (agile capacity decision)', () => {
+    // RED: phrasing variety beyond D-005 literal strings — prevents blocklist workaround.
+    // "Sprint" and "developers" are organizational/agile nouns, not numeric operands.
+    expect(classify('add 4 developers to the sprint').route).toBe('ARCHITECTURAL');
+  });
+
+  it('FU-2-MISUSE-06 — "add 6 months to the roadmap" must route ARCHITECTURAL (schedule judgment)', () => {
+    // RED: "months" is a planning/schedule noun, not an arithmetic operand.
+    expect(classify('add 6 months to the roadmap').route).toBe('ARCHITECTURAL');
+  });
+
+  // --- FU-3: /\bsum\s+(these|the|all|those)\b/i too loose — "sum the <results/outcomes>"
+  //     is a reporting or evaluation question, not a compute request.
+  //
+  // PRINCIPLE: "sum the quarterly results" asks for judgment about what those results
+  // mean — "it depends on the framing" is a legitimate answer. Pure deterministic sum
+  // requires the VALUES being summed to be present or clearly numeric. Without concrete
+  // numeric operands in the sentence, "sum the X" is a reporting/interpretation request.
+
+  it('FU-3-MISUSE-01 — "sum the quarterly results" must route ARCHITECTURAL (reporting/interpretation, not compute)', () => {
+    // RED: currently matches /\bsum\s+(these|the|all|those)\b/i. "Quarterly results"
+    // is a business-reporting noun phrase, not a set of numeric operands.
+    expect(classify('sum the quarterly results').route).toBe('ARCHITECTURAL');
+  });
+
+  it('FU-3-MISUSE-02 — "sum the business outcomes" must route ARCHITECTURAL (evaluation question)', () => {
+    // RED: "business outcomes" requires interpretive judgment — no single correct sum.
+    expect(classify('sum the business outcomes').route).toBe('ARCHITECTURAL');
+  });
+
+  it('FU-3-MISUSE-03 — "sum the team\'s feedback" must route ARCHITECTURAL (qualitative judgment)', () => {
+    // RED: phrasing variety — "feedback" is qualitative, not numeric.
+    // A blocklist on "results" and "outcomes" would not catch this.
+    expect(classify("sum the team's feedback").route).toBe('ARCHITECTURAL');
+  });
+
+  it('FU-3-MISUSE-04 — "sum all the performance issues" must route ARCHITECTURAL (qualitative review)', () => {
+    // RED: additional variety — "all" variant of the pattern, non-numeric noun.
+    expect(classify('sum all the performance issues').route).toBe('ARCHITECTURAL');
+  });
+
+  it('FU-3-MISUSE-05 — "sum those architectural concerns" must route ARCHITECTURAL (judgment, not count)', () => {
+    // RED: "those" variant — qualitative concerns are not numeric operands.
+    expect(classify('sum those architectural concerns').route).toBe('ARCHITECTURAL');
+  });
+
+  // --- FU-4: /^\s*(calculate|compute|convert)\b/i too loose at sentence start —
+  //     when the OBJECT of calculate/compute/convert is an architectural noun, the
+  //     operation requires judgment, not deterministic arithmetic.
+  //
+  // PRINCIPLE: "convert the database schema" is an architectural activity — schema
+  // migrations require decisions about type mappings, nullability, backwards compat.
+  // "compute the optimal strategy" requires judgment — "optimal" means "it depends."
+  // Sentence-initial anchoring was meant to exclude mid-sentence judgment frames, but
+  // it fails when the object itself is an architectural/judgment noun. The fix must
+  // require that the object is numeric or a recognized unit of measure.
+
+  it('FU-4-MISUSE-01 — "convert the database schema" must route ARCHITECTURAL (migration is architecture)', () => {
+    // RED: starts with "convert", matches /^\s*(calculate|compute|convert)\b/i.
+    // Schema conversion involves structural decisions — no single correct result.
+    expect(classify('convert the database schema').route).toBe('ARCHITECTURAL');
+  });
+
+  it('FU-4-MISUSE-02 — "compute the optimal strategy" must route ARCHITECTURAL (judgment: optimal = it depends)', () => {
+    // RED: "optimal" is a judgment word — reasonable engineers disagree on optimal strategies.
+    expect(classify('compute the optimal strategy').route).toBe('ARCHITECTURAL');
+  });
+
+  it('FU-4-MISUSE-03 — "calculate the best team structure" must route ARCHITECTURAL (org design decision)', () => {
+    // RED: phrasing variety — "calculate" at sentence start, but object is an org/design noun.
+    expect(classify('calculate the best team structure').route).toBe('ARCHITECTURAL');
+  });
+
+  it('FU-4-MISUSE-04 — "convert our monolith to microservices" must route ARCHITECTURAL (architectural migration)', () => {
+    // RED: "convert" at sentence start, but this is a system architecture decision.
+    // Blocklisting "database schema" alone would not catch this case.
+    expect(classify('convert our monolith to microservices').route).toBe('ARCHITECTURAL');
+  });
+
+  it('FU-4-MISUSE-05 — "compute the ideal architecture" must route ARCHITECTURAL (design judgment)', () => {
+    // RED: "ideal architecture" is a judgment noun — no single correct result.
+    expect(classify('compute the ideal architecture').route).toBe('ARCHITECTURAL');
+  });
+
+  it('FU-4-MISUSE-06 — "calculate the right approach for authentication" must route ARCHITECTURAL (design decision)', () => {
+    // RED: phrasing variety — "right approach" is judgment-dependent.
+    // Prevents a blocklist fix covering only the D-005 literal strings.
+    expect(classify('calculate the right approach for authentication').route).toBe('ARCHITECTURAL');
+  });
+
+  it('FU-4-MISUSE-07 — "convert the legacy system to event-driven" must route ARCHITECTURAL (architectural decision)', () => {
+    // RED: "convert" + architectural migration target = judgment required.
+    expect(classify('convert the legacy system to event-driven').route).toBe('ARCHITECTURAL');
+  });
+
+  // --- FU-5: /\bhow\s+(much|many)\s+(is|are)\b/i too loose —
+  //     "how much is X worth" is valuation (UNKNOWN), "how many is too many X" is opinion (ARCHITECTURAL).
+  //
+  // PRINCIPLE: deterministic "how much/many is/are" requires a numeric or arithmetic
+  // operand immediately following (e.g., "how much is 8 times 9"). Without a numeric
+  // operand, these are valuation or opinion questions where "it depends" is legitimate.
+  // UNKNOWN is correct for valuation questions (genuinely ambiguous without more context).
+
+  it('FU-5-MISUSE-01 — "how much is the project worth" must route UNKNOWN (valuation question — genuinely ambiguous)', () => {
+    // RED: currently matches /\bhow\s+(much|many)\s+(is|are)\b/i and routes MECHANICAL.
+    // Project valuation depends on context, market, and stakeholder perspective.
+    // UNKNOWN collapses to display_route: 'architectural' per PM AC Section 3.
+    const result = classify('how much is the project worth');
+    expect(result.route).toBe('UNKNOWN');
+    expect(result.display_route).toBe('architectural');
+  });
+
+  it('FU-5-MISUSE-02 — "how many is too many microservices" must route ARCHITECTURAL (opinion question)', () => {
+    // RED: "too many" is an opinion frame — reasonable engineers answer differently.
+    // This is not a count request; it is a design philosophy question.
+    expect(classify('how many is too many microservices').route).toBe('ARCHITECTURAL');
+  });
+
+  it('FU-5-MISUSE-03 — "how much is good test coverage" must route UNKNOWN (genuinely ambiguous — context-dependent)', () => {
+    // RED: "good test coverage" depends on risk tolerance, team maturity, and project type.
+    // No single correct threshold — genuinely ambiguous without more context.
+    // D-005 instruction specifies UNKNOWN for this category.
+    const result = classify('how much is good test coverage');
+    expect(result.route).toBe('UNKNOWN');
+    expect(result.display_route).toBe('architectural');
+  });
+
+  it('FU-5-MISUSE-04 — "how much is technical debt costing us" must route UNKNOWN (valuation/estimation judgment)', () => {
+    // RED: phrasing variety — "technical debt cost" is an estimation question, not arithmetic.
+    // Prevents blocklisting only "project worth" and "test coverage".
+    const result = classify('how much is technical debt costing us');
+    expect(result.route).toBe('UNKNOWN');
+    expect(result.display_route).toBe('architectural');
+  });
+
+  it('FU-5-MISUSE-05 — "how many is enough for redundancy" must route ARCHITECTURAL (design tradeoff)', () => {
+    // RED: phrasing variety — "enough for redundancy" is an architectural judgment.
+    // "It depends on your SLA, cost tolerance, and failure domain" is a valid answer.
+    expect(classify('how many is enough for redundancy').route).toBe('ARCHITECTURAL');
+  });
+
+  // ===========================================================================
+  // BOUNDARY — edge cases that sit near the mechanical/non-mechanical border.
+  // These confirm the tightened patterns hit the right lines.
+  // ===========================================================================
+
+  it('FU-BOUNDARY-01 — "add 5 and 3" stays MECHANICAL (two numeric operands with conjunction)', () => {
+    // GREEN guard: "and 3" after the digit confirms the operand pattern — pure arithmetic.
+    expect(classify('add 5 and 3').route).toBe('MECHANICAL');
+  });
+
+  it('FU-BOUNDARY-02 — "add 100 to 250" stays MECHANICAL (numeric operands on both sides of "to")', () => {
+    // GREEN guard: "100 to 250" — both operands are digits, clearly arithmetic.
+    expect(classify('add 100 to 250').route).toBe('MECHANICAL');
+  });
+
+  it('FU-BOUNDARY-03 — "sum these numbers" stays MECHANICAL (object is a numeric noun)', () => {
+    // GREEN guard: "numbers" is a numeric noun — this is a compute request.
+    expect(classify('sum these numbers').route).toBe('MECHANICAL');
+  });
+
+  it('FU-BOUNDARY-04 — "sum the values 4 8 15" stays MECHANICAL (explicit numeric values present)', () => {
+    // GREEN guard: inline numeric values make this deterministic.
+    expect(classify('sum the values 4 8 15').route).toBe('MECHANICAL');
+  });
+
+  it('FU-BOUNDARY-05 — "calculate the total" stays MECHANICAL (standard deterministic compute)', () => {
+    // GREEN guard: "the total" is a numeric aggregate — single correct result.
+    expect(classify('calculate the total').route).toBe('MECHANICAL');
+  });
+
+  it('FU-BOUNDARY-06 — "compute the sum" stays MECHANICAL (numeric aggregate noun)', () => {
+    // GREEN guard: "sum" as noun is numeric — compute request with one correct result.
+    expect(classify('compute the sum').route).toBe('MECHANICAL');
+  });
+
+  it('FU-BOUNDARY-07 — "convert 5km to miles" stays MECHANICAL (numeric operand + unit)', () => {
+    // GREEN guard: digit + unit = deterministic unit conversion.
+    expect(classify('convert 5km to miles').route).toBe('MECHANICAL');
+  });
+
+  it('FU-BOUNDARY-08 — "convert 100 fahrenheit to celsius" stays MECHANICAL (numeric + unit conversion)', () => {
+    // GREEN guard: canonical unit conversion with digit — one correct result.
+    expect(classify('convert 100 fahrenheit to celsius').route).toBe('MECHANICAL');
+  });
+
+  it('FU-BOUNDARY-09 — "how much is 8 times 9" stays MECHANICAL (arithmetic operands present)', () => {
+    // GREEN guard: digit immediately follows "is" — structural signal of arithmetic.
+    expect(classify('how much is 8 times 9').route).toBe('MECHANICAL');
+  });
+
+  it('FU-BOUNDARY-10 — "how many is 3 plus 4" stays MECHANICAL (arithmetic expression)', () => {
+    // GREEN guard: digit immediately follows "is" — deterministic count arithmetic.
+    expect(classify('how many is 3 plus 4').route).toBe('MECHANICAL');
+  });
+
+  it('FU-BOUNDARY-11 — "how many services should we run" routes MECHANICAL via /run/ keyword (NOT a FU-5 case)', () => {
+    // DEBATABLE — flagged for Sage/staff-eng review.
+    // This input does NOT match /\bhow\s+(much|many)\s+(is|are)\b/i (no "is"/"are" after "many").
+    // It IS caught by /\b(run|exec|execute)\b/i (MECHANICAL first-match wins).
+    // Architectural read: "how many services should we run" is a design question —
+    //   "should we" is an architectural frame and "it depends on your SLA/cost/redundancy"
+    //   is a valid answer. The `run` match is a false positive from the M1 seed patterns.
+    // Mechanical read: "run" is unambiguously operational, and a dev could interpret
+    //   "how many services should we run" as "how many to run right now" (a config question).
+    // Decision needed: is /run/ too greedy here, or is the input genuinely MECHANICAL?
+    // For now: assert the ACTUAL current behavior (MECHANICAL via run-pattern) so this
+    // test passes before tightening and stays green after — it is NOT a FU-5 regression.
+    expect(classify('how many services should we run').route).toBe('MECHANICAL');
+  });
+
+  it('FU-BOUNDARY-12 — "add 2+2" stays MECHANICAL (inline arithmetic expression as operand)', () => {
+    // GREEN guard: the operand itself is an arithmetic expression — unambiguously deterministic.
+    expect(classify('add 2+2').route).toBe('MECHANICAL');
+  });
+
+  // ===========================================================================
+  // GOLDEN — structural correctness of RouteDecision for tightened-pattern outputs.
+  // ===========================================================================
+
+  it('FU-GOLDEN-01 — UNKNOWN valuation result has correct RouteDecision shape (display_route is architectural)', () => {
+    // PM AC Section 3 lock: UNKNOWN never surfaces as "unknown" to end users.
+    const result = classify('how much is the project worth');
+    expect(result.route).toBe('UNKNOWN');
+    expect(result.display_route).toBe('architectural');
+    expect(result.display_route).not.toBe('unknown');
+    expect(result.raw_input).toBe('how much is the project worth');
+  });
+
+  it('FU-GOLDEN-02 — ARCHITECTURAL false-positive flip has correct RouteDecision shape', () => {
+    const result = classify('convert the database schema');
+    expect(result.route).toBe('ARCHITECTURAL');
+    expect(result.display_route).toBe('architectural');
+    expect(result.raw_input).toBe('convert the database schema');
+  });
+
+  it('FU-GOLDEN-03 — tightened compute true-positive retains matched_pattern field', () => {
+    // After tightening, true MECHANICAL compute inputs must still report a matched_pattern.
+    const result = classify('calculate the total');
+    expect(result.route).toBe('MECHANICAL');
+    expect(typeof result.matched_pattern).toBe('string');
+    expect(result.matched_pattern!.length).toBeGreaterThan(0);
+  });
+
+  it('FU-GOLDEN-04 — classifier latency for tightening regressions < 100ms each', () => {
+    const inputs = [
+      'add 10 engineers to the team',
+      'sum the quarterly results',
+      'convert the database schema',
+      'compute the optimal strategy',
+      'how much is the project worth',
+      'how many is too many microservices',
+      'add 5 and 3',
+      'sum these numbers',
+      'convert 5km to miles',
+      'how much is 8 times 9',
+    ];
+    for (const input of inputs) {
+      const start = performance.now();
+      const result = classify(input);
+      const elapsed = performance.now() - start;
+      expect(elapsed).toBeLessThan(100);
+      assertValidDecision(result);
+    }
+  });
+});
+
+// =============================================================================
+// M2 Refinement — FU-7 noun-list gaps + greedy-edge cases
+//
+// PRINCIPLE (D-005): MECHANICAL = single deterministic operation with exactly one
+// correct result. A numeric-aggregate noun that names a technical/statistical
+// quantity with one correct answer is MECHANICAL (e.g., variance, throughput,
+// latency, hash). A noun that requires judgment or "it depends" stays ARCHITECTURAL.
+//
+// FU-7 targets: the FU-4 noun allowlist is incomplete. Technical/statistical/
+// performance quantities (variance, throughput, latency, count, standard deviation,
+// hash, checksum, ratio, temperature) have exactly one correct result given
+// concrete inputs — they are MECHANICAL by the principle, but currently the
+// FU-4 lookahead doesn't find them and they fall through to the architectural
+// extension (/\b(convert|calculate|compute)\s+(?:the|our|a|this)\b/i).
+//
+// Greedy-edge targets: two borderline inputs that the FU-2 architectural extension
+// catches — "add 5 items to the cart" and "add 7 rows to the database" — are
+// operational commands but lack a second numeric operand, so MECHANICAL correctly
+// rejects them. ARCHITECTURAL is slightly aggressive but defensible.
+//
+// Order: MISUSE (judgment nouns that must STAY ARCHITECTURAL) → BOUNDARY (gap
+// nouns currently RED, plus greedy-edge and digit-ordering probes) → GOLDEN
+// (existing numeric-aggregate nouns that must stay MECHANICAL after any noun-list
+// expansion).
+//
+// RED = currently wrong, must be fixed by dev.
+// GREEN guard = already correct, must not regress.
+//
+// FU-7 nouns tested explicitly: variance, throughput, latency, count,
+//   standard deviation, hash, checksum, ratio, temperature.
+// FU-7 nouns INTENTIONALLY left as headroom for dev's category-widening:
+//   entropy, frequency, duration, offset, bandwidth, p99, percentile.
+//   Dev MUST NOT enumerate these nine test nouns blindly — the fix requires a
+//   principled category generalisation (e.g., "technical/statistical numeric
+//   quantity with exactly one correct result" as a comment + extended noun list
+//   or a unit/suffix heuristic).
+// =============================================================================
+
+describe('Classifier M2 refinement — FU-7 noun gaps + greedy edges', () => {
+  // ===========================================================================
+  // MISUSE — judgment nouns that must STAY ARCHITECTURAL after any noun-list
+  // widening. These are GREEN guards — they should pass before AND after dev's
+  // fix. If any of these flip to MECHANICAL, the fix over-widened.
+  // ===========================================================================
+
+  it('FU7-MISUSE-01 — "calculate the best architecture" stays ARCHITECTURAL (judgment noun, not a numeric aggregate)', () => {
+    // "best architecture" requires judgment — "it depends" is a legitimate answer.
+    // This is a load-bearing guard from the prior FU-2..FU-5 cycle.
+    expect(classify('calculate the best architecture').route).toBe('ARCHITECTURAL');
+  });
+
+  it('FU7-MISUSE-02 — "compute the optimal strategy" stays ARCHITECTURAL (already-passing FU-4 guard)', () => {
+    // Re-asserting from FU-4 misuse block — re-stated here as an explicit guard
+    // so dev widening of FU-7 nouns does not accidentally swallow "strategy".
+    expect(classify('compute the optimal strategy').route).toBe('ARCHITECTURAL');
+  });
+
+  it('FU7-MISUSE-03 — "calculate the right approach" stays ARCHITECTURAL (judgment: "right" = it depends)', () => {
+    // "Right approach" has no single correct answer — context and tradeoffs determine it.
+    expect(classify('calculate the right approach').route).toBe('ARCHITECTURAL');
+  });
+
+  it('FU7-MISUSE-04 — "compute the ideal solution" stays ARCHITECTURAL (ideal = judgment-laden)', () => {
+    // "Ideal" is an opinion qualifier — no single numeric result.
+    // Phrasing variety beyond the three D-005 literal strings prevents blocklist workaround.
+    expect(classify('compute the ideal solution').route).toBe('ARCHITECTURAL');
+  });
+
+  it('FU7-MISUSE-05 — "calculate the best approach for authentication" stays ARCHITECTURAL (design decision)', () => {
+    // Additional guard: "best approach" + domain noun should never be MECHANICAL.
+    expect(classify('calculate the best approach for authentication').route).toBe('ARCHITECTURAL');
+  });
+
+  // ===========================================================================
+  // BOUNDARY — FU-7 gap-noun cases (RED) + greedy-edge probes + digit-ordering
+  // confirmation. Gap-noun cases are RED against the current patterns.ts.
+  // ===========================================================================
+
+  // --- FU-7 gap nouns: technical/statistical quantities with one correct result ---
+  // All of these route ARCHITECTURAL today because the noun is not in the FU-4 allowlist.
+  // After dev's fix they must route MECHANICAL.
+
+  it('FU7-BOUNDARY-01 — "calculate the variance" must route MECHANICAL (statistical quantity, one correct result) [RED]', () => {
+    // PRINCIPLE: given a dataset, variance has exactly one correct value.
+    // Currently routes ARCHITECTURAL — "variance" not in FU-4 noun list.
+    expect(classify('calculate the variance').route).toBe('MECHANICAL');
+  });
+
+  it('FU7-BOUNDARY-02 — "calculate the throughput" must route MECHANICAL (performance metric, one correct value) [RED]', () => {
+    // Throughput = operations/second — deterministic given the measurement inputs.
+    // Currently routes ARCHITECTURAL — "throughput" not in FU-4 noun list.
+    expect(classify('calculate the throughput').route).toBe('MECHANICAL');
+  });
+
+  it('FU7-BOUNDARY-03 — "calculate the latency" must route MECHANICAL (timing metric, one correct value) [RED]', () => {
+    // Network/system latency is a measured numeric quantity — exactly one correct result.
+    // Currently routes ARCHITECTURAL — "latency" not in FU-4 noun list.
+    expect(classify('calculate the latency').route).toBe('MECHANICAL');
+  });
+
+  it('FU7-BOUNDARY-04 — "calculate the count" must route MECHANICAL (deterministic integer result) [RED]', () => {
+    // Count of a set is deterministic — exactly one correct answer.
+    // Currently routes ARCHITECTURAL — "count" not in FU-4 noun list.
+    expect(classify('calculate the count').route).toBe('MECHANICAL');
+  });
+
+  it('FU7-BOUNDARY-05 — "calculate the standard deviation" must route MECHANICAL (statistical quantity, one correct result) [RED]', () => {
+    // Standard deviation of a dataset has exactly one correct value.
+    // "standard deviation" as a two-word phrase: lookahead must find "deviation" or the phrase.
+    expect(classify('calculate the standard deviation').route).toBe('MECHANICAL');
+  });
+
+  it('FU7-BOUNDARY-06 — "compute the hash" must route MECHANICAL (cryptographic function, one correct output) [RED]', () => {
+    // A hash of a given input is deterministic — exactly one correct result.
+    // Currently routes ARCHITECTURAL — "hash" not in FU-4 noun list.
+    expect(classify('compute the hash').route).toBe('MECHANICAL');
+  });
+
+  it('FU7-BOUNDARY-07 — "compute the checksum" must route MECHANICAL (error-detection value, deterministic) [RED]', () => {
+    // Checksum is a deterministic numeric computation — one correct result.
+    // Currently routes ARCHITECTURAL — "checksum" not in FU-4 noun list.
+    expect(classify('compute the checksum').route).toBe('MECHANICAL');
+  });
+
+  it('FU7-BOUNDARY-08 — "compute the ratio" must route MECHANICAL (numeric proportion, one correct result) [RED]', () => {
+    // A ratio of two quantities is deterministic — one correct value.
+    // Currently routes ARCHITECTURAL — "ratio" not in FU-4 noun list.
+    expect(classify('compute the ratio').route).toBe('MECHANICAL');
+  });
+
+  it('FU7-BOUNDARY-09 — "convert the temperature" must route MECHANICAL (unit conversion noun, one correct result) [RED]', () => {
+    // Temperature is a unit-of-measure noun — converting a temperature value is deterministic.
+    // Currently routes ARCHITECTURAL — "temperature" not in FU-4 noun list.
+    // NOTE: without a numeric value ("convert 100F to C") this is the noun-only form;
+    // the noun itself is sufficient signal per the FU-4 allowlist design.
+    expect(classify('convert the temperature').route).toBe('MECHANICAL');
+  });
+
+  // --- Phrasing variety: technical nouns with "our/a/this" determiners ---
+  // Verifies dev's fix generalises to all determiners in the FU-4 pattern, not just "the".
+
+  it('FU7-BOUNDARY-10 — "compute our checksum" must route MECHANICAL (determiner variation) [RED]', () => {
+    // Same determinism principle as FU7-BOUNDARY-07, but "our" determiner.
+    expect(classify('compute our checksum').route).toBe('MECHANICAL');
+  });
+
+  it('FU7-BOUNDARY-11 — "calculate a variance" must route MECHANICAL (indefinite article variation) [RED]', () => {
+    // Same determinism principle as FU7-BOUNDARY-01, but "a" determiner.
+    expect(classify('calculate a variance').route).toBe('MECHANICAL');
+  });
+
+  // --- Greedy-edge cases: operational commands that lack a second numeric operand ---
+  // These match the FU-2 ARCHITECTURAL extension (/\badd\s+\d+\s+\w.*?\s+(?:to|for|in)\s+(?:the|our|a|this)\b/i).
+  // Routing them ARCHITECTURAL is the conservative/defensible call (no second numeric operand).
+  // D-005 Concern A adjudication: "slightly aggressive but not wrong — neither has a single
+  // deterministic result given the context-free input. Accepted."
+
+  it('FU7-BOUNDARY-12 — "add 5 items to the cart" routes ARCHITECTURAL (no second numeric operand; operational noun) [GREEN]', () => {
+    // "items" is an operational noun, not an arithmetic operand. MECHANICAL correctly rejects
+    // (no "and N", "to N", or arithmetic operator after the digit). ARCHITECTURAL extension fires.
+    // Conservative call: routing ARCHITECTURAL avoids false mechanical route for a DB write.
+    // If this were UNKNOWN the user experience would be the same (display_route: architectural)
+    // but ARCHITECTURAL is explicitly documented in D-005 Concern A adjudication.
+    expect(classify('add 5 items to the cart').route).toBe('ARCHITECTURAL');
+  });
+
+  it('FU7-BOUNDARY-13 — "add 7 rows to the database" routes ARCHITECTURAL (no second numeric operand; data operation) [GREEN]', () => {
+    // "rows" is a data noun, not an arithmetic operand. Same reasoning as FU7-BOUNDARY-12.
+    // Mechanical pattern requires "and <N>", "to <N>", or operator after digit — absent here.
+    expect(classify('add 7 rows to the database').route).toBe('ARCHITECTURAL');
+  });
+
+  // --- Digit-ordering probe: MECHANICAL-first holds when digit IS present ---
+  // This proves the evaluate-MECHANICAL-first ordering works correctly even with
+  // the architectural extension present for the same verb form.
+
+  it('FU7-BOUNDARY-14 — "convert the 5 files" routes MECHANICAL (digit present → FU-4 lookahead fires before arch extension) [GREEN]', () => {
+    // MECHANICAL FU-4 pattern: /^\s*(calculate|compute|convert)\b(?=.*(?:\d|...))/i
+    // Lookahead finds the digit "5" → MECHANICAL fires first.
+    // Architectural extension /\b(convert|calculate|compute)\s+(?:the|our|a|this)\b/i also matches
+    // but is evaluated SECOND — MECHANICAL wins.
+    // This confirms MECHANICAL-first ordering is preserved after FU-7 noun widening.
+    expect(classify('convert the 5 files').route).toBe('MECHANICAL');
+  });
+
+  // --- True-positive guards near the greedy edge: arithmetic stays MECHANICAL ---
+  // These confirm the tightened FU-2 pattern still routes arithmetic correctly
+  // after dev's FU-7 work — no regression on the MECHANICAL side.
+
+  it('FU7-BOUNDARY-15 — "add 5 and 3" stays MECHANICAL (two numeric operands — pure arithmetic) [GREEN guard]', () => {
+    // Tightened FU-2 mechanical pattern: "and 3" is a second numeric operand.
+    expect(classify('add 5 and 3').route).toBe('MECHANICAL');
+  });
+
+  it('FU7-BOUNDARY-16 — "add 100 to 250" stays MECHANICAL (digit after "to" — pure arithmetic) [GREEN guard]', () => {
+    // Tightened FU-2 mechanical pattern: "to 250" — digit follows "to".
+    expect(classify('add 100 to 250').route).toBe('MECHANICAL');
+  });
+
+  it('FU7-BOUNDARY-17 — "add 2+2" stays MECHANICAL (inline arithmetic expression) [GREEN guard]', () => {
+    // Tightened FU-2 mechanical pattern: arithmetic operator + digit.
+    expect(classify('add 2+2').route).toBe('MECHANICAL');
+  });
+
+  // ===========================================================================
+  // GOLDEN — existing numeric-aggregate nouns that must stay MECHANICAL after
+  // dev widens the FU-7 noun list. These are GREEN guards. If any flip to
+  // ARCHITECTURAL after the fix, the widening broke the existing allowlist.
+  // ===========================================================================
+
+  it('FU7-GOLDEN-01 — "calculate the total" stays MECHANICAL (original FU-4 allowlist noun) [GREEN guard]', () => {
+    expect(classify('calculate the total').route).toBe('MECHANICAL');
+    expect(classify('calculate the total').display_route).toBe('mechanical');
+  });
+
+  it('FU7-GOLDEN-02 — "compute the sum" stays MECHANICAL (original FU-4 allowlist noun) [GREEN guard]', () => {
+    expect(classify('compute the sum').route).toBe('MECHANICAL');
+  });
+
+  it('FU7-GOLDEN-03 — "calculate the average" stays MECHANICAL (original FU-4 allowlist noun) [GREEN guard]', () => {
+    expect(classify('calculate the average').route).toBe('MECHANICAL');
+  });
+
+  it('FU7-GOLDEN-04 — "calculate the median" stays MECHANICAL (median IS in FU-4 allowlist — confirmed) [GREEN guard]', () => {
+    // Explicitly confirming median is already in the list — tests the pre-existing coverage.
+    expect(classify('calculate the median').route).toBe('MECHANICAL');
+  });
+
+  it('FU7-GOLDEN-05 — "calculate the mean" stays MECHANICAL (original FU-4 allowlist noun) [GREEN guard]', () => {
+    expect(classify('calculate the mean').route).toBe('MECHANICAL');
+  });
+
+  it('FU7-GOLDEN-06 — "convert 5km to miles" stays MECHANICAL (digit present — digit branch of FU-4) [GREEN guard]', () => {
+    // This passes via the digit branch of the FU-4 lookahead, not the noun branch.
+    // Confirms digit branch is unaffected by noun-list widening.
+    expect(classify('convert 5km to miles').route).toBe('MECHANICAL');
+  });
+
+  it('FU7-GOLDEN-07 — RouteDecision shape for FU-7 gap noun after fix (MECHANICAL with matched_pattern) [GREEN after fix]', () => {
+    // After dev's fix: gap nouns must return a fully-formed MECHANICAL RouteDecision,
+    // not just any truthy result. matched_pattern must be populated.
+    // NOTE: this test is RED now (route is ARCHITECTURAL); it turns GREEN after the fix.
+    const result = classify('calculate the variance');
+    expect(result.route).toBe('MECHANICAL');
+    expect(result.display_route).toBe('mechanical');
+    expect(result.raw_input).toBe('calculate the variance');
+    expect(typeof result.matched_pattern).toBe('string');
+    expect(result.matched_pattern!.length).toBeGreaterThan(0);
+  });
+
+  it('FU7-GOLDEN-08 — classifier latency < 100ms for all FU-7 inputs', () => {
+    const inputs = [
+      'calculate the variance',
+      'calculate the throughput',
+      'calculate the latency',
+      'calculate the count',
+      'calculate the standard deviation',
+      'compute the hash',
+      'compute the checksum',
+      'compute the ratio',
+      'convert the temperature',
+      'compute our checksum',
+      'calculate a variance',
+      'add 5 items to the cart',
+      'add 7 rows to the database',
+      'convert the 5 files',
+      'calculate the best architecture',
+      'compute the optimal strategy',
+    ];
+    for (const input of inputs) {
+      const start = performance.now();
+      const result = classify(input);
+      const elapsed = performance.now() - start;
+      expect(elapsed).toBeLessThan(100);
+      assertValidDecision(result);
+    }
+  });
+});

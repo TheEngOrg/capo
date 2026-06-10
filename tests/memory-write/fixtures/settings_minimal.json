@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [],
+    "deny": []
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "hooks": [{"type": "command", "command": ".claude/hooks/hook-one.sh"}],
+        "matcher": "Bash"
+      },
+      {
+        "hooks": [{"type": "command", "command": ".claude/hooks/hook-two.sh"}],
+        "matcher": "Edit"
+      },
+      {
+        "hooks": [{"type": "command", "command": ".claude/hooks/hook-three.sh"}],
+        "matcher": "Write"
+      }
+    ]
+  },
+  "_schema_version": "1"
+}

@@ -1,0 +1,11 @@
+{
+  "schema_version": "1.0.0",
+  "workstream_id": "M2",
+  "phase": "qa-spec",
+  "from_agent": "qa",
+  "to_phase": "dev",
+  "artifact_paths": [
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/tests/classifier/classifier.test.ts"
+  ],
+  "timestamp": "2026-05-30T03:57:59Z"
+}

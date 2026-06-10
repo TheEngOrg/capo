@@ -1,0 +1,17 @@
+{
+  "schema_version": "1.0.0",
+  "workstream_id": "M1-pass-2b",
+  "phase": "dev",
+  "from_agent": "dev",
+  "to_phase": "qa-validate",
+  "artifact_paths": [
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/src/repl/useSubmit.ts",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/src/ui/Output.tsx",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/src/cli/App.tsx",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/src/repl/Session.tsx",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/src/ui/Prompt.tsx",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/src/security/keys.ts",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/dist/teo-darwin-arm64"
+  ],
+  "timestamp": "2026-05-29T17:41:12Z"
+}

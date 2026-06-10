@@ -1,0 +1,286 @@
+#!/usr/bin/env bash
+# ============================================================================
+# mg-memory-settings-insert — TEO settings.json PreToolUse Hook Inserter
+# ============================================================================
+# Inserts a hook block into the PreToolUse array in .claude/settings.json.
+# JSON-aware: uses jq for all operations. No anchor/text-search ambiguity.
+# Idempotent: keyed on hook script path; will not insert duplicates.
+#
+# USAGE
+#   mg-memory-settings-insert --hook-command <script-path> --matcher <matcher>
+#     [--position <index|append>]
+#   mg-memory-settings-insert --hook-json <json-block>
+#     [--position <index|append>]
+#   mg-memory-settings-insert --help | -h
+#
+# OPTIONS
+#   --hook-command <path>   Script path for the hook command
+#   --matcher <matcher>     Hook matcher (Bash, Edit, Write, etc.)
+#   --hook-json <json>      Full hook block JSON (overrides --hook-command/--matcher)
+#   --position <n|append>   Insertion index (0-based) or "append" (default: append)
+#   --settings-file <path>  Path to settings.json (default: .claude/settings.json)
+#   --project-root <path>   Override project root
+#
+# SCOPE
+#   ONLY operates on .claude/settings.json.
+#   Calling this tool on .claude/memory/** is refused (wrong tool).
+#
+# SECURITY
+#   Output is valid JSON (jq validated).
+#   Idempotent: keyed on hooks[].hooks[0].command matching --hook-command.
+#   Atomic write: flock + mktemp + mv.
+#   EXIT trap unsets bypass token.
+#   Every outcome audited.
+#
+# EXIT CODES
+#   0  Applied or no-op (already registered)
+#   1  Refused
+#   2  Usage error
+# ============================================================================
+
+set -uo pipefail
+
+SCRIPT_NAME="mg-memory-settings-insert"
+
+TEO_APPLY_EDIT_BYPASS="teo-ae-$$-$(date +%s)"
+export TEO_APPLY_EDIT_BYPASS
+_MG_SI_TMPFILES=()
+trap 'unset TEO_APPLY_EDIT_BYPASS; for _f in "${_MG_SI_TMPFILES[@]:-}"; do rm -f "$_f" 2>/dev/null || true; done' EXIT
+
+HAS_JQ=true
+HAS_FLOCK=true
+if ! command -v jq > /dev/null 2>&1; then
+  printf 'ERROR: jq is required\n' >&2; exit 1
+fi
+if ! command -v flock > /dev/null 2>&1; then
+  HAS_FLOCK=false
+  printf 'WARN: flock not available — writing without lock\n' >&2
+fi
+
+EXECUTION_ID="$(date +%s)-$$"
+get_timestamp() { date -u '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || date '+%Y-%m-%dT%H:%M:%SZ'; }
+get_date_suffix() { date -u '+%Y-%m-%d' 2>/dev/null || date '+%Y-%m-%d'; }
+
+usage() {
+  printf 'Usage: %s --hook-command <path> --matcher <m> [--position <n|append>]\n' "$SCRIPT_NAME"
+  printf '  OR:  %s --hook-json <json> [--position <n|append>]\n' "$SCRIPT_NAME"
+  printf 'Insert a hook block into .claude/settings.json PreToolUse array.\n'
+  printf 'Options:\n'
+  printf '  --hook-command <path>   Hook script path\n'
+  printf '  --matcher <matcher>     Hook matcher\n'
+  printf '  --hook-json <json>      Full hook block JSON\n'
+  printf '  --position <n|append>   Index (0-based) or append (default: append)\n'
+  printf '  --settings-file <path>  Path to settings.json\n'
+  printf '  --project-root <path>   Override project root\n'
+  printf '  --help, -h              Show help\n'
+}
+
+HOOK_COMMAND=""
+HOOK_MATCHER=""
+HOOK_JSON=""
+POSITION="append"
+SETTINGS_FILE_ARG=""
+PROJECT_ROOT_ARG=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --help|-h) usage; exit 0 ;;
+    --hook-command)
+      [[ $# -lt 2 ]] && { printf 'ERROR: --hook-command requires an argument\n' >&2; exit 2; }
+      HOOK_COMMAND="$2"; shift 2 ;;
+    --matcher)
+      [[ $# -lt 2 ]] && { printf 'ERROR: --matcher requires an argument\n' >&2; exit 2; }
+      HOOK_MATCHER="$2"; shift 2 ;;
+    --hook-json)
+      [[ $# -lt 2 ]] && { printf 'ERROR: --hook-json requires an argument\n' >&2; exit 2; }
+      HOOK_JSON="$2"; shift 2 ;;
+    --position)
+      [[ $# -lt 2 ]] && { printf 'ERROR: --position requires an argument\n' >&2; exit 2; }
+      POSITION="$2"; shift 2 ;;
+    --settings-file)
+      [[ $# -lt 2 ]] && { printf 'ERROR: --settings-file requires an argument\n' >&2; exit 2; }
+      SETTINGS_FILE_ARG="$2"; shift 2 ;;
+    --project-root)
+      [[ $# -lt 2 ]] && { printf 'ERROR: --project-root requires an argument\n' >&2; exit 2; }
+      PROJECT_ROOT_ARG="$2"; shift 2 ;;
+    -*) printf 'ERROR: unrecognized flag: %s\n' "$1" >&2; exit 2 ;;
+    *) printf 'ERROR: unexpected argument: %s\n' "$1" >&2; exit 2 ;;
+  esac
+done
+
+# Validate: need either --hook-json OR (--hook-command AND --matcher)
+if [[ -z "$HOOK_JSON" ]] && [[ -z "$HOOK_COMMAND" ]]; then
+  printf 'ERROR: --hook-command or --hook-json is required\n' >&2; exit 2
+fi
+if [[ -z "$HOOK_JSON" ]] && [[ -z "$HOOK_MATCHER" ]]; then
+  printf 'ERROR: --matcher is required when using --hook-command\n' >&2; exit 2
+fi
+
+if [[ -n "$PROJECT_ROOT_ARG" ]]; then
+  PROJECT_ROOT="$PROJECT_ROOT_ARG"
+elif [[ -n "${TEO_PROJECT_ROOT:-}" ]]; then
+  PROJECT_ROOT="$TEO_PROJECT_ROOT"
+elif command -v git > /dev/null 2>&1; then
+  PROJECT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || printf '%s' "$PWD")"
+else
+  PROJECT_ROOT="$PWD"
+fi
+
+# Determine settings file path
+if [[ -n "$SETTINGS_FILE_ARG" ]]; then
+  SETTINGS_FILE="$SETTINGS_FILE_ARG"
+else
+  SETTINGS_FILE="${PROJECT_ROOT}/.claude/settings.json"
+fi
+
+# Scope gate: only accepts settings.json target
+# (memory files go to mg-memory-write / mg-memory-append)
+SETTINGS_BASENAME="$(basename "$SETTINGS_FILE")"
+if [[ "$SETTINGS_BASENAME" != "settings.json" ]]; then
+  printf 'ERROR: this tool only operates on settings.json (got: %s). Use mg-memory-* tools for .claude/memory/ files.\n' "$SETTINGS_FILE" >&2
+  exit 1
+fi
+
+# Refuse if settings_file path contains .claude/memory
+if [[ "$SETTINGS_FILE" == *".claude/memory"* ]]; then
+  printf 'ERROR: settings-insert tool refuses .claude/memory/ targets — use mg-memory-write instead\n' >&2
+  exit 1
+fi
+
+[[ -n "${TEO_AUDIT_DIR:-}" ]] && AUDIT_DIR="$TEO_AUDIT_DIR" || AUDIT_DIR="${PROJECT_ROOT}/.claude/memory/traces"
+
+atomic_json_append() {
+  local log_file="$1" entry_json="$2" lock_file tmp_file
+  lock_file="${log_file}.lock"
+  tmp_file="$(mktemp "${log_file}.tmp.XXXXXX")" || { printf 'WARN: audit temp failed\n' >&2; return 0; }
+  _MG_SI_TMPFILES+=("$tmp_file")
+  local existing="[]"
+  if [[ -s "$log_file" ]] && jq empty "$log_file" > /dev/null 2>&1; then
+    existing="$(cat "$log_file")"
+  fi
+  if [[ "$HAS_FLOCK" == "true" ]]; then
+    (flock -x -w 10 9 2>/dev/null || true
+     printf '%s' "$existing" | jq --argjson e "$entry_json" '. + [$e]' > "$tmp_file" 2>/dev/null && mv "$tmp_file" "$log_file"
+    ) 9>"$lock_file"
+    rm -f "$lock_file" 2>/dev/null || true
+  else
+    printf '%s' "$existing" | jq --argjson e "$entry_json" '. + [$e]' > "$tmp_file" 2>/dev/null && mv "$tmp_file" "$log_file"
+  fi
+}
+
+write_audit() {
+  local verdict="$1" reason="${2:-}"
+  local target_display; target_display="$(basename "$SETTINGS_FILE")"
+  local log_file="${AUDIT_DIR}/edit-audit-$(get_date_suffix).json"
+  mkdir -p "$AUDIT_DIR" 2>/dev/null || true
+  local entry
+  if [[ "$verdict" == "refused" ]]; then
+    entry="$(jq -n --arg ei "$EXECUTION_ID" --arg ag "${AGENT_IDENTITY_TOKEN:-unknown}" --arg p "$target_display" --arg op 'settings-json-insert' --arg v "$verdict" --arg r "$reason" --arg ts "$(get_timestamp)" '{execution_id:$ei,agent:$ag,path:$p,operation:$op,verdict:$v,refusal_reason:$r,timestamp:$ts}' 2>/dev/null)" || return 0
+  else
+    entry="$(jq -n --arg ei "$EXECUTION_ID" --arg ag "${AGENT_IDENTITY_TOKEN:-unknown}" --arg p "$target_display" --arg op 'settings-json-insert' --arg v "$verdict" --arg ts "$(get_timestamp)" '{execution_id:$ei,agent:$ag,path:$p,operation:$op,verdict:$v,timestamp:$ts}' 2>/dev/null)" || return 0
+  fi
+  [[ -n "$entry" ]] && atomic_json_append "$log_file" "$entry"
+}
+
+# File checks
+[[ ! -f "$SETTINGS_FILE" ]] && { printf 'ERROR: settings file not found: %s\n' "$SETTINGS_FILE" >&2; write_audit "refused" "file-not-found"; exit 1; }
+jq empty "$SETTINGS_FILE" > /dev/null 2>&1 || { printf 'ERROR: settings.json is not valid JSON\n' >&2; write_audit "refused" "invalid-json-target"; exit 1; }
+
+# Validate schema: must have .hooks.PreToolUse as array
+PTU_CHECK="$(jq -r 'if (.hooks.PreToolUse | type) == "array" then "ok" else "bad" end' "$SETTINGS_FILE" 2>/dev/null || printf 'bad')"
+if [[ "$PTU_CHECK" != "ok" ]]; then
+  printf 'ERROR: settings.json does not have .hooks.PreToolUse array\n' >&2
+  write_audit "refused" "schema-missing-PreToolUse"
+  exit 1
+fi
+
+# Build the hook block JSON
+if [[ -n "$HOOK_JSON" ]]; then
+  BLOCK_JSON="$HOOK_JSON"
+  # Validate it's valid JSON
+  printf '%s' "$BLOCK_JSON" | jq empty > /dev/null 2>&1 || { printf 'ERROR: --hook-json is not valid JSON\n' >&2; write_audit "refused" "invalid-hook-json"; exit 1; }
+  # Extract dedup key from the json
+  DEDUP_KEY="$(printf '%s' "$BLOCK_JSON" | jq -r '.hooks[0].command // .command // ""' 2>/dev/null || printf '')"
+else
+  # Build from --hook-command and --matcher
+  BLOCK_JSON="$(jq -n --arg cmd "$HOOK_COMMAND" --arg m "$HOOK_MATCHER" \
+    '{"matcher": $m, "hooks": [{"type": "command", "command": $cmd}]}' 2>/dev/null)" || {
+    printf 'ERROR: failed to build hook block JSON\n' >&2; write_audit "refused" "json-build-failed"; exit 1
+  }
+  DEDUP_KEY="$HOOK_COMMAND"
+fi
+
+# Idempotency check: scan existing PreToolUse entries for matching command
+if [[ -n "$DEDUP_KEY" ]]; then
+  EXISTING_COUNT="$(jq --arg key "$DEDUP_KEY" \
+    '[.hooks.PreToolUse[] | select(.hooks[0].command == $key)] | length' \
+    "$SETTINGS_FILE" 2>/dev/null || printf '0')"
+  if [[ "$EXISTING_COUNT" -gt 0 ]]; then
+    printf 'INFO: hook already registered (idempotent — no change): %s\n' "$DEDUP_KEY" >&2
+    write_audit "applied"
+    exit 0
+  fi
+  # Dedup: also check if block already appears verbatim (belt and suspenders)
+  # and remove duplicates if present
+  DUP_COUNT="$(jq --argjson block "$BLOCK_JSON" \
+    '[.hooks.PreToolUse[] | select(. == $block)] | length' \
+    "$SETTINGS_FILE" 2>/dev/null || printf '0')"
+  if [[ "$DUP_COUNT" -gt 0 ]]; then
+    printf 'INFO: exact hook block already present (idempotent — no change)\n' >&2
+    write_audit "applied"
+    exit 0
+  fi
+fi
+
+# Build new settings JSON with hook block inserted at position
+if [[ "$POSITION" == "append" ]]; then
+  NEW_JSON="$(jq --argjson block "$BLOCK_JSON" \
+    '.hooks.PreToolUse += [$block]' \
+    "$SETTINGS_FILE" 2>/dev/null)" || {
+    printf 'ERROR: jq insert failed\n' >&2; write_audit "refused" "jq-insert-failed"; exit 1
+  }
+else
+  # Numeric position
+  if ! printf '%s' "$POSITION" | grep -qE '^[0-9]+$'; then
+    printf 'ERROR: --position must be a non-negative integer or "append"\n' >&2; exit 2
+  fi
+  NEW_JSON="$(jq --argjson block "$BLOCK_JSON" --argjson pos "$POSITION" \
+    '.hooks.PreToolUse = (.hooks.PreToolUse[:$pos] + [$block] + .hooks.PreToolUse[$pos:])' \
+    "$SETTINGS_FILE" 2>/dev/null)" || {
+    printf 'ERROR: jq positional insert failed\n' >&2; write_audit "refused" "jq-insert-failed"; exit 1
+  }
+fi
+
+# Validate result
+printf '%s' "$NEW_JSON" | jq empty > /dev/null 2>&1 || { printf 'ERROR: result is not valid JSON\n' >&2; write_audit "refused" "result-not-valid-json"; exit 1; }
+# Verify schema intact
+PTU_AFTER="$(printf '%s' "$NEW_JSON" | jq -r 'if (.hooks.PreToolUse | type) == "array" then "ok" else "bad" end' 2>/dev/null || printf 'bad')"
+[[ "$PTU_AFTER" != "ok" ]] && { printf 'ERROR: schema broken after insert\n' >&2; write_audit "refused" "schema-broken-after-insert"; exit 1; }
+
+# Atomic write
+LOCK_FILE="${SETTINGS_FILE}.teo-si.lock"
+TMP_FILE=""
+if [[ "$HAS_FLOCK" == "true" ]]; then
+  TMP_FILE="$(mktemp "${SETTINGS_FILE}.teo-si.tmp.XXXXXX" 2>/dev/null)" || { printf '%s\n' "$NEW_JSON" > "$SETTINGS_FILE"; write_audit "applied"; exit 0; }
+  _MG_SI_TMPFILES+=("$TMP_FILE")
+  (flock -x -w 10 9 2>/dev/null || printf 'WARN: flock timeout\n' >&2
+   printf '%s\n' "$NEW_JSON" > "$TMP_FILE"
+   mv "$TMP_FILE" "$SETTINGS_FILE"
+  ) 9>"$LOCK_FILE"
+  _SUBSHELL_RC=$?
+  rm -f "$LOCK_FILE" 2>/dev/null || true
+  if [[ "$_SUBSHELL_RC" -ne 0 ]]; then write_audit "refused" "atomic-write-failed"; exit 1; fi
+else
+  printf 'WARN: flock not available — writing without lock\n' >&2
+  TMP_FILE="$(mktemp "${SETTINGS_FILE}.teo-si.tmp.XXXXXX" 2>/dev/null)" || true
+  if [[ -n "$TMP_FILE" ]]; then
+    _MG_SI_TMPFILES+=("$TMP_FILE")
+    printf '%s\n' "$NEW_JSON" > "$TMP_FILE"
+    mv "$TMP_FILE" "$SETTINGS_FILE"
+  else
+    printf '%s\n' "$NEW_JSON" > "$SETTINGS_FILE"
+  fi
+fi
+
+write_audit "applied"
+exit 0

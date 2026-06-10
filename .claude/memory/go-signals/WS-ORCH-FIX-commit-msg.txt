@@ -1,0 +1,18 @@
+chore(WS-ORCH-FIX): green memory-write tooling + clean baseline
+
+WS-ORCH-FIX is the primary work here:
+- New replace-range op + --content-file primitive for the memory-write tooling (teo-apply-edit / mg-memory-patch-section)
+- Deleted the dead Block B that was breaking mg-memory-patch-section
+- Fixed the phantom teo-memory-* citation in teo-sage-constraint.sh (now mg-memory-*)
+- Activated pre-bash-write-guard.sh (registered in settings.json)
+- tests/memory-write/ green at 109/109, pre-bash-write-guard at 44/44
+- #47898 held at met:false with a status_override recording the HOLD-until-A2A ruling
+
+We're folding in two unrelated changesets to land a clean baseline in one shot, per decision to commit everything together:
+- Pre-existing framework-upgrade churn (13 agent.md files, several hooks/skills, ADR-0005, SPIKE-001)
+- M1/M2 milestone artifacts (go-signals, research notes, workstream state, specs)
+
+These aren't WS-ORCH-FIX work — they were already in the tree. Committed here only to reset to a clean baseline before M3.
+
+Trace-Id: 130aef68-c3bc-44bd-b1f5-cd3147ea2902
+Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>

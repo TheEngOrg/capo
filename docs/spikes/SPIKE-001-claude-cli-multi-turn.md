@@ -2,7 +2,7 @@
 
 **Date:** 2026-05-21
 **Author:** dev (TEO spike)
-**Status:** COMPLETE
+**Status:** PARTIAL
 **Blocks:** ADR-0001 PROPOSED → ACCEPTED
 
 ---

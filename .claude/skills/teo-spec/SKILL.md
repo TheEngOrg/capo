@@ -71,7 +71,7 @@ write: .claude/memory/agent-mg-spec-decisions.json
 2. Classify as Tier 1 (internal) or Tier 2 (external)
 3. For Tier 2 dependencies:
    - Spawn `staff-engineer` to run validation spike
-   - Spike MUST use WebSearch to verify existence
+   - Spike MUST use firecrawl-search to verify existence (fallback: WebSearch)
    - Wait for spike results before finalizing specs
 4. If spike returns NO-GO:
    - Revise feature specs to use validated alternatives

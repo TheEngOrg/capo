@@ -1,0 +1,16 @@
+{
+  "schema_version": "1.0.0",
+  "workstream_id": "M1-pass-2a",
+  "phase": "qa-spec",
+  "from_agent": "qa",
+  "to_phase": "dev",
+  "artifact_paths": [
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/tests/classifier/classifier.test.ts",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/tests/classifier/patterns.test.ts",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/tests/security/identity.test.ts",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/tests/security/policy.test.ts",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/tests/audit/log.test.ts",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/tests/repl/history.test.ts"
+  ],
+  "timestamp": "2026-05-29T16:33:51Z"
+}

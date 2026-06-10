@@ -1,0 +1,27 @@
+{
+  "schema_version": "1.0.0",
+  "workstream_id": "M1-pass-2",
+  "phase": "qa-spec",
+  "from_agent": "qa",
+  "to_phase": "dev",
+  "artifact_paths": [
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/tests/repl/session.test.tsx",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/tests/repl/useSubmit.test.ts",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/tests/ui/Prompt.test.tsx",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/tests/ui/Output.test.tsx",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/tests/ui/RouteIndicator.test.tsx",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/tests/ui/ErrorBoundary.test.tsx",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/tests/cli/main.test.tsx",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/tests/integration/golden.test.ts"
+  ],
+  "summary": {
+    "total_tests": 175,
+    "passing": 165,
+    "failing": 10,
+    "todo_manual_tty": 2,
+    "red_files": ["useSubmit.test.ts", "Output.test.tsx", "cli/main.test.tsx"],
+    "green_files": ["session.test.tsx", "Prompt.test.tsx", "RouteIndicator.test.tsx", "ErrorBoundary.test.tsx", "golden.test.ts"],
+    "tdd_state": "correct — red against stubs, green for already-implemented sources"
+  },
+  "timestamp": "2026-05-29T17:31:04Z"
+}

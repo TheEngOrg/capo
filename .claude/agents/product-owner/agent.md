@@ -55,15 +55,19 @@ read:
   - .claude/memory/user-feedback.json
   - .claude/memory/workstream-status.json
 
-# Write requirements
-write: .claude/memory/product-requirements.json
-  feature: <name>
-  user_story: "As a <user>, I want <goal> so that <benefit>"
-  acceptance_criteria:
-    - <criterion 1>
-    - <criterion 2>
+# Write sprint acceptance records (validation of pre-existing PM stories — NOT origination)
+# NOTE: product-requirements.json is PM-owned. PO NEVER writes to product-requirements.json.
+write: .claude/memory/sprint-acceptance.json
+  feature: <name>  # Must reference a feature already in PM's product-requirements.json
+  sprint_id: <sprint-id>
+  acceptance_status: accepted | rejected | deferred
+  acceptance_notes: <rationale>
+
   priority: <high|medium|low>
 ```
+
+**Write-scope constraint:** PO NEVER writes user_story or acceptance_criteria fields — those are PM-owned origination fields in product-requirements.json. PO writes acceptance verdicts (accepted/rejected/deferred) and sprint priority to sprint-acceptance.json only. Authoring new user stories or acceptance criteria routes to product-manager.
+
 
 ## Delegation
 

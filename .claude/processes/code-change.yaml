@@ -1,0 +1,80 @@
+# =============================================================================
+# Process Flow: code-change
+# =============================================================================
+# Phase 2 preview — this file documents the intended enforcement for code
+# changes. It is NOT read by the harness yet. Phase 1 enforcement is
+# implemented in .claude/hooks/task-completed.sh (WARN level).
+#
+# When the Phase 2 harness is built, it will read this file and auto-generate
+# hook logic from it. Until then, this serves as the spec.
+# =============================================================================
+
+name: code-change
+version: 1
+
+trigger:
+  condition: Source file edited
+  patterns:
+    - "**/*.ts"
+    - "**/*.tsx"
+    - "**/*.js"
+    - "**/*.jsx"
+    - "**/*.py"
+    - "**/*.rs"
+    - "**/*.go"
+  exclude:
+    - "node_modules/**"
+    - ".next/**"
+    - "dist/**"
+    - "build/**"
+
+enforcement: warn  # Phase 1: advisory. Phase 2: block.
+
+steps:
+  - name: run-tests
+    action: Verify tests pass for changed files
+    gate: test_exit_code == 0
+    on_fail: warn
+    hook_ref: task-completed.sh#gate-1
+    notes: |
+      In Phase 1, vitest is run with --changed flag scoped to staged files.
+      In Phase 2, the harness will determine the test runner from project config.
+
+  - name: check-docs
+    action: Verify related documentation is updated alongside source changes
+    gate: docs_staged_with_source
+    on_fail: warn
+    hook_ref: task-completed.sh#gate-3
+    notes: |
+      Checks that at least one .md file, README, CHANGELOG, or docs/ file
+      is staged when source files are staged. Phase 1 warns only.
+
+  - name: count-freshness
+    action: Verify CLAUDE.md counts match actual agent/skill/protocol counts on disk
+    gate: claude_md_counts_match_disk
+    on_fail: warn
+    hook_ref: task-completed.sh#gate-4
+    notes: |
+      Prevents CLAUDE.md from drifting as agents/skills/protocols are
+      added or removed. Phase 1 warns only.
+
+  - name: lint
+    action: Verify linting passes for changed files
+    gate: lint_exit_code == 0
+    on_fail: warn
+    hook_ref: null  # Not yet implemented in hooks. Phase 2.
+    notes: |
+      Phase 2 will add eslint/prettier check to the hook chain.
+      Not enforced in Phase 1.
+
+metadata:
+  created: "2026-03-24"
+  phase: 1
+  author: sage
+  related_protocol: process-enforcement-protocol.md
+  migration_notes: |
+    When Phase 2 harness is ready:
+    1. Harness reads this YAML at session start
+    2. Hook logic is generated from steps + gates
+    3. Enforcement level can be changed from 'warn' to 'block' per-step
+    4. Existing task-completed.sh hardcoded logic is replaced by harness calls

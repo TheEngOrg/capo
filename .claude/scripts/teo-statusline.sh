@@ -2,9 +2,7 @@
 # ============================================================================
 # teo-statusline.sh — TEO statusline for Claude Code
 # ============================================================================
-# Outputs a single status line:
-#   With .teo-for-claude-version:  TEO v{teo} | MG v{mg} | {edition} | Sage: {sage}
-#   Without (fallback):            TEO v{teo} | {session} | Sage: {sage}
+# Outputs a single status line: TEO v{teo} | {session} | Sage: {sage}
 #
 # Wired via settings.json statusLine.command.
 # Receives session JSON on stdin (discarded — not used here).
@@ -18,23 +16,11 @@ cat > /dev/null || true
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$PWD}"
 CLAUDE_DIR="$PROJECT_DIR/.claude"
 
-# Read version — primary: .teo-for-claude-version, fallback: TEO_INSTALL.json, then TEO_PROJECT
+# Read version — prefer TEO_INSTALL.json .version (jq), fallback TEO_PROJECT Version: (awk)
 TEO_VERSION="unknown"
-MG_VERSION=""
-EDITION=""
 
-# Primary: .teo-for-claude-version (partner install marker — teo_version field)
-if [[ -f "$CLAUDE_DIR/.teo-for-claude-version" ]]; then
-    _v=$(awk '/^teo_version:/ {print $NF}' "$CLAUDE_DIR/.teo-for-claude-version" 2>/dev/null || echo "")
-    [[ -n "$_v" ]] && TEO_VERSION="$_v"
-    _mg=$(awk '/^mg_base_version:/ {print $NF}' "$CLAUDE_DIR/.teo-for-claude-version" 2>/dev/null || echo "")
-    [[ -n "$_mg" ]] && MG_VERSION="$_mg"
-    _ed=$(awk '/^edition:/ {print $NF}' "$CLAUDE_DIR/.teo-for-claude-version" 2>/dev/null || echo "")
-    [[ -n "$_ed" ]] && EDITION="$_ed"
-fi
-
-# Secondary: TEO_INSTALL.json .version field (jq)
-if [[ "$TEO_VERSION" == "unknown" ]] && [[ -f "$CLAUDE_DIR/TEO_INSTALL.json" ]] && command -v jq >/dev/null 2>/dev/null; then
+# Prefer TEO_INSTALL.json .version field (jq)
+if [[ -f "$CLAUDE_DIR/TEO_INSTALL.json" ]] && command -v jq >/dev/null 2>/dev/null; then
     _v=$(jq -r '.version // empty' "$CLAUDE_DIR/TEO_INSTALL.json" 2>/dev/null || echo "")
     [[ -n "$_v" ]] && TEO_VERSION="$_v"
 fi
@@ -47,37 +33,34 @@ fi
 
 # Final fallback: already "unknown"
 
+# Determine session status from the TEO auth file
+SESSION_STATUS="devMode"
+_basename="enterprise-session"
+SESSION_FILE="$HOME/.claude/${_basename}.json"
+if [[ -f "$SESSION_FILE" ]]; then
+    if command -v jq >/dev/null 2>/dev/null; then
+        DEV_MODE=$(jq -r '.devMode // false' "$SESSION_FILE" 2>/dev/null || echo "false")
+        if [[ "$DEV_MODE" == "true" ]]; then
+            SESSION_STATUS="devMode"
+        else
+            TIER=$(jq -r '.license.tier // "unknown"' "$SESSION_FILE" 2>/dev/null || echo "unknown")
+            SESSION_STATUS="licensed ($TIER)"
+        fi
+    elif grep -q '"devMode".*true' "$SESSION_FILE" 2>/dev/null; then
+        SESSION_STATUS="devMode"
+    else
+        SESSION_STATUS="licensed"
+    fi
+else
+    SESSION_STATUS="devMode"
+fi
+
 # Sage status: active if agent.md present
 SAGE_STATUS="missing"
 if [[ -f "$CLAUDE_DIR/agents/sage/agent.md" ]]; then
     SAGE_STATUS="active"
 fi
 
-# Emit statusline — format depends on whether .teo-for-claude-version was present
-if [[ -n "$EDITION" ]] && [[ -n "$MG_VERSION" ]]; then
-    # Partner install: include MG version and edition from .teo-for-claude-version
-    echo "TEO v${TEO_VERSION} | MG v${MG_VERSION} | ${EDITION} | Sage: ${SAGE_STATUS}"
-else
-    # Enterprise / fallback: determine session status from TEO auth file
-    SESSION_STATUS="devMode"
-    _basename="enterprise-session"
-    SESSION_FILE="$HOME/.claude/${_basename}.json"
-    if [[ -f "$SESSION_FILE" ]]; then
-        if command -v jq >/dev/null 2>/dev/null; then
-            DEV_MODE=$(jq -r '.devMode // false' "$SESSION_FILE" 2>/dev/null || echo "false")
-            if [[ "$DEV_MODE" == "true" ]]; then
-                SESSION_STATUS="devMode"
-            else
-                TIER=$(jq -r '.license.tier // "unknown"' "$SESSION_FILE" 2>/dev/null || echo "unknown")
-                SESSION_STATUS="licensed ($TIER)"
-            fi
-        elif grep -q '"devMode".*true' "$SESSION_FILE" 2>/dev/null; then
-            SESSION_STATUS="devMode"
-        else
-            SESSION_STATUS="licensed"
-        fi
-    fi
-    echo "TEO v${TEO_VERSION} | ${SESSION_STATUS} | Sage: ${SAGE_STATUS}"
-fi
+echo "TEO v${TEO_VERSION} | ${SESSION_STATUS} | Sage: ${SAGE_STATUS}"
 
 exit 0

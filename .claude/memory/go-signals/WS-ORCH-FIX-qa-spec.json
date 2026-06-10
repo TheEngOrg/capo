@@ -1,0 +1,11 @@
+{
+  "schema_version": "1.0.0",
+  "workstream_id": "WS-ORCH-FIX",
+  "phase": "qa-spec",
+  "from_agent": "qa",
+  "to_phase": "dev",
+  "artifact_paths": [
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/.claude/memory/pipeline/ws-orch-fix-memory-write-tooling-qa-spec.md"
+  ],
+  "timestamp": "2026-06-09T00:00:00Z"
+}

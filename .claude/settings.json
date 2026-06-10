@@ -1,4 +1,8 @@
 {
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  },
+  "teammateMode": "auto",
   "permissions": {
     "allow": [
       "Read",
@@ -9,13 +13,19 @@
       "WebFetch",
       "WebSearch",
       "Task",
+      "Agent",
+      "TeamCreate",
+      "SendMessage",
       "Bash(npm:*)",
       "Bash(git:*)",
       "Bash(node:*)",
-      "Bash(npx:*)",
+      "Bash(npx: vitest*)",
+      "Bash(npx: tsc*)",
+      "Bash(npx: next*)",
       "Bash(pnpm:*)",
       "Bash(yarn:*)",
       "Bash(vitest:*)",
+      "Bash(playwright:*)",
       "Bash(tsc:*)",
       "Bash(eslint:*)",
       "Bash(prettier:*)",
@@ -43,13 +53,54 @@
       "Bash(gh:*)",
       "Bash(du:*)",
       "Bash(date:*)",
-      "Bash(.claude/scripts/teo-statusline.sh:*)",
+      "Bash(.claude/scripts/teo-validate:*)",
+      "Bash(.claude/scripts/teo-help:*)",
+      "Bash(.claude/scripts/teo-run-tests:*)",
+      "Bash(.claude/scripts/teo-benchmark:*)",
+      "Bash(.claude/scripts/teo-capture-learnings:*)",
+      "Bash(.claude/scripts/teo-compliance-report:*)",
+      "Bash(.claude/scripts/teo-sync-global:*)",
+      "Bash(.claude/scripts/teo-monitor:*)",
+      "Bash(.claude/scripts/teo-memory-write:*)",
+      "Bash(.claude/scripts/teo-memory-append:*)",
+      "Bash(.claude/scripts/teo-memory-patch-section:*)",
+      "Bash(.claude/scripts/teo-memory-read:*)",
+      "Bash(.claude/scripts/teo-memory-clean:*)",
+      "Bash(.claude/scripts/teo-context-reset:*)",
+      "Bash(.claude/scripts/teo-session-meta-write:*)",
+      "Bash(.claude/scripts/teo-render-diagrams:*)",
       "Bash(.claude/scripts/teo-smoke-install:*)",
       "Bash(.claude/scripts/teo-sweep-install:*)",
       "Bash(.claude/scripts/teo-find:*)",
       "Bash(.claude/scripts/teo-stat:*)",
       "Bash(.claude/scripts/teo-grep-r:*)",
-      "Bash(chmod +x .claude/scripts/*)"
+      "Bash(.claude/scripts/teo-gemini:*)",
+      "Bash(.claude/scripts/teo-codex:*)",
+      "Bash(.claude/scripts/teo-build-release:*)",
+      "Bash(.claude/scripts/teo-commit-lock:*)",
+      "Bash(.claude/scripts/teo-commit-message-verify:*)",
+      "Bash(.claude/scripts/teo-prepare-commit-message:*)",
+      "Bash(.claude/scripts/teo-check-wrapper-paths:*)",
+      "Bash(.claude/scripts/teo-check-bats-count:*)",
+      "Bash(.claude/scripts/teo-check-orphan-bats:*)",
+      "Bash(.claude/scripts/teo-check-suite-list-parity:*)",
+      "Bash(.claude/scripts/teo-spawn-prep:*)",
+      "Bash(.claude/scripts/teo-update-test-baselines:*)",
+      "Edit(.claude/memory/**)",
+      "Write(.claude/memory/**)",
+      "Bash(.claude/scripts/mg-memory-append:*)",
+      "Bash(.claude/scripts/mg-memory-patch-section:*)",
+      "Bash(.claude/scripts/mg-memory-write:*)",
+      "Bash(.claude/scripts/mg-memory-read:*)",
+      "Bash(chmod +x .claude/scripts/*)",
+      "Bash(d2:*)",
+      "Bash(plantuml:*)",
+      "Bash(/opt/homebrew/bin/d2:*)",
+      "Bash(/opt/homebrew/bin/plantuml:*)",
+      "Bash(docker:*)",
+      "Bash(kill:*)",
+      "Bash(pkill:*)",
+      "Bash(python3:*)"
     ],
     "deny": [
       "Bash(bash:*)",
@@ -83,17 +134,254 @@
       "Bash(nc:*)",
       "Bash(ncat:*)",
       "Bash(curl:*)",
+      "Bash(xargs sh*)",
+      "Bash(xargs bash*)",
+      "Bash(xargs zsh*)",
       "Bash(node -e*)",
       "Bash(node --eval*)",
       "Bash(npx -c*)",
       "Bash(npx --eval*)"
     ]
   },
-  "statusLine": {
-    "type": "command",
-    "command": ".claude/scripts/teo-statusline.sh"
-  },
   "hooks": {
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/pre-task-classify-check.sh"
+          }
+        ],
+        "matcher": "Task"
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/teo-tool-call-audit.sh"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/teo-context-checkpoint.sh"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/block-no-verify.sh"
+          }
+        ],
+        "matcher": "Bash"
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/pre-bash-gate-check.sh"
+          }
+        ],
+        "matcher": "Bash"
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/teo-bash-arg-validate.sh"
+          }
+        ],
+        "matcher": "Bash"
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/teo-sage-constraint.sh"
+          }
+        ],
+        "matcher": "Bash"
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/teo-cad-commit-guard.sh"
+          }
+        ],
+        "matcher": "Bash(git commit*)"
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/pre-commit-check.sh"
+          }
+        ],
+        "matcher": "Bash(git commit*)"
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/teo-gateway-guard.sh"
+          }
+        ],
+        "matcher": "Read"
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/teo-sage-constraint.sh"
+          }
+        ],
+        "matcher": "Edit"
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/pre-edit-write-guard.sh"
+          }
+        ],
+        "matcher": "Edit"
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/mg-teo-bleed-check.sh"
+          }
+        ],
+        "matcher": "Edit"
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/teo-sage-constraint.sh"
+          }
+        ],
+        "matcher": "Write"
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/pre-edit-write-guard.sh"
+          }
+        ],
+        "matcher": "Write"
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/mg-teo-bleed-check.sh"
+          }
+        ],
+        "matcher": "Write"
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/pdd-contract-guard.sh"
+          }
+        ],
+        "matcher": "Edit"
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/pdd-contract-guard.sh"
+          }
+        ],
+        "matcher": "Write"
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/pre-bash-write-guard.sh"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/teo-post-spawn-citation-check.sh"
+          }
+        ],
+        "matcher": "Agent"
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/teo-sage-spawned.sh"
+          }
+        ],
+        "matcher": "Agent"
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/teo-deployment-engineer-output-gate.sh"
+          }
+        ],
+        "matcher": "Agent"
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/post-edit-gate-check.sh"
+          }
+        ],
+        "matcher": "Edit"
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/post-edit-gate-check.sh"
+          }
+        ],
+        "matcher": "Write"
+      }
+    ],
+    "TeammateIdle": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/teammate-idle.sh"
+          }
+        ]
+      }
+    ],
+    "TaskCompleted": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/task-completed.sh"
+          }
+        ]
+      }
+    ],
     "SessionStart": [
       {
         "hooks": [
@@ -119,47 +407,16 @@
           }
         ]
       }
-    ],
-    "PreToolUse": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": ".claude/hooks/block-no-verify.sh"
-          }
-        ],
-        "matcher": "Bash"
-      }
-    ],
-    "PostToolUse": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": ".claude/hooks/post-tool-use.sh"
-          }
-        ]
-      }
-    ],
-    "TaskCompleted": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": ".claude/hooks/task-completed.sh"
-          }
-        ]
-      }
-    ],
-    "TeammateIdle": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": ".claude/hooks/teammate-idle.sh"
-          }
-        ]
-      }
     ]
-  }
+  },
+  "statusLine": {
+    "type": "command",
+    "command": ".claude/scripts/teo-statusline.sh"
+  },
+  "_provenance": {
+    "agent_id": "unknown",
+    "timestamp": "2026-04-23T08:40:12Z",
+    "workstream_id": null
+  },
+  "_schema_version": "1"
 }

@@ -59,3 +59,4 @@ Brodie's voice: conversational, senior engineer, contractions, short paragraphs.
 | D-002-vitest-runs-under-node.md | Vitest workers run under Node, not Bun — `Bun.*` globals are unavailable inside tests |
 | D-003-coverage-gate-tiered-thresholds.md | Flat 99% global replaced with per-file tiers — pure-logic at 100%, Session.tsx branch-exempted (TTY paths), global floor as safety net |
 | D-004-synchronous-token-issuance-useref.md | useEffect throws escape ErrorBoundary — identity token issuance moved to synchronous render phase with useRef guard to satisfy T-34 |
+| D-005-classifier-ground-truth-principle.md | MECHANICAL=deterministic/ARCHITECTURAL=judgment/UNKNOWN=ambiguous — principle that governs all pattern additions; M2 compute expansion is its first application |

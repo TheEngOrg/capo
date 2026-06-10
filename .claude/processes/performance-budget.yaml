@@ -1,0 +1,86 @@
+# =============================================================================
+# Process Flow: performance-budget
+# =============================================================================
+# Phase 1: audit only — logs warnings when limits are exceeded.
+# No blocking enforcement. Baselines documented in:
+#   docs/reports/performance-baselines.md
+#
+# When Phase 2 harness is built, this file drives automated enforcement.
+# =============================================================================
+
+name: performance-budget
+version: 1
+
+trigger:
+  condition: pipeline_completion
+  notes: |
+    Evaluated after each Sage pipeline completes. In Phase 1, the Sage
+    self-checks against these limits and logs to session trace.
+
+enforcement: log  # Phase 1: audit only. Phase 2: warn. Phase 3: block.
+
+limits:
+  # ── Agent spawning ──────────────────────────────────────
+  max_agent_spawns_per_pipeline: 12
+  notes_spawns: |
+    Median observed: 6. BUILD (ARCHITECTURAL) may reach 15 — log warning
+    but do not block. If consistently exceeded, pipeline needs decomposition.
+
+  # ── Pipeline depth ──────────────────────────────────────
+  max_pipeline_steps: 8
+  notes_steps: |
+    Median observed: 3. Maximum template: 5 (BUILD with all conditionals).
+    Headroom for future pipeline complexity.
+
+  # ── Skill invocations ──────────────────────────────────
+  max_skill_invocations_per_step: 3
+  notes_skills: |
+    Current baseline: 1 skill per step (sequential pipeline). Allows for
+    parallel skill invocation in future without triggering warnings.
+
+  # ── Validation ──────────────────────────────────────────
+  teo_validate_max_checks: 15
+  teo_validate_max_wall_clock_ms: 2000
+  notes_validate: |
+    Current: 8 check groups, 340ms. Adding checks beyond 15 requires
+    justification — each check adds filesystem I/O.
+
+  # ── Context budget ──────────────────────────────────────
+  max_framework_context_pct: 15
+  notes_context: |
+    Current: ~10.5% of 1M context. If framework overhead exceeds 15%,
+    skills or protocols need pruning or lazy-loading.
+
+  # ── Memory accumulation ─────────────────────────────────
+  max_memory_total_kb: 4000
+  notes_memory: |
+    Raised from 700 KB to 4000 KB on 2026-05-24 (WS-CI-FIX-B3). The 700 KB
+    number was set when only pipeline/ and a small traces/ footprint existed.
+    Telemetry growth (engine-lifecycle.json, engine-file-edits.json,
+    context-events.jsonl) pushed working memory to ~3500 KB even after
+    full tidy + OQ-1 exclusions. 4000 KB gives ~500 KB headroom.
+
+    FOLLOW-UP: A telemetry log-rotation workstream (proposed WS-LOG-ROTATE)
+    should keep the largest 3 trace files bounded so this number doesn't
+    keep climbing. See follow-up note in dev-output-pdd-s4-final.md.
+
+    Budget measurement EXCLUDES research-corpora subdirs:
+    archive/, vacuum-corpus/, vacuum-source/, audits/, l7-cross-model-convo/,
+    atomic-discovery/, case-studies/.
+    Applied via OQ-1 resolution 2026-05-03. teo-benchmark and teo-memory-tidy
+    were aligned on the same exclusion model in WS-CI-FIX-B2 (commit landing
+    alongside this change).
+
+baseline_reference: docs/reports/performance-baselines.md
+
+metadata:
+  created: "2026-03-24"
+  phase: 1
+  author: sage
+  issue: 32
+  workstream: WS-5
+  related_protocol: process-enforcement-protocol.md
+  migration_notes: |
+    Phase 2: Sage reads this file at session start, checks limits after
+    each pipeline, logs violations to sage-session-log.json.
+    Phase 3: Violations block pipeline completion (user override available).

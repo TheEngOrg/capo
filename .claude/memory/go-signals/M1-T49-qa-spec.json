@@ -1,0 +1,19 @@
+{
+  "schema_version": "1.0.0",
+  "workstream_id": "M1-T49",
+  "phase": "qa-spec",
+  "from_agent": "qa",
+  "to_phase": "dev",
+  "artifact_paths": [
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/tests/repl/useSubmit.test.ts",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/tests/cli/main.test.tsx"
+  ],
+  "timestamp": "2026-05-29T18:05:20Z",
+  "notes": {
+    "new_red_tests": ["T-49(a)", "T-49(b)"],
+    "fixed_tautologies": ["T-35 in main.test.tsx", "T-51 subprocess (now honest todo + unit seam)"],
+    "suite_result": "2 failing (correct red) + 180 passing + 3 todo",
+    "previously_passing": 178,
+    "now_passing": 180
+  }
+}

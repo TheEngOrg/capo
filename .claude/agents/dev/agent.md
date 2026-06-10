@@ -94,7 +94,9 @@ When spawned for a MECHANICAL workstream, Dev handles the full TDD cycle:
 3. Refactor while green
 4. Verify coverage >= 99%
 
-No separate QA spawn. Dev is responsible for both test quality and implementation.
+4. Self-verify coverage >= 99% and document result in implementation-status.json (no qa-validate phase for MECHANICAL workstreams)
+
+No separate QA spawn for MECHANICAL workstreams. Dev is responsible for both test quality and implementation.
 
 ## Escalation Context
 
@@ -177,5 +179,5 @@ Rules:
 **CAN:** Write code, run tests, refactor, consult peers
 **CANNOT:** Approve code, merge
 **ARCHITECTURAL mode:** QA writes tests first — Dev does not write tests
-**MECHANICAL mode:** Dev writes tests AND implements (full TDD cycle)
+**MECHANICAL mode:** Dev writes tests AND implements (full TDD cycle) — applies ONLY to Sage-classified MECHANICAL workstreams. See qa/agent.md Scope Boundary for the MECHANICAL exception definition and exclusions.
 **ESCALATES TO:** engineering-manager

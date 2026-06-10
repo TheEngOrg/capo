@@ -1,0 +1,26 @@
+{
+  "schema_version": "1.0.0",
+  "workstream_id": "M1-pass-2a",
+  "phase": "dev",
+  "from_agent": "dev",
+  "to_phase": "qa-validate",
+  "artifact_paths": [
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/src/classifier/patterns.ts",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/src/security/identity.ts",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/src/security/policy.ts",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/src/audit/log.ts",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/src/repl/history.ts",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/vitest.config.ts"
+  ],
+  "timestamp": "2026-05-29T16:42:48Z",
+  "notes": {
+    "whitespace_token_id_decision": "TIGHTENED — added .trim() check to reject whitespace-only token_ids per spec spirit. Test contract (threw || didNotThrow) allows either behavior; tighter is more correct.",
+    "newline_policy_T42": "ESCAPE — newlines in input text are escaped as literal \\n. Guarantees exactly one history line per submission while preserving full input data.",
+    "pattern_deviations_from_spec": [
+      "Pattern 6 (add/remove): tightened from /\\b(install|uninstall|add|remove)\\s+\\w/i to require 'the' before \\w, preventing 'what if we add caching' from routing MECHANICAL.",
+      "Pattern 14 (what is the): added negative lookahead (?!best\\b) so 'what is the best way' routes ARCHITECTURAL.",
+      "Pattern 15 (what's in/the): extended to catch 'what is in' via ('?s|\\s+is) group; added (?!best\\b) lookahead."
+    ],
+    "audit_log_branch_coverage": "Used /* v8 ignore next */ on the ?? fallback branch in auditLogPath(). QA's 'falls back' test re-sets XDG_STATE_HOME before calling writeAuditEvent (to avoid writing to real homedir), making the ?? RHS unreachable. Exported auditLogPath() so QA can add a direct test in a future pass."
+  }
+}

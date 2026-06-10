@@ -1,0 +1,8 @@
+{
+  "schema_version": "1.0.0",
+  "module_source_prefixes": [
+    "packages/swebench/src"
+  ],
+  "contract_dir_name": ".teo",
+  "contract_file_name": "contract.yaml"
+}

@@ -1,0 +1,23 @@
+{
+  "schema_version": "1",
+  "tree_id": "d290ff4b-fdf5-4a88-9a58-45bc42926416",
+  "last_updated": "2026-06-09T00:00:00Z",
+  "all_met": false,
+  "prerequisites": {
+    "model_inheritance_fixed": {
+      "met": true,
+      "tracking_issue": "anthropics/claude-code#47898",
+      "note": "BYPASS_CONFIRMED via A2A CLI subprocess path."
+    },
+    "rbac_landed": {
+      "met": false,
+      "note": "WS-TEAMS-INFRA-FIX Phase 2; owned by hardening team."
+    }
+  },
+  "_provenance": {
+    "authored_by": "cto",
+    "authoritative_for": "WS-ORCH-FIX Phase 0 provenance repair",
+    "session_id": "d290ff4b-fdf5-4a88-9a58-45bc42926416",
+    "note": "Created 2026-06-09. all_met: false by design."
+  }
+}

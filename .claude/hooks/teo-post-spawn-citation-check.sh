@@ -71,8 +71,12 @@ CITATION_CHECK_DEFAULT="${SCRIPT_DIR}/../scripts/teo-research-citation-check"
 CITATION_CHECK="${TEO_CITATION_CHECK_SCRIPT:-${CITATION_CHECK_DEFAULT}}"
 
 # Traces directory for hook-failures.json
+# Phase 3.5: honor TEO_HOOK_LOG_DIR_OVERRIDE for event writes
 TRACES_DIR="${PROJECT_ROOT}/.claude/memory/traces"
-HOOK_FAILURES_LOG="${TRACES_DIR}/hook-failures.json"
+EFFECTIVE_TRACES_DIR="${TEO_HOOK_LOG_DIR_OVERRIDE:-${TRACES_DIR}}"
+mkdir -p "${EFFECTIVE_TRACES_DIR}" 2>/dev/null || true
+TRACES_DIR="${PROJECT_ROOT}/.claude/memory/traces"
+HOOK_FAILURES_LOG="${EFFECTIVE_TRACES_DIR}/hook-failures.json"
 
 # --- Infrastructure checks ---------------------------------------------------
 

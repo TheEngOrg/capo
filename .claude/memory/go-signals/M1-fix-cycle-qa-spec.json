@@ -1,0 +1,13 @@
+{
+  "schema_version": "1.0.0",
+  "workstream_id": "M1-fix-cycle",
+  "phase": "qa-spec",
+  "from_agent": "qa",
+  "to_phase": "dev",
+  "artifact_paths": [
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/tests/repl/keys.test.tsx",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/tests/repl/session.test.tsx",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/tests/integration/golden.test.ts"
+  ],
+  "timestamp": "2026-05-29T18:52:45Z"
+}

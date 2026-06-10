@@ -1,0 +1,15 @@
+{
+  "schema_version": "1.0.0",
+  "workstream_id": "WS-ORCH-FIX",
+  "phase": "dev",
+  "from_agent": "dev",
+  "to_phase": "qa-validate",
+  "artifact_paths": [
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/.claude/hooks/teo-sage-constraint.sh",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/.claude/scripts/mg-memory-patch-section",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/.claude/scripts/teo-apply-edit",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/tests/memory-write/test_teo_apply_edit_range_op.bats"
+  ],
+  "timestamp": "2026-06-10T00:00:00Z",
+  "notes": "All 5 changes applied (order: 3->4->1->2->5). shellcheck clean. 109/109 tests pass (22 new, 87 existing)."
+}

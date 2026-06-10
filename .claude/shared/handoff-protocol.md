@@ -423,18 +423,10 @@ The lock covers the atomic window between `git add` and the final `git commit`.
 Any crash or early exit must still be followed by `teo-commit-lock release` on
 best-effort; the 90-second TTL auto-evicts stale locks if release is missed.
 
-Sage NEVER runs git commit, git push, git tag, or git reset directly — at any
-lock level or enforcement level. Sage authorizes commits via COMMIT_DIRECTIVE;
-deployment-engineer is the sole actor that executes git operations.
-
-The commit-lock applies to deployment-engineer, not Sage. Before executing any
-COMMIT_DIRECTIVE, deployment-engineer MUST acquire the lock with its own agent ID
-(`TEO_AGENT_ID=deployment-engineer`) to prevent concurrent directives from racing
-on the same branch. If two COMMIT_DIRECTIVEs target the same branch simultaneously,
-deployment-engineer queues the second or halts and surfaces the conflict to Sage
-before proceeding. At `standard` enforcement level, a missed lock acquisition emits
-WARN only. At `strict` enforcement level, a missed lock acquisition blocks the git
-operation until the lock is held.
+Sage direct commits (staff-review merges, changelog updates) must either acquire
+the lock with `TEO_AGENT_ID=sage` or set `TEO_COMMIT_GATE=light` on the invocation.
+At `standard` level Sage commits without a lock emit WARN only. At `strict` level
+they will be blocked.
 
 ---
 

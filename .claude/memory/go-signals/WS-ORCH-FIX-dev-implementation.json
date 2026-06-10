@@ -1,0 +1,27 @@
+{
+  "schema_version": "1.0.0",
+  "workstream_id": "WS-ORCH-FIX",
+  "phase": "dev",
+  "from_agent": "dev",
+  "to_phase": "qa-validate",
+  "artifact_paths": [
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/.claude/hooks/teo-claim-evidence-gate.sh",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/.claude/scripts/teo-claim-evidence-gate",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/tests/hooks/teo-claim-evidence-gate.bats",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/tests/hooks/teo-claim-evidence-gate-rule2.bats",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/tests/hooks/teo-claim-evidence-gate-edge.bats",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/.claude/settings.json"
+  ],
+  "evidence": [
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/.claude/hooks/teo-claim-evidence-gate.sh",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/.claude/scripts/teo-claim-evidence-gate",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/tests/hooks/teo-claim-evidence-gate.bats",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/tests/hooks/teo-claim-evidence-gate-rule2.bats",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/tests/hooks/teo-claim-evidence-gate-edge.bats",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/.claude/settings.json"
+  ],
+  "timestamp": "2026-06-10T04:05:33Z",
+  "bats_result": "46/46",
+  "vitest_result": "350/350",
+  "write_mechanism_notes": "teo-apply-edit for new files; bash cp for replacements; settings.json updated via jq transform + cp"
+}

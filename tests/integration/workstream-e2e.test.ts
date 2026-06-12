@@ -91,7 +91,9 @@ describe("teo run --workstream (sandbox isolation)", () => {
     // The work landed in the sandbox, NOT the live tree.
     expect(existsSync(join(projectRoot, "did-work.txt"))).toBe(false);
     expect(existsSync(join(teoHome, "worktrees", "ws-e2e-proj", "ws-a", "did-work.txt"))).toBe(true);
-  });
+    // 30s: this test spawns cold `npx tsx` subprocesses; the default 5s vitest
+    // test timeout is too tight on a CI runner. Matches the cli-e2e convention.
+  }, 30_000);
 
   it("lists the running workstream, diffs the change, and closes it", () => {
     teo(["run", "plan.json", "--workstream", "ws-a", "--isolation", "sandbox"]);
@@ -107,5 +109,6 @@ describe("teo run --workstream (sandbox isolation)", () => {
     expect(close.stdout).toContain("ws-a");
     // The sandbox tree is gone after close.
     expect(existsSync(join(teoHome, "worktrees", "ws-e2e-proj", "ws-a"))).toBe(false);
-  });
+    // 30s: four sequential cold `npx tsx` spawns — well over the 5s default.
+  }, 30_000);
 });

@@ -50,7 +50,7 @@ jobs:
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: ~/.bun/install/cache
-          key: bun-${{ env.BUN_VERSION }}-${{ hashFiles('bun.lockb', 'package.json') }}
+          key: bun-${{ env.BUN_VERSION }}-${{ hashFiles('bun.lock', 'package.json') }}
           restore-keys: |
             bun-${{ env.BUN_VERSION }}-
 
@@ -118,7 +118,7 @@ jobs:
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: ~/.bun/install/cache
-          key: bun-${{ env.BUN_VERSION }}-${{ hashFiles('bun.lockb', 'package.json') }}
+          key: bun-${{ env.BUN_VERSION }}-${{ hashFiles('bun.lock', 'package.json') }}
           restore-keys: |
             bun-${{ env.BUN_VERSION }}-
 
@@ -159,7 +159,7 @@ jobs:
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: ~/.bun/install/cache
-          key: bun-${{ env.BUN_VERSION }}-${{ matrix.os }}-${{ hashFiles('bun.lockb', 'package.json') }}
+          key: bun-${{ env.BUN_VERSION }}-${{ matrix.os }}-${{ hashFiles('bun.lock', 'package.json') }}
           restore-keys: |
             bun-${{ env.BUN_VERSION }}-${{ matrix.os }}-
 
@@ -225,7 +225,7 @@ jobs:
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: ~/.bun/install/cache
-          key: bun-${{ env.BUN_VERSION }}-${{ matrix.os }}-${{ hashFiles('bun.lockb', 'package.json') }}
+          key: bun-${{ env.BUN_VERSION }}-${{ matrix.os }}-${{ hashFiles('bun.lock', 'package.json') }}
           restore-keys: |
             bun-${{ env.BUN_VERSION }}-${{ matrix.os }}-
 

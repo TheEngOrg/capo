@@ -32,6 +32,11 @@ docs/spikes/SPIKE-002/sandbox/node_modules/
 /oq3-probe
 /oq3-case-*
 
+# Demo home — contains an HMAC signing key; never commit a key to a repo.
+# Regenerate locally with: TEO_HOME=demo/.teo-home npx tsx demo/build-plans.ts
+demo/.teo-home/
+demo/plans/
+
 # v5 rebuild — M3 archived on disk, already pinned in commit 8fd9d3c
 .archive-m3/
 settings.v4-snapshot.json

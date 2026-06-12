@@ -1,9 +1,16 @@
-# TEO 5 — Architecture Spec
+# TEO 5 — Architecture
 
-Status: **DRAFT — pending approval**
+Status: **BUILT** — deterministic core shipped, 100% covered, CLI live.
 Supersedes: the M3 LLM-dispatch line (pinned at branch `m3-baseline-pre-v5`, commit `8fd9d3c`).
 
-This is the Step 1 design doc. No `src/` code is written or wiped until this is approved.
+> **Reading this for the first time?** The one idea: an LLM agent is the most
+> expensive, least deterministic, least auditable way to do anything, so it is the
+> **tool of last resort** — not the default. TEO plans work, runs the mechanical
+> majority as plain scripts (zero tokens), spends an agent only where the work
+> genuinely needs generation or judgment, and signs + logs every step into an
+> append-only ledger you can audit and bill from. §1 is the shape; §4–5 are why it's
+> auditable; the rest is the contract. A 5-minute end-to-end demo lives in
+> [`../../demo/DEMO.md`](../../demo/DEMO.md).
 
 ---
 
@@ -350,16 +357,18 @@ on how a script is invoked.
 
 ---
 
-## 7. What gets wiped
+## 7. The v4 break (what the rebuild removed)
 
-On approval:
-- `src/` is cleared and rebuilt against §6. (M3 recoverable at `m3-baseline-pre-v5`.)
-- `.claude/memory/` scratch (`tmp-*`, stale `identity-tokens/`, `go-signals/`,
-  `_v4-disabled-traces/`) is removed — the stale-token enforcement drift goes away with it.
-- `.claude/` keeps: `agents/`, `skills/`, dispatcher `CLAUDE.md`, `settings.json`
-  (v4 enforcement hooks already removed; signing now lives in `~/.teo/`, not stray files).
+TEO 5 was a clean rebuild off the M3 baseline (recoverable at `m3-baseline-pre-v5`):
+- `src/` was rebuilt against §6, deterministic-core-first.
+- The `.claude/memory/` scratch that v4 parasitized (`tmp-*`, stale `identity-tokens/`,
+  `go-signals/`, `_v4-disabled-traces/`) is gone — and the stale-token enforcement drift
+  it caused went with it.
+- `.claude/` now keeps only config Claude Code must discover: `agents/`, `skills/`,
+  dispatcher `CLAUDE.md`, `settings.json`. Signing lives in `~/.teo/keyring/`, never in a
+  repo or a stray file — which is precisely why a captured token can no longer be replayed.
 
-## 8. Open items (decide during build, not now)
+## 8. Open items / deliberate non-goals for v5.0
 
 - Per-project namespace hash: git-remote vs abspath as the seed.
 - Whether `teo audit` renders finance rollups itself or emits CSV/JSON for a sheet.

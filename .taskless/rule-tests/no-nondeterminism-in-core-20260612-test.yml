@@ -2,7 +2,8 @@ id: no-nondeterminism-in-core
 valid:
   - "const ts = opts.created_at;"
   - "const now = clock.nowIso();"
-  - "const seed = src.gitRemote ?? src.absPath;"
+  - "const parsed = new Date(event.ts);"
+  - "const event_id = randomUUID();"
   - "function nowIso(): string { return externalClock(); }"
 invalid:
   - "const ts = new Date().toISOString();"

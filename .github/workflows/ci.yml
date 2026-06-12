@@ -88,6 +88,8 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
+      # The Taskless CLI is distributed on npm and run via npx, so this job needs
+      # Node. Every other job uses Bun — this is the one intentional exception.
       - name: Set up Node
         uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
         with:

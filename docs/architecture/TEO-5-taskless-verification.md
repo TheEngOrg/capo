@@ -40,9 +40,17 @@ A plan task can then carry:
 ```
 
 The orchestrator runs it, exit code → verdict, and — because it's a verification —
-its result already flows into the **signed gate** that follows. So a Taskless rule
-can back a gate with a cryptographically signed verdict, which is the thing the CI
-job alone can't give you.
+its result already flows into the **gate** that follows. The gate (not the
+verification event) is what gets HMAC-signed by its `gate_owner`
+(`orchestrator.ts` `runGate`): the gate signs over its `gate_constraints`, which can
+include a `verification-ref` to a Taskless check. So a Taskless rule can *back a
+signed gate verdict* — the signature attests "the gate owner accepted, and this
+rule was a constraint." That's the thing the CI job alone can't give you.
+
+(To be precise: the `MECH_VERIFY` event for the Taskless check itself carries
+`signature: null`, like every non-gate event. Its tamper-evidence comes from the
+append-only, monotonic-`seq` ledger. The cryptographic signature lives on the
+*gate* event that references it — see §3.)
 
 ## 2. Why this is the right seam
 
@@ -82,8 +90,10 @@ The `MECH_VERIFY` event's `detail` gains the Taskless specifics:
   ] } }
 ```
 
-So the ledger names the exact rule that failed a task — auditable, attributable, and
-(once the gate signs over it) tamper-evident.
+So the ledger names the exact rule that failed a task — auditable and attributable
+via the append-only `seq`-ordered ledger. When a downstream gate references this
+verification in its `gate_constraints`, the gate owner's HMAC signature is what makes
+the *acceptance* tamper-evident; the `MECH_VERIFY` line itself stays `signature: null`.
 
 ## 4. Planner guidance (§5a addition)
 

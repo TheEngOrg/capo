@@ -1,16 +1,23 @@
 id: no-nondeterminism-in-core
 language: typescript
 severity: error
-message: "No Date.now(), new Date(), or Math.random() in src/core/** — the deterministic core must be pure and replayable."
+message: "No wall-clock or randomness in src/core/** — the deterministic core must replay identically. Use Date.now()/Math.random() only at the CLI boundary."
 note: |
   TEO 5's core is deterministic by contract (TEO-5.md §1): given the same plan it
-  must replay identically, which is also what makes runs resumable. Wall-clock and
-  randomness break that. Pass a clock/ts in from the CLI boundary (see how the CLI
-  passes `created_at`) and derive any needed variation from inputs, not Date/Math.random.
+  must replay identically, which is also what makes runs resumable. Wall-clock
+  (`Date.now()`, no-arg `new Date()`) and `Math.random()` break that — pass a
+  clock/ts in from the CLI boundary instead (see how the CLI passes `created_at`).
+
+  Deliberate carve-outs (NOT flagged):
+  - `new Date(arg)` — parsing a timestamp from an input is deterministic; only the
+    no-arg `new Date()` reads the wall clock.
+  - `randomUUID()` (node:crypto) — used in telemetry for `event_id`. An event id is
+    identity, not logic: it never feeds a verdict or sequencing, so it doesn't need
+    to be replay-stable. If that ever changes, revisit this carve-out.
 files:
   - "src/core/**"
 rule:
   any:
     - pattern: Date.now()
-    - pattern: new Date($$$)
+    - pattern: new Date()        # no-arg only — reads the wall clock
     - pattern: Math.random()

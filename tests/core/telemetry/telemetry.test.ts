@@ -167,4 +167,22 @@ describe("financeRollup", () => {
     expect(roll.total.cost_usd).toBe(0);
     expect(Object.keys(roll.byActor)).toHaveLength(0);
   });
+
+  it("counts LLM calls — events carrying a model — per actor and in total", () => {
+    // Sage planning + one engineer agent call: 2 LLM calls. SCRIPT/system: none.
+    appendEvent(paths, ev({ actor_id: "sage-001", phase: "PLAN", model: "claude-opus-4-8", tokens_in: 500, tokens_out: 200, cost_usd: 0.02 }));
+    appendEvent(paths, ev({ actor_id: "eng-001", phase: "TASK_OUTPUT", model: "claude-opus-4-8", tokens_in: 800, tokens_out: 300, cost_usd: 0.04 }));
+    appendEvent(paths, ev({ actor_id: "system", phase: "MECH_VERIFY" }));
+    const roll = financeRollup(paths, PLAN);
+    expect(roll.llm_calls.total).toBe(2);
+    expect(roll.llm_calls.byActor["sage-001"]).toBe(1);
+    expect(roll.llm_calls.byActor["eng-001"]).toBe(1);
+    expect(roll.llm_calls.byActor.system).toBeUndefined();
+  });
+
+  it("reports zero LLM calls for an all-SCRIPT plan", () => {
+    appendEvent(paths, ev({ actor_id: "system", phase: "TASK_OUTPUT", detail: { kind: "script" } }));
+    appendEvent(paths, ev({ actor_id: "system", phase: "MECH_VERIFY" }));
+    expect(financeRollup(paths, PLAN).llm_calls.total).toBe(0);
+  });
 });

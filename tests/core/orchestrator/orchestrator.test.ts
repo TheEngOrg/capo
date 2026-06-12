@@ -12,7 +12,7 @@ import {
 } from "../../../src/core/home/home.js";
 import { issueAgent } from "../../../src/core/identity/identity.js";
 import { signPlan, type ExecutionPlan, type PlanTask } from "../../../src/core/plan/plan.js";
-import { readEvents } from "../../../src/core/telemetry/telemetry.js";
+import { financeRollup, readEvents } from "../../../src/core/telemetry/telemetry.js";
 import type { SpawnRunner } from "../../../src/core/agent-spawn/agent-spawn.js";
 import { runPlan, type RunResult } from "../../../src/core/orchestrator/orchestrator.js";
 
@@ -108,6 +108,12 @@ describe("runPlan — happy path", () => {
     expect(res.status).toBe("pending-human");
     expect(res.tasks[0].verdict).toBe("pass");
     expect(res.tasks[0].tokens_in).toBe(200);
+    // The AGENT task's TASK_OUTPUT carries a top-level model, so the audit counts
+    // it as one LLM call attributed to the engineer. (Regression guard: model was
+    // once only in detail, leaving llm_calls at 0 despite real token spend.)
+    const roll = financeRollup(paths, "plan-1");
+    expect(roll.llm_calls.total).toBe(1);
+    expect(roll.llm_calls.byActor["eng-001"]).toBe(1);
   });
 
   it("runs tasks in ascending task_order", async () => {

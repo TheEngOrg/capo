@@ -99,19 +99,34 @@ export interface FinanceTotals {
   tokens_out: number;
 }
 
+/** How many LLM calls a plan made — the headline "agent is last resort" number. */
+export interface LlmCallCount {
+  byActor: Record<string, number>;
+  total: number;
+}
+
 export interface FinanceRollup {
   byActor: Record<string, FinanceTotals>;
   total: FinanceTotals;
+  /** Count of LLM-backed events (those carrying a model): Sage PLAN + AGENT tasks. */
+  llm_calls: LlmCallCount;
 }
 
 function zero(): FinanceTotals {
   return { cost_usd: 0, tokens_in: 0, tokens_out: 0 };
 }
 
-/** Sum cost + tokens for a plan, grouped by actor_id, plus a grand total. */
+/**
+ * Sum cost + tokens for a plan, grouped by actor_id, plus a grand total, and
+ * count the LLM calls. An LLM call is any event carrying a `model` — the planner
+ * PLAN event and every AGENT task's TASK_OUTPUT set it; SCRIPT/system events do
+ * not. So a well-planned (mostly-SCRIPT) run shows a small llm_calls.total.
+ */
 export function financeRollup(paths: ProjectPaths, planId: string): FinanceRollup {
   const byActor: Record<string, FinanceTotals> = {};
   const total = zero();
+  const llmByActor: Record<string, number> = {};
+  let llmTotal = 0;
   for (const e of readEvents(paths, planId)) {
     if (!byActor[e.actor_id]) byActor[e.actor_id] = zero();
     const bucket = byActor[e.actor_id];
@@ -124,6 +139,10 @@ export function financeRollup(paths: ProjectPaths, planId: string): FinanceRollu
     total.cost_usd += cost;
     total.tokens_in += tin;
     total.tokens_out += tout;
+    if (e.model !== undefined) {
+      llmByActor[e.actor_id] = (llmByActor[e.actor_id] ?? 0) + 1;
+      llmTotal += 1;
+    }
   }
-  return { byActor, total };
+  return { byActor, total, llm_calls: { byActor: llmByActor, total: llmTotal } };
 }

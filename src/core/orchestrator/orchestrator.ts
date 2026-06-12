@@ -213,6 +213,7 @@ async function runTask(
   let tokens_in: number | undefined;
   let tokens_out: number | undefined;
   let cost_usd: number | undefined;
+  let model: string | undefined;
   let workOk: boolean;
   let workDetail: Record<string, unknown>;
 
@@ -240,6 +241,7 @@ async function runTask(
     tokens_in = r.tokens_in;
     tokens_out = r.tokens_out;
     cost_usd = r.cost_usd;
+    model = r.model;
     workDetail = { kind: "agent", model: r.model };
   }
 
@@ -252,6 +254,9 @@ async function runTask(
     ts,
     tokens_in,
     tokens_out,
+    // Top-level model marks this as an LLM-backed event — the audit's llm_calls
+    // tally counts these. Absent on SCRIPT tasks (0 tokens). See telemetry.ts.
+    model,
     cost_usd,
     detail: workDetail,
   });

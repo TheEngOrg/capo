@@ -28,6 +28,8 @@ paths.ensure();
 const created_at = "2026-06-12T00:00:00.000Z"; // fixed clock — reproducible plans
 const sage = issueAgent(home, { agent_type: "SAGE", issued_at: created_at });
 const qa = issueAgent(home, { agent_type: "QA", issued_at: created_at });
+const eng = issueAgent(home, { agent_type: "ENGINEER", issued_at: created_at });
+const devops = issueAgent(home, { agent_type: "COORD", issued_at: created_at });
 
 const scriptDir = "demo/scripts";
 
@@ -99,9 +101,72 @@ const planned: ExecutionPlan = {
   ],
 };
 
+// ── LIVE-AGENT: real LLM calls. ENGINEER writes, COORD/devops notes, QA reviews,
+// then a signed gate and a SCRIPT deploy. The descriptions are small, self-
+// contained prompts so the live `claude -p` calls return fast on stage. Each
+// AGENT task is one live LLM call; Sage's plan is another. So `teo audit` shows
+// llm_calls.total = (agent tasks) here, vs 0 for the all-SCRIPT plans. ──
+const liveAgent: ExecutionPlan = {
+  plan_id: "demo-live-agent-feature",
+  project_id,
+  description: "Add a /version endpoint: engineer drafts it, devops notes the rollout, QA reviews, gate, deploy.",
+  created_by: sage.agent_id,
+  created_at,
+  schema_version: "5.0",
+  tasks: [
+    {
+      task_id: "eng-draft",
+      task_order: 1,
+      task_actor: eng.agent_id,
+      task_actor_type: "ENGINEER",
+      description:
+        "In one short paragraph, describe how you'd add a GET /version endpoint that returns the app's semver as JSON. No code, just the approach.",
+      expected_output: "a short approach for a /version endpoint",
+      verifications: [],
+    },
+    {
+      task_id: "devops-rollout",
+      task_order: 2,
+      task_actor: devops.agent_id,
+      task_actor_type: "COORD",
+      description:
+        "In two sentences, note the safest way to roll a tiny read-only endpoint like /version to staging then prod.",
+      expected_output: "a brief rollout note",
+      verifications: [],
+    },
+    {
+      task_id: "qa-review",
+      task_order: 3,
+      task_actor: qa.agent_id,
+      task_actor_type: "QA",
+      description:
+        "In two sentences, list what a test for GET /version must assert (status code and body shape).",
+      expected_output: "a brief test checklist",
+      verifications: [],
+    },
+    {
+      task_id: "qa-gate",
+      task_order: 4,
+      is_gate: true,
+      gate_owner: qa.agent_id,
+      description: "Quality gate: engineering + QA review complete before deploy.",
+      gate_constraints: [{ kind: "verification-ref", task_id: "qa-review" }],
+    },
+    {
+      task_id: "deploy-staging",
+      task_order: 5,
+      task_actor_type: "SCRIPT",
+      description: "Deploy the reviewed build to staging (mechanical — 0 tokens).",
+      expected_output: "staging serving /version; smoke check green",
+      script: { path: `${scriptDir}/deploy-staging.sh`, args: [], expect_exit: 0 },
+      verifications: [{ kind: "script", cmd: `${scriptDir}/smoke-staging.sh`, expect_exit: 0 }],
+    },
+  ],
+};
+
 mkdirSync(resolve("demo/plans"), { recursive: true });
 
-for (const plan of [simple, planned]) {
+for (const plan of [simple, planned, liveAgent]) {
   const v = validatePlan(home, plan);
   if (!v.ok) throw new Error(`invalid ${plan.plan_id}: ${v.errors.join("; ")}`);
   const signed = signPlan(home, plan);

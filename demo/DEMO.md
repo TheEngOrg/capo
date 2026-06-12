@@ -133,29 +133,75 @@ Then the finance rollup — cost by actor, falls straight out of the ledger:
 npx tsx src/index.ts audit demo/plans/demo-planned-health-feature.json | jq '.finance'
 ```
 
-**Point at:** `total.cost_usd: 0`. This whole planned workstream — build, test, signed
-gate, deploy, human sign-off — cost **zero tokens**, because the work was mechanical and
-TEO never reached for an agent. When a task *does* spend an agent, its tokens and
-`cost_usd` land on that actor's line, and per-client cost rolls up by project namespace.
+**Point at:** `total.cost_usd: 0` **and `llm_calls.total: 0`**. This whole planned
+workstream — build, test, signed gate, deploy, human sign-off — made **zero LLM calls**,
+because the work was mechanical and TEO never reached for an agent. Hold that number; Act 4
+runs a plan that *does* spend agents, and you'll watch the count go from 0 to 3. When a task
+spends an agent, its call, tokens, and `cost_usd` land on that actor's line, and per-client
+cost rolls up by project namespace.
 
 ---
 
-## Optional — the live Sage moment (only if the room wants it)
+## Act 4 — Live, end-to-end, with real LLM calls
 
-Everything above is pre-baked for reliability. If you want to show Sage classifying in
-real time, run the planner live (this one *does* call the `claude` binary):
+Acts 1–3 cost $0 because they're all-SCRIPT. This act runs a plan that actually *spends
+agents* — an engineer, devops, and QA each make a real `claude` call — so you can show the
+full arc and the LLM-call count coming out of the audit.
+
+**Say:** "Now a plan that needs judgment. Engineer drafts the endpoint, devops notes the
+rollout, QA reviews — three real agent calls — then a signed gate and a mechanical deploy.
+Watch what the audit says it cost."
+
+Show the task mix (3 agent tasks → gate → script):
 
 ```sh
-npx tsx src/index.ts plan "Add a /health endpoint that returns 200, then deploy to staging" \
+jq '[.tasks[]|{order:.task_order, type:(.task_actor_type // "GATE"), id:.task_id}]' \
+  demo/plans/demo-live-agent-feature.json
+```
+
+Run it live (~20s — three real `claude` calls):
+
+```sh
+npx tsx src/index.ts run demo/plans/demo-live-agent-feature.json
+```
+
+**Point at:** each agent task passes with `detail.model: claude-opus-4-8` — those are the
+live calls. The `qa-gate` is signed; the deploy is a script. Same pipeline as Act 2, but now
+agents did real work.
+
+Sign off, then audit the cost + call count:
+
+```sh
+npx tsx src/index.ts gate demo/plans/demo-live-agent-feature.json accept --as byazaki --reason "reviewed"
+npx tsx src/index.ts audit demo/plans/demo-live-agent-feature.json | jq '.finance.llm_calls'
+npx tsx src/index.ts audit demo/plans/demo-live-agent-feature.json | jq '.finance.total'
+```
+
+**Point at:**
+- `llm_calls.total: 3` — and `byActor` attributes each call to one agent id (`eng-…`,
+  `coord-…`, `qa-…`). Every LLM call is named and counted.
+- `total.cost_usd` — a real dollar figure, ~$0.50, with real token counts.
+- The contrast lands here: Act 1's whole workstream was **0 calls / $0** because it was
+  mechanical. This one spent 3 calls only where judgment was actually needed. That's the
+  thesis — agents are the line item you can see and minimize, not an invisible default.
+
+> This act makes real model calls — slower, and it can hiccup. The pre-baked plan keeps it
+> as reliable as a live LLM gets, but if it stumbles, Acts 1–3 already told the story. Run
+> `demo/reset.ts` and you can retry cleanly.
+
+### Optional — the live Sage planner
+
+To also show Sage *writing* a plan in real time (one more live call):
+
+```sh
+npx tsx src/index.ts plan "Add a /version endpoint that returns the app semver, then deploy to staging" \
   --out /tmp/live-plan.json
 jq '[.tasks[]|{order:.task_order, type:(.task_actor_type), id:.task_id}]' /tmp/live-plan.json
 ```
 
-**Point at:** Sage independently splits this into agent tasks for the code + test, a signed
-QA gate, and a SCRIPT task for the deploy — the same script-vs-agent line, decided live.
-
-> Caveat: this is a live model call — slower, and it can hiccup. If it does, you've already
-> shown the real pipeline in Acts 1–3. Don't lead with this one.
+**Point at:** Sage independently splits this into agent tasks, a signed gate, and a SCRIPT
+deploy — the script-vs-agent line, decided live. You can then `teo run /tmp/live-plan.json`
+to execute the plan Sage just wrote (it'll make a live call per agent task).
 
 ---
 

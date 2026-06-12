@@ -1,16 +1,16 @@
 {
   "name": "teo",
-  "version": "0.1.0",
-  "description": "TEO — Team Orchestration for Claude Code",
+  "version": "5.0.0",
+  "description": "TEO 5 — deterministic team orchestration for Claude Code",
   "license": "MIT",
   "type": "module",
   "engines": {
     "bun": ">=1.3.14"
   },
   "scripts": {
-    "dev": "bun run src/index.tsx",
-    "build:darwin": "bun build --compile --target=bun-darwin-arm64 src/index.tsx --outfile dist/teo-darwin-arm64",
-    "build:linux": "bun build --compile --target=bun-linux-x64 src/index.tsx --outfile dist/teo-linux-x64",
+    "dev": "bun run src/index.ts",
+    "build:darwin": "bun build --compile --target=bun-darwin-arm64 src/index.ts --outfile dist/teo-darwin-arm64",
+    "build:linux": "bun build --compile --target=bun-linux-x64 src/index.ts --outfile dist/teo-linux-x64",
     "lint": "bunx biome check src/",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",

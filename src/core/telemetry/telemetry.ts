@@ -112,7 +112,8 @@ export function financeRollup(paths: ProjectPaths, planId: string): FinanceRollu
   const byActor: Record<string, FinanceTotals> = {};
   const total = zero();
   for (const e of readEvents(paths, planId)) {
-    const bucket = byActor[e.actor_id] ?? (byActor[e.actor_id] = zero());
+    if (!byActor[e.actor_id]) byActor[e.actor_id] = zero();
+    const bucket = byActor[e.actor_id];
     const cost = e.cost_usd ?? 0;
     const tin = e.tokens_in ?? 0;
     const tout = e.tokens_out ?? 0;

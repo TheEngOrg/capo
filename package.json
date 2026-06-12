@@ -18,6 +18,7 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.104.1",
     "commander": "^12.1.0",
     "ink": "7.0.4",
     "ink-spinner": "5.0.0",

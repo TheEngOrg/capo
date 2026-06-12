@@ -13,7 +13,14 @@ export default defineConfig({
       provider: "v8",
       reporter: ["text", "json-summary", "lcov"],
       include: ["src/core/**"],
-      exclude: ["src/index.tsx", "src/cli/**", "node_modules/**"],
+      exclude: [
+        "src/index.tsx",
+        "src/cli/**",
+        "node_modules/**",
+        // Live-I/O LLM runners — exercised by integration tests against a real
+        // binary / API key, not the unit coverage gate. See TEO-5.md §6.
+        "src/core/agent-spawn/runners/**",
+      ],
       thresholds: {
         lines: 100,
         functions: 100,

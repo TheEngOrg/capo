@@ -16,7 +16,7 @@ import { runVerifications } from "../mechanical-verify/mechanical-verify.js";
 import { verifyPlan, type ExecutionPlan, type PlanTask } from "../plan/plan.js";
 import { runScript } from "../script-runner/script-runner.js";
 import { sign } from "../signing/signing.js";
-import { appendEvent, type ActorType, type Phase, type Verdict } from "../telemetry/telemetry.js";
+import { appendEvent, nextSeq, type ActorType, type Phase, type Verdict } from "../telemetry/telemetry.js";
 
 export interface TaskOutcome {
   task_id: string;
@@ -260,7 +260,18 @@ function runGate(
 ): TaskOutcome {
   // A validated plan guarantees a gate has a registered gate_owner.
   const owner = task.gate_owner as string;
-  const seq = appendEvent(paths, {
+  // Compute seq, sign over it, then append the event carrying its signature.
+  const seq = nextSeq(paths, planId);
+  const signature = sign(home, {
+    plan_id: planId,
+    task_id: task.task_id,
+    actor_id: owner,
+    verdict: "pass",
+    ts,
+    seq,
+  });
+
+  appendEvent(paths, {
     plan_id: planId,
     task_id: task.task_id,
     ts,
@@ -269,17 +280,7 @@ function runGate(
     actor_type: "QA",
     verdict: "pass",
     detail: { constraints: (task.gate_constraints ?? []).length },
-    signature: null,
-  }).seq;
-
-  // Sign the gate verdict so the approval is unforgeable + attributable.
-  const signature = sign(home, {
-    plan_id: planId,
-    task_id: task.task_id,
-    actor_id: owner,
-    verdict: "pass",
-    ts,
-    seq,
+    signature,
   });
 
   return { task_id: task.task_id, verdict: "pass", signed_by: owner, signature };

@@ -12,12 +12,14 @@
  * Plan files carry project_id; the CLI resolves ~/.teo and the project paths
  * from there. This module is exercised by integration tests, not the unit gate.
  */
-import { readFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { readFileSync, writeFileSync } from "node:fs";
 import { Command } from "commander";
-import { ensureTeoHome, projectPaths, resolveTeoHome } from "../core/home/home.js";
+import { ensureTeoHome, projectId, projectPaths, resolveTeoHome } from "../core/home/home.js";
 import { humanGate } from "../core/human-gate/human-gate.js";
 import { runPlan } from "../core/orchestrator/orchestrator.js";
-import { loadPlan, type ExecutionPlan } from "../core/plan/plan.js";
+import { planFromRequest } from "../core/planner/planner.js";
+import { loadPlan, savePlan, type ExecutionPlan } from "../core/plan/plan.js";
 import { runScript } from "../core/script-runner/script-runner.js";
 import { deriveStreamState } from "../core/stream/stream.js";
 import { financeRollup, readEvents } from "../core/telemetry/telemetry.js";
@@ -38,6 +40,29 @@ function resolveProject(plan: ExecutionPlan) {
 export function buildProgram(): Command {
   const program = new Command();
   program.name("teo").description("TEO 5 — deterministic orchestration").version("5.0.0");
+
+  program
+    .command("plan")
+    .argument("<request>", "what you want the team to do")
+    .option("--out <path>", "where to write the signed plan", "plan.json")
+    .option("--runner <kind>", "claude-cli | anthropic-api", "claude-cli")
+    .description("Sage classifies + decomposes the request into a signed plan")
+    .action(async (request: string, opts: { out: string; runner: string }) => {
+      const home = resolveTeoHome();
+      ensureTeoHome(home);
+      const project_id = projectId({ absPath: process.cwd() });
+      const paths = projectPaths(home, project_id);
+      paths.ensure();
+      const plan = await planFromRequest(home, paths, request, {
+        project_id,
+        plan_id: randomUUID(),
+        created_at: nowIso(),
+        kind: opts.runner === "anthropic-api" ? "anthropic-api" : "claude-cli",
+      });
+      savePlan(home, plan);
+      writeFileSync(opts.out, `${JSON.stringify(plan, null, 2)}\n`);
+      process.stdout.write(`plan ${plan.plan_id} written to ${opts.out} (${plan.tasks.length} tasks)\n`);
+    });
 
   program
     .command("run")

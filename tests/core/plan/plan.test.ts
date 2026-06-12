@@ -105,6 +105,23 @@ describe("validatePlan — structure", () => {
     expect(res.errors.join(" ")).toMatch(/schema_version/i);
   });
 
+  it("accepts a valid non-negative max_retries", () => {
+    const res = validatePlan(home, basePlan([scriptTask({ max_retries: 3 })]));
+    expect(res.ok).toBe(true);
+  });
+
+  it("rejects a negative max_retries", () => {
+    const res = validatePlan(home, basePlan([scriptTask({ max_retries: -1 })]));
+    expect(res.ok).toBe(false);
+    expect(res.errors.join(" ")).toMatch(/max_retries/i);
+  });
+
+  it("rejects a non-integer max_retries", () => {
+    const res = validatePlan(home, basePlan([scriptTask({ max_retries: 1.5 })]));
+    expect(res.ok).toBe(false);
+    expect(res.errors.join(" ")).toMatch(/max_retries/i);
+  });
+
   it("rejects a non-gate task with neither SCRIPT nor a valid AGENT type", () => {
     const orphan = { task_id: "t-orphan", task_order: 3 } as PlanTask;
     const res = validatePlan(home, basePlan([orphan]));

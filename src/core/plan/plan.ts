@@ -51,6 +51,12 @@ export interface PlanTask {
   task_actor?: string; // agent_id — required for AGENT tasks
   script?: ScriptBlock; // required for SCRIPT tasks
   verifications?: Verification[];
+  /**
+   * How many times to re-run this task if its work or mechanical verification
+   * fails, before the run goes to error. Default 0 (no retry — first failure
+   * is terminal). Useful for flaky checks; SCRIPT/AGENT both honored.
+   */
+  max_retries?: number;
 
   // Gate fields.
   is_gate?: boolean;
@@ -96,6 +102,10 @@ export function validatePlan(home: TeoHome, plan: ExecutionPlan): ValidationResu
       errors.push(`duplicate task_order ${task.task_order}`);
     }
     orders.add(task.task_order);
+
+    if (task.max_retries !== undefined && (!Number.isInteger(task.max_retries) || task.max_retries < 0)) {
+      errors.push(`task ${task.task_id}: max_retries must be a non-negative integer`);
+    }
 
     if (task.is_gate) {
       if (!task.gate_owner || lookupAgent(home, task.gate_owner) === null) {

@@ -126,7 +126,7 @@ export async function runPlan(
       continue;
     }
 
-    const outcome = await runTask(paths, plan.plan_id, task, ts, opts);
+    const outcome = await runTaskWithRetries(paths, plan.plan_id, task, ts, opts);
     outcomes.push(outcome);
     if (outcome.verdict === "fail") {
       emit(paths, plan.plan_id, {
@@ -154,6 +154,38 @@ export async function runPlan(
   });
 
   return { plan_id: plan.plan_id, status: "pending-human", tasks: outcomes };
+}
+
+/**
+ * Run a task, retrying on failure up to task.max_retries times (default 0). A
+ * RETRY telemetry event is emitted before each re-attempt so the audit trail
+ * shows every try. Returns the last attempt's outcome.
+ */
+async function runTaskWithRetries(
+  paths: ProjectPaths,
+  planId: string,
+  task: PlanTask,
+  ts: string,
+  opts: RunOptions,
+): Promise<TaskOutcome> {
+  const maxRetries = task.max_retries ?? 0;
+  let attempt = 0;
+  let outcome = await runTask(paths, planId, task, ts, opts);
+
+  while (outcome.verdict === "fail" && attempt < maxRetries) {
+    attempt++;
+    emit(paths, planId, {
+      task_id: task.task_id,
+      phase: "RETRY",
+      actor_id: "system",
+      actor_type: "SYSTEM",
+      verdict: "n/a",
+      ts,
+      detail: { attempt, of: maxRetries },
+    });
+    outcome = await runTask(paths, planId, task, ts, opts);
+  }
+  return outcome;
 }
 
 /** Run one non-gate task: do the work (SCRIPT or AGENT), then mechanically verify. */

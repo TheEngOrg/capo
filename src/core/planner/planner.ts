@@ -62,6 +62,7 @@ Emit ONLY a single JSON object (optionally inside a \`\`\`json fenced block) wit
       "expected_output": "<the verifiable expectation>",
       "script": { "path": "scripts/x.sh", "args": [], "expect_exit": 0 },   // SCRIPT tasks only
       "verifications": [ { "kind": "script", "cmd": "<shell cmd>", "expect_exit": 0 } ],
+      "max_retries": 0,                                                       // optional: re-run N times if a flaky task/verification fails
       "is_gate": true, "gate_owner": "QA", "gate_constraints": [ ... ]       // gate tasks only
     }
   ]

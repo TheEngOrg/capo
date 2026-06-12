@@ -363,7 +363,10 @@ On approval:
 
 - Per-project namespace hash: git-remote vs abspath as the seed.
 - Whether `teo audit` renders finance rollups itself or emits CSV/JSON for a sheet.
-- Retry policy when a task's mechanical verification fails (auto-retry N? straight to ERROR?).
+- ~~Retry policy when a task's mechanical verification fails (auto-retry N? straight to ERROR?).~~
+  **RESOLVED:** `max_retries` on a task (default 0 = first failure is terminal). The
+  orchestrator re-runs a failed task up to N times, emitting a `RETRY` telemetry event per
+  re-attempt, before going to `error`. Sage may set it on flaky tasks.
 - **Script-over-agent enforcement heuristic** (deferred from §5a): once we have real plans,
   add plan-validation that flags an agent task whose only output is a deterministic command —
   "this should have been a SCRIPT task." Guidance ships in v5.0; the mechanical gate comes after.

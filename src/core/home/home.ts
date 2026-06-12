@@ -20,6 +20,8 @@ export interface TeoHome {
   signingKeyPath: string;
   registryPath: string;
   memoryDir: string;
+  /** Per-project isolated working trees for parallel workstreams. See §workstream-isolation. */
+  worktreesDir: string;
 }
 
 export interface ProjectPaths {
@@ -58,6 +60,7 @@ export function resolveTeoHome(env: HomeEnv = process.env): TeoHome {
     signingKeyPath: join(keyringDir, "signing.key"),
     registryPath: join(root, "registry", "agents.jsonl"),
     memoryDir: join(root, "memory"),
+    worktreesDir: join(root, "worktrees"),
   };
 }
 

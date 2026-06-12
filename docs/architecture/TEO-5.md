@@ -381,4 +381,7 @@ TEO 5 was a clean rebuild off the M3 baseline (recoverable at `m3-baseline-pre-v
   "this should have been a SCRIPT task." Guidance ships in v5.0; the mechanical gate comes after.
 - Human-gate notification channel (out of scope for core; the event is enough to drive any notifier).
 - Concurrency: tasks run strictly sequentially by `task_order` in v5.0. Parallel/DAG
-  execution is a deliberate non-goal for the first cut.
+  *task* execution remains a deliberate non-goal. Parallel *workstreams* (whole plans
+  running at once, each in an isolated working tree) are implemented — see
+  [`TEO-5-workstream-isolation.md`](./TEO-5-workstream-isolation.md) and the
+  `workstream-tree` core module.

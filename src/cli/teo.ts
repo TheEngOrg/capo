@@ -23,6 +23,13 @@ import { loadPlan, savePlan, type ExecutionPlan } from "../core/plan/plan.js";
 import { runScript } from "../core/script-runner/script-runner.js";
 import { deriveStreamState } from "../core/stream/stream.js";
 import { financeRollup, readEvents } from "../core/telemetry/telemetry.js";
+import {
+  acquireWorkstream,
+  type Backend,
+  listWorkstreams,
+  reconcileWorkstream,
+  releaseWorkstream,
+} from "../core/workstream-tree/workstream-tree.js";
 
 /** ISO-8601 UTC now. The CLI is the system boundary, so a real clock is fine here. */
 function nowIso(): string {
@@ -67,15 +74,80 @@ export function buildProgram(): Command {
   program
     .command("run")
     .argument("<plan>", "path to a signed TEO-EXECUTION-PLAN json file")
+    .option("--workstream <id>", "run in an isolated working tree for this workstream id")
+    .option("--isolation <kind>", "git | sandbox | none (default: auto-detect)")
     .description("run a plan to pending-human or error")
-    .action(async (planPath: string) => {
+    .action(async (planPath: string, opts: { workstream?: string; isolation?: string }) => {
       const homeForLoad = resolveTeoHome();
       ensureTeoHome(homeForLoad);
       const plan = loadPlan(homeForLoad, planPath);
       const { home, paths } = resolveProject(plan);
-      const result = await runPlan(home, paths, plan, { cwd: process.cwd() });
+
+      // Resolve the working tree: an isolated one for a named workstream, else cwd.
+      let cwd = process.cwd();
+      if (opts.workstream) {
+        const acquired = await acquireWorkstream(home, {
+          projectRoot: process.cwd(),
+          projectId: plan.project_id,
+          workstreamId: opts.workstream,
+          planId: plan.plan_id,
+          ts: nowIso(),
+          isolation: opts.isolation as Backend | undefined,
+        });
+        cwd = acquired.cwd;
+        process.stdout.write(`workstream ${opts.workstream} → ${acquired.backend} tree at ${acquired.cwd}\n`);
+      }
+
+      const result = await runPlan(home, paths, plan, { cwd });
       process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
       if (result.status === "error") process.exitCode = 1;
+    });
+
+  const ws = program.command("workstream").description("manage parallel workstream trees");
+
+  ws.command("list")
+    .argument("<plan>", "path to the plan json (for project_id)")
+    .description("live workstreams + state + backend + tree path")
+    .action((planPath: string) => {
+      const home = resolveTeoHome();
+      ensureTeoHome(home);
+      const plan = JSON.parse(readFileSync(planPath, "utf8")) as ExecutionPlan;
+      process.stdout.write(`${JSON.stringify(listWorkstreams(home, plan.project_id), null, 2)}\n`);
+    });
+
+  ws.command("diff")
+    .argument("<plan>", "path to the plan json")
+    .argument("<ws-id>", "workstream id")
+    .description("reconcile report (changes vs the live tree) without applying")
+    .action(async (planPath: string, wsId: string) => {
+      const home = resolveTeoHome();
+      ensureTeoHome(home);
+      const plan = JSON.parse(readFileSync(planPath, "utf8")) as ExecutionPlan;
+      const report = await reconcileWorkstream(home, {
+        projectRoot: process.cwd(),
+        projectId: plan.project_id,
+        workstreamId: wsId,
+        ts: nowIso(),
+      });
+      process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+    });
+
+  ws.command("close")
+    .argument("<plan>", "path to the plan json")
+    .argument("<ws-id>", "workstream id")
+    .description("reconcile then release the workstream tree")
+    .action(async (planPath: string, wsId: string) => {
+      const home = resolveTeoHome();
+      ensureTeoHome(home);
+      const plan = JSON.parse(readFileSync(planPath, "utf8")) as ExecutionPlan;
+      const report = await reconcileWorkstream(home, {
+        projectRoot: process.cwd(),
+        projectId: plan.project_id,
+        workstreamId: wsId,
+        ts: nowIso(),
+      });
+      await releaseWorkstream(home, { projectId: plan.project_id, workstreamId: wsId, ts: nowIso() });
+      process.stdout.write(`${JSON.stringify({ closed: wsId, report }, null, 2)}\n`);
     });
 
   program

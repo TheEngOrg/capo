@@ -37,6 +37,7 @@ describe("resolveTeoHome", () => {
     expect(home.signingKeyPath).toBe(join(sandbox, "keyring", "signing.key"));
     expect(home.registryPath).toBe(join(sandbox, "registry", "agents.jsonl"));
     expect(home.memoryDir).toBe(join(sandbox, "memory"));
+    expect(home.worktreesDir).toBe(join(sandbox, "worktrees"));
   });
 
   it("throws when neither TEO_HOME nor HOME is available", () => {

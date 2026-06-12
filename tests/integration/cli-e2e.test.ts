@@ -19,14 +19,17 @@ let sandbox: string;
 let teoHome: string;
 let planPath: string;
 
+// Use the locally-installed tsx binary directly, NOT `npx tsx` — npx installs
+// tsx on demand into a shared ~/.npm/_npx cache, and concurrent integration
+// tests racing that install collide (ENOTEMPTY, exit 190) on CI.
+const TSX_BIN = join(process.cwd(), "node_modules", ".bin", "tsx");
+const ENTRY = join(process.cwd(), "src/index.ts");
+
 function teo(args: string[]) {
-  return spawnSync("npx", ["tsx", join(process.cwd(), "src/index.ts"), ...args], {
+  return spawnSync(TSX_BIN, [ENTRY, ...args], {
     cwd: sandbox,
     env: { ...process.env, TEO_HOME: teoHome },
     encoding: "utf8",
-    // Cold `npx tsx` under parallel CI load is slow and can overrun the default
-    // 1MB spawnSync buffer (full JSON result + telemetry), which kills the proc
-    // and yields a non-zero status. Give it room + a generous timeout.
     timeout: 60_000,
     maxBuffer: 16 * 1024 * 1024,
   });

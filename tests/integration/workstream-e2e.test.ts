@@ -19,11 +19,25 @@ let projectRoot: string;
 let teoHome: string;
 
 function teo(args: string[]) {
-  return spawnSync("npx", ["tsx", join(process.cwd(), "src/index.ts"), ...args], {
+  const r = spawnSync("npx", ["tsx", join(process.cwd(), "src/index.ts"), ...args], {
     cwd: projectRoot,
     env: { ...process.env, TEO_HOME: teoHome },
     encoding: "utf8",
+    // Cold `npx tsx` on a CI runner can be slow to resolve+compile; give it room
+    // so a slow start isn't read as a logic failure.
+    timeout: 120_000,
+    maxBuffer: 16 * 1024 * 1024,
   });
+  // Surface a real spawn failure (non-zero exit, signal, or spawn error) with its
+  // stderr, instead of letting an empty stdout fail later as a cryptic
+  // "expected '' to contain ...". This is the fix for the darwin-arm64 flake.
+  if (r.error || r.status !== 0) {
+    throw new Error(
+      `teo ${args.join(" ")} failed (status=${r.status}, signal=${r.signal})\n` +
+        `stderr: ${r.stderr ?? ""}\nstdout: ${r.stdout ?? ""}\n${r.error?.message ?? ""}`,
+    );
+  }
+  return r;
 }
 
 beforeEach(() => {

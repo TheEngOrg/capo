@@ -1,9 +1,0 @@
-{
-  "phase": "framework-fix",
-  "verdict": "COMPLETE",
-  "artifact_paths": [
-    ".claude/agents/deployment-engineer/agent.md",
-    ".claude/agents/sage/agent.md"
-  ],
-  "next_owner": "sage"
-}

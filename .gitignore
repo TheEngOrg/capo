@@ -31,3 +31,8 @@ docs/spikes/SPIKE-002/sandbox/node_modules/
 # OQ-3 / spike probe binaries (derivable, large)
 /oq3-probe
 /oq3-case-*
+
+# v5 rebuild — M3 archived on disk, already pinned in commit 8fd9d3c
+.archive-m3/
+settings.v4-snapshot.json
+.claude/settings.v4-snapshot.json

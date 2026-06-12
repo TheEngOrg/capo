@@ -1,8 +1,0 @@
-{
-  "phase": "m1-spec-pm",
-  "verdict": "COMPLETE",
-  "artifact_path": "docs/specs/M1-acceptance-criteria.md",
-  "next_owners": ["qa", "staff-engineer"],
-  "oq_closures": ["ADR-0006 OQ-2", "ADR-0006 OQ-3"],
-  "date": "2026-05-28"
-}

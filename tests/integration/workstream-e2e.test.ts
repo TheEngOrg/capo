@@ -18,13 +18,18 @@ import { savePlan, signPlan, type ExecutionPlan } from "../../src/core/plan/plan
 let projectRoot: string;
 let teoHome: string;
 
+// Use the locally-installed tsx binary directly. NOT `npx tsx` — npx installs
+// tsx on demand into a shared ~/.npm/_npx cache, and concurrent integration
+// tests racing that install collide (ENOTEMPTY, exit 190) on CI. tsx is a
+// devDependency, so node_modules/.bin/tsx is always present.
+const TSX_BIN = join(process.cwd(), "node_modules", ".bin", "tsx");
+const ENTRY = join(process.cwd(), "src/index.ts");
+
 function teo(args: string[]) {
-  const r = spawnSync("npx", ["tsx", join(process.cwd(), "src/index.ts"), ...args], {
+  const r = spawnSync(TSX_BIN, [ENTRY, ...args], {
     cwd: projectRoot,
     env: { ...process.env, TEO_HOME: teoHome },
     encoding: "utf8",
-    // Cold `npx tsx` on a CI runner can be slow to resolve+compile; give it room
-    // so a slow start isn't read as a logic failure.
     timeout: 120_000,
     maxBuffer: 16 * 1024 * 1024,
   });
@@ -91,7 +96,9 @@ describe("teo run --workstream (sandbox isolation)", () => {
     // The work landed in the sandbox, NOT the live tree.
     expect(existsSync(join(projectRoot, "did-work.txt"))).toBe(false);
     expect(existsSync(join(teoHome, "worktrees", "ws-e2e-proj", "ws-a", "did-work.txt"))).toBe(true);
-  });
+    // 30s: this test spawns cold `npx tsx` subprocesses; the default 5s vitest
+    // test timeout is too tight on a CI runner. Matches the cli-e2e convention.
+  }, 30_000);
 
   it("lists the running workstream, diffs the change, and closes it", () => {
     teo(["run", "plan.json", "--workstream", "ws-a", "--isolation", "sandbox"]);
@@ -107,5 +114,6 @@ describe("teo run --workstream (sandbox isolation)", () => {
     expect(close.stdout).toContain("ws-a");
     // The sandbox tree is gone after close.
     expect(existsSync(join(teoHome, "worktrees", "ws-e2e-proj", "ws-a"))).toBe(false);
-  });
+    // 30s: four sequential cold `npx tsx` spawns — well over the 5s default.
+  }, 30_000);
 });

@@ -9,6 +9,15 @@ export default defineConfig({
     globals: true,
     environment: "node",
     include: ["tests/**/*.{test,spec}.{ts,tsx}"],
+    // The integration tests each spawn cold `npx tsx` subprocesses. With vitest's
+    // default file parallelism, all three integration files race at once and
+    // fork-bomb a 2-core CI runner — slow subprocesses overrun buffers / time out
+    // (sporadic exit-1 / timeout on darwin). Cap the fork pool so the deterministic
+    // unit suite still parallelizes but the subprocess tests don't stampede.
+    pool: "forks",
+    poolOptions: {
+      forks: { maxForks: 2, minForks: 1 },
+    },
     coverage: {
       provider: "v8",
       reporter: ["text", "json-summary", "lcov"],

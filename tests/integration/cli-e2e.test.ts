@@ -24,6 +24,11 @@ function teo(args: string[]) {
     cwd: sandbox,
     env: { ...process.env, TEO_HOME: teoHome },
     encoding: "utf8",
+    // Cold `npx tsx` under parallel CI load is slow and can overrun the default
+    // 1MB spawnSync buffer (full JSON result + telemetry), which kills the proc
+    // and yields a non-zero status. Give it room + a generous timeout.
+    timeout: 60_000,
+    maxBuffer: 16 * 1024 * 1024,
   });
 }
 

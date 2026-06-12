@@ -1,0 +1,48 @@
+{
+  "schema_version": "1.0.0",
+  "workstream_id": "M3",
+  "phase": "dev",
+  "spawn": "spawn-1-llm-core",
+  "from_agent": "dev",
+  "to_phase": "qa-validate",
+  "status": "complete",
+  "artifact_paths": [
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/src/llm/context.ts",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/src/llm/claude-runtime.ts",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/src/context/manager.ts",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/src/mechanical/errors.ts",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/src/repl/SubprocessController.ts",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/src/repl/types.ts",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/src/repl/useSubmit.ts",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/src/repl/Session.tsx",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/src/cli/App.tsx",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/src/ui/Output.tsx",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/tests/unit/llm-runtime.test.ts",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/tests/unit/context-manager.test.ts",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/tests/repl/ctrl-c-cancel.test.ts",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/tests/integration/llm-dispatch.test.ts",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/tests/repl/useSubmit.test.ts",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/tests/ui/Output.test.tsx"
+  ],
+  "qa_tests_green": [
+    "T-M3-1.1", "T-M3-1.2", "T-M3-1.3", "T-M3-1.4",
+    "T-M3-1.5", "T-M3-1.6", "T-M3-1.7",
+    "T-M3-3.1", "T-M3-3.2", "T-M3-3.3", "T-M3-3.4", "T-M3-3.5", "T-M3-3.6",
+    "T-M3-4.1", "T-M3-4.2", "T-M3-4.3", "T-M3-4.4",
+    "T-M3-8.1", "T-M3-9.1", "T-M3-9.2"
+  ],
+  "tests_passing": {
+    "before": "365/382",
+    "after": "389/406",
+    "no_regressions": true
+  },
+  "blockers": [],
+  "notes": [
+    "useSubmit contextManager/subprocessController made optional (with fallbacks) to preserve backward compat with keys.test.tsx",
+    "Tests mock spawn (async) not spawnSync — matches async implementation",
+    "ArchitecturalStub left on disk (dead code); Output.tsx no longer imports it",
+    "MECHANICAL route in useSubmit returns 'not yet implemented' message string per spec",
+    "Biome passes: removed subprocessController from useCallback deps (not used in callback body)"
+  ],
+  "timestamp": "2026-06-10T17:24:00Z"
+}

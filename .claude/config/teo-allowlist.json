@@ -1,10 +1,12 @@
 {
   "schema_version": "1.0.0",
   "additional_protected_paths": [
+    ".claude/CLAUDE.md",
     ".claude/agents/**",
     ".claude/skills/**",
-    ".claude/CLAUDE.md",
-    ".github/workflows/**"
+    ".github/workflows/**",
+    "benchmark/**",
+    "data/**"
   ],
   "additional_enforced_paths": [
     ".claude/agents/**",

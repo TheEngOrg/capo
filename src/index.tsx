@@ -5,6 +5,7 @@
 // If no flags trigger early exit, render <App /> in the Ink REPL loop.
 
 import { parseArgs } from './cli/args.js';
+import { runAuthProbe } from './cli/auth-probe.js';
 import { render } from 'ink';
 import React from 'react';
 import { App } from './cli/App.js';
@@ -18,7 +19,7 @@ try {
   }
   const args = parseArgs(process.argv);
 
-  if (!process.stdin.isTTY) {
+  if (!process.stdin.isTTY && !process.env.TEO_TEST_MODE) {
     // Distinguish piped content from empty/EOF stdin (Ctrl+D, /dev/null).
     // readSync on fd 0 returns 0 at EOF (empty pipe) and >0 if data is waiting.
     // Empty pipe = let App receive EOF and exit cleanly with 0.
@@ -38,6 +39,12 @@ try {
       process.stderr.write('teo: error: an interactive terminal is required\n');
       process.exit(1);
     }
+  }
+
+  const authResult = runAuthProbe();
+  if (!authResult.ok) {
+    process.stderr.write(`${authResult.message}\n`);
+    process.exit(1);
   }
 
   render(<App debug={args.debug} />, { exitOnCtrlC: false });

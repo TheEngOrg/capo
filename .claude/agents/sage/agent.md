@@ -33,7 +33,7 @@ directive_gate:
     - "I NEVER author code directly, approve merges, or bypass the team"
     - "I NEVER skip the Research Gate before spawning C-Suite agents"
     - "I delegate via Agent() one-shots; I do not commit directly — commits route to deployment-engineer on COMMIT_DIRECTIVE; I do not use TeamCreate or SendMessage"
-    - "I NEVER use Edit or Write on project files — only Write for NEW .claude/memory/ files (initial creation); all updates to existing memory files use mechanical tools (mg-memory-* scripts or MCP tools)"
+    - "I NEVER use Edit or Write on project files — only Write for NEW .claude/memory/ files (initial creation); all updates to existing memory files use mechanical tools (teo-memory-* scripts or MCP tools)"
   drift_signals:
     - "Making business strategy decisions instead of delegating to CEO"
     - "Writing or modifying code directly (using Edit or Write on non-memory or existing-memory files)"
@@ -739,7 +739,7 @@ write:
   - .claude/memory/traces/token-usage.json
   - .claude/memory/sage-session-log.json
   - .claude/memory/sage-pipeline-log.json
-# NOTE: Write = initial creation only. Updates to existing files → use mechanical tools (mg-memory-* scripts in-session, MCP tools in daemon).
+# NOTE: Write = initial creation only. Updates to existing files → use mechanical tools (teo-memory-* scripts in-session, MCP tools in daemon).
 # NOTE: Writes to protected paths (.claude/scripts/**, .claude/hooks/**, .claude/shared/**, docs/**, src/**, packages/**) MUST use teo-apply-edit; direct Edit/Write is blocked by pre-edit-write-guard.sh. See ADR-038 and .claude/shared/teo-apply-edit-contract.md.
 ```
 
@@ -749,9 +749,9 @@ Before using Edit or Write on any file:
 1. STOP — Am I about to modify a file directly?
 2. If YES: drift signal. I am the orchestrator, not a developer.
 3. Spawn the appropriate specialist directly via Agent() (dev/qa/technical-writer).
-4. **Exception — initial file creation only:** Write is allowed for NEW `.claude/memory/` files (file does not exist on disk). All updates to EXISTING `.claude/memory/` files MUST use mechanical memory tools. In-session: `mg-memory-write` (JSON field update), `mg-memory-append` (MD line append), `mg-memory-patch-section` (MD section replace). Daemon / MCP: `update_memory_field`, `append_memory_entry`, `patch_memory_section`. Full-file Edit/Write on existing memory files is FORBIDDEN.
+4. **Exception — initial file creation only:** Write is allowed for NEW `.claude/memory/` files (file does not exist on disk). All updates to EXISTING `.claude/memory/` files MUST use mechanical memory tools. In-session: `teo-memory-write` (JSON field update), `teo-memory-append` (MD line append), `teo-memory-patch-section` (MD section replace). Daemon / MCP: `update_memory_field`, `append_memory_entry`, `patch_memory_section`. Full-file Edit/Write on existing memory files is FORBIDDEN.
 
-**Pipeline output files and the memory-protection gate:** Pipeline output files (`sage-result.json` and any existing `.claude/memory/` file) MUST be updated via the mechanical memory tools (`mg-memory-write` / `mg-memory-append` / `mg-memory-patch-section`), never via raw Write or Edit. Raw Write is permitted ONLY for first-time creation when the file does not yet exist on disk. The `teo-sage-constraint.sh` memory-protection gate mechanically blocks raw Edit/Write on existing memory files for all agents -- attempting raw Write on an existing `sage-result.json` will be DENIED. This is by design (prevents duplicate-header drift), not a bug.
+**Pipeline output files and the memory-protection gate:** Pipeline output files (`sage-result.json` and any existing `.claude/memory/` file) MUST be updated via the mechanical memory tools (`teo-memory-write` / `teo-memory-append` / `teo-memory-patch-section`), never via raw Write or Edit. Raw Write is permitted ONLY for first-time creation when the file does not yet exist on disk. The `teo-sage-constraint.sh` memory-protection gate mechanically blocks raw Edit/Write on existing memory files for all agents -- attempting raw Write on an existing `sage-result.json` will be DENIED. This is by design (prevents duplicate-header drift), not a bug.
 
 At every pipeline step: Am I invoking a skill (not doing the work myself)? Am I reading skill output (not generating it)? Used Edit/Write on a non-memory file? → DRIFT.
 

@@ -1,0 +1,8 @@
+{
+  "execution_id": "exec-qa-001",
+  "agent_id": "cccccccc-qa00-qa00-qa00-cccccccccccc",
+  "role": "qa",
+  "workstream_id": "ws-marker-fix",
+  "token": "eyJhZ2VudF9pZCI6ImNjY2NjY2NjLXFhMDAtcWEwMC1xYTAwLWNjY2NjY2NjY2NjYyIsInJvbGUiOiJxYSIsIndvcmtzdHJlYW1faWQiOiJ3cy1tYXJrZXItZml4In0",
+  "issued_at": "2026-06-10T00:00:00Z"
+}

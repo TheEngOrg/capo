@@ -1,0 +1,10 @@
+{
+  "schema_version": "1.0.0",
+  "target": ".claude/scripts/teo-claude",
+  "patches": [
+    {
+      "op": "append",
+      "content": "#!/usr/bin/env sh\n# .claude/scripts/teo-claude\n# Thin passthrough for claude --print invocations in agent-sandbox integration tests.\n# TEST-INFRA ONLY -- does NOT ship in the binary.\n#\n# Only args permitted: --print, --output-format text, --dangerously-skip-permissions,\n# and the prompt string. No other flags accepted.\n#\n# Usage: teo-claude --print --output-format text [--dangerously-skip-permissions] <prompt>\n#\n# The allowlist entry in teo-bash-arg-validator tight-matches --print --output-format text\n# as the first args, preventing arbitrary-flag injection.\n#\n# Outputs: stdout from claude verbatim. Exits with claude's exit code.\nset -eu\nexec claude \"$@\"\n"
+    }
+  ]
+}

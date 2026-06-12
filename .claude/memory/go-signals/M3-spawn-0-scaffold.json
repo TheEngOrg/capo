@@ -1,0 +1,61 @@
+{
+  "schema_version": "1.0.0",
+  "workstream_id": "M3",
+  "phase": "dev",
+  "from_agent": "dev",
+  "to_phase": "qa-validate",
+  "status": "complete",
+  "artifact_paths": [
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/src/index.tsx",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/src/cli/auth-probe.ts",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/vitest.config.ts",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/biome.json",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/package.json",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/.claude/scripts/teo-claude",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/.claude/scripts/teo-bash-arg-validator",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/tests/unit/coverage-config.test.ts",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/tests/unit/auth-probe.test.ts",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/tests/unit/biome-config.test.ts",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/tests/unit/tsconfig-strict.test.ts",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/tests/unit/no-v8-ignore.test.ts",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/tests/integration/auth-probe.test.ts",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/tests/integration/biome-check.test.ts",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/tests/integration/typescript-clean.test.ts",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/tests/integration/llm-dispatch.test.ts",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/tests/integration/mechanical-dispatch.test.ts",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/tests/integration/debug-flag.test.ts",
+    "/Users/brodieyazaki/work/agent-tools/the-eng-org/tests/e2e/active.test.ts"
+  ],
+  "deliverables": {
+    "1_teo_test_mode_bypass": "src/index.tsx updated — TEO_TEST_MODE env bypass added to non-TTY guard at line 22",
+    "2_auth_probe": "src/cli/auth-probe.ts created — runAuthProbe() wired before render in src/index.tsx",
+    "3_vitest_config_include": "vitest.config.ts updated — src/llm/**, src/mechanical/**, src/context/**, src/spinner/** added to coverage.include with per-file thresholds",
+    "4_biome": "biome.json created with recommended base + overrides; package.json updated with lint script; biome check src/ passes clean",
+    "5_teo_claude_wrapper": ".claude/scripts/teo-claude created (exec claude \"$@\" wrapper); allowlist entry added to teo-bash-arg-validator"
+  },
+  "tests_passing": {
+    "before": "350/357 (7 todo)",
+    "after": "365/382 (17 todo)",
+    "new_passing": 15,
+    "no_regressions": true
+  },
+  "qa_tests_green": [
+    "T-M3-9.3 (coverage-config.test.ts)",
+    "T-M3-9.4 (coverage-config.test.ts)",
+    "T-M3-9.5 (coverage-config.test.ts)",
+    "T-M3-6.1 (auth-probe.test.ts integration — exit 1 with claude auth hint)",
+    "T-M3-6.2 (auth-probe.test.ts unit)",
+    "T-M3-6.3 (auth-probe.test.ts unit)",
+    "T-M3-6.4 (auth-probe.test.ts unit)",
+    "T-M3-6.5 (auth-probe.test.ts unit)",
+    "T-M3-6.6 (auth-probe.test.ts integration — success path)",
+    "T-M3-10.1 (biome-config.test.ts)",
+    "T-M3-10.2 (biome-config.test.ts)",
+    "T-M3-10.3 (biome-check.test.ts)",
+    "T-M3-11.1 (typescript-clean.test.ts)",
+    "T-M3-11.2 (tsconfig-strict.test.ts)",
+    "T-M3-12.1 (no-v8-ignore.test.ts)"
+  ],
+  "blockers": [],
+  "timestamp": "2026-06-10T20:26:00Z"
+}

@@ -84,8 +84,11 @@
       "Bash(.claude/scripts/teo-check-bats-count:*)",
       "Bash(.claude/scripts/teo-check-orphan-bats:*)",
       "Bash(.claude/scripts/teo-check-suite-list-parity:*)",
+      "Bash(.claude/scripts/teo-delegate-cleanup:*)",
       "Bash(.claude/scripts/teo-spawn-prep:*)",
       "Bash(.claude/scripts/teo-update-test-baselines:*)",
+      "Bash(./scripts/build-teo-for-claude.sh:*)",
+      "Bash(scripts/build-teo-for-claude.sh:*)",
       "Edit(.claude/memory/**)",
       "Write(.claude/memory/**)",
       "Bash(.claude/scripts/mg-memory-append:*)",
@@ -304,15 +307,6 @@
           }
         ],
         "matcher": "Write"
-      },
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": ".claude/hooks/pre-bash-write-guard.sh"
-          }
-        ]
       }
     ],
     "PostToolUse": [

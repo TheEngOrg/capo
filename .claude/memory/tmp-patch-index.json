@@ -1,0 +1,21 @@
+{
+  "schema_version": "1.0.0",
+  "target": "src/index.tsx",
+  "patches": [
+    {
+      "op": "replace",
+      "anchor": "import { parseArgs } from './cli/args.js';",
+      "content": "import { parseArgs } from './cli/args.js';\nimport { runAuthProbe } from './cli/auth-probe.js';"
+    },
+    {
+      "op": "replace",
+      "anchor": "  if (!process.stdin.isTTY) {",
+      "content": "  if (!process.stdin.isTTY && !process.env.TEO_TEST_MODE) {"
+    },
+    {
+      "op": "replace",
+      "anchor": "  render(<App debug={args.debug} />, { exitOnCtrlC: false });",
+      "content": "  const authResult = runAuthProbe();\n  if (!authResult.ok) {\n    process.stderr.write(`${authResult.message}\\n`);\n    process.exit(1);\n  }\n\n  render(<App debug={args.debug} />, { exitOnCtrlC: false });"
+    }
+  ]
+}

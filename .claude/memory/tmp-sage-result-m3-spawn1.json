@@ -1,0 +1,59 @@
+{
+  "session_id": "83883d8d-d4ca-41c5-ac27-01170b0b219d",
+  "timestamp": "2026-06-10T21:00:00Z",
+  "pipeline_phase": "M3-DEV-SPAWN-1-LLM-CORE",
+  "status": "in_progress",
+  "next_action": "GATEWAY_SPAWN_REQUEST dev Spawn 1 (LLM core): async useSubmit + claude-runtime + context manager + SubprocessController + Ctrl+C wiring. 50-turn cap. Exit criterion: real Claude output end-to-end, no stub text.",
+  "gate_blocked_reason": null,
+  "workstream_id": "M3",
+  "completed_steps": [
+    "qa-confirm-spec",
+    "dev-build-replace-range",
+    "qa-verification-gate-PASS-109of109",
+    "dev-follow-on-sequence-PASS",
+    "security-engineer-re-review-PASS-44of44",
+    "user-scope-reconciliation",
+    "dev-status-override-added",
+    "deployment-engineer-commit-babdfb8",
+    "M3-Spawn-0-scaffold-PASS-365of382"
+  ],
+  "pending_steps": [
+    "M3-Spawn-1-LLM-core (IN FLIGHT)",
+    "M3-Spawn-2-mechanical-core",
+    "M3-Spawn-3-UX-layer",
+    "M3-qa-verify-final",
+    "M3-commit"
+  ],
+  "open_decisions": [
+    "INFRA-GAP-1: teo-prepare-commit-message and teo-commit-message-verify scripts referenced in deployment-engineer constitution but do not exist in repo — build or de-reference",
+    "INFRA-GAP-2 (DROPPED per user directive 2026-06-10): WS-MARKER-FIX dropped — global fix coming from theengorg-enterprise. Route around with cp-from-staging pattern.",
+    "OI-3: teo-claude allowlist wrapper landed in M3 Spawn 0 (test-infra only)",
+    "SPIKE-001 OI-1/OI-2: closed PASS — runtime locked ClaudeCliRuntime; ADR-0001 ready to advance to ACCEPTED",
+    "RISK-1: async useSubmit breaks existing sync tests — Spawn 1 must audit before adding new tests",
+    "RISK-2: spawnSync blocks Ink render loop — production must use async spawn, tests mock spawn"
+  ],
+  "completed_gate_outputs": [
+    {
+      "step": "qa-verification",
+      "verdict": "PASS",
+      "evidence": "109/109 bats tests/memory-write/"
+    },
+    {
+      "step": "security-re-review",
+      "verdict": "PASS",
+      "evidence": "44/44 bats tests/hooks/pre-bash-write-guard.bats; protected-path BLOCK + memory-allow confirmed"
+    },
+    {
+      "step": "M3-Spawn-0-scaffold",
+      "verdict": "PASS",
+      "evidence": "365/382 tests (17 todo), 0 regressions. biome.json, auth-probe.ts, vitest.config.ts M3 includes, teo-claude wrapper, TEO_TEST_MODE bypass all on disk."
+    }
+  ],
+  "m3_spawn_status": {
+    "spawn_0_scaffold": "PASS",
+    "spawn_1_llm_core": "IN_FLIGHT",
+    "spawn_2_mechanical_core": "NOT_STARTED",
+    "spawn_3_ux_layer": "NOT_STARTED"
+  },
+  "cap_mechanism_finding": "MEASURED RESULT: Agent tool has NO maxTurns parameter — prose cap is the only lever. Honor-system prose worked (33/20 cap) and failed (364/40 cap). Emphasize stop-and-report in every spawn prompt. WS-TURN-CAP-ENFORCEMENT is a follow-up — not blocking M3."
+}

@@ -187,7 +187,7 @@ Next steps:
 - Each project has its own `.claude/memory/` directory
 - Memory files are ignored by git (`.claude/memory/.gitignore`)
 - No data crosses between projects or clients
-- NDA-safe architecture
+- Your project data stays in your project directory
 
 **Absolute paths are NEVER used** in generated files.
 

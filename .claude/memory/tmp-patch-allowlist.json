@@ -1,0 +1,11 @@
+{
+  "schema_version": "1.0.0",
+  "target": ".claude/scripts/teo-bash-arg-validator",
+  "patches": [
+    {
+      "op": "insert-after",
+      "anchor": "    # Docker (BR-5 spike + SWE-bench runner, granted 2026-05-23)",
+      "content": "    # teo-claude wrapper (M3 test-infra, granted 2026-06-10)\n    # Tight-match: first two args must be --print --output-format\n    \".claude/scripts/teo-claude --print --output-format\"\n    \".claude/scripts/teo-claude$\""
+    }
+  ]
+}

@@ -30,6 +30,8 @@ directive_gate:
     - "Authorizing irreversible changes without explicit user written authorization"
     - "Modifying application code instead of deployment configuration"
     - "Executing releases outside the defined gate sequence"
+    - "Writing go-signal without first writing the pipeline commit-output artifact"
+    - "Using action vocabulary (committed/merged/deployed) in pipeline artifact status field instead of outcome vocabulary (success/failed/partial)"
     - "Rewriting or abridging a staff-approved commit message from a COMMIT_DIRECTIVE"
     - "Changing the commit subject from the COMMIT_DIRECTIVE commit_subject"
     - "Dropping sections from the COMMIT_DIRECTIVE commit_body"
@@ -154,8 +156,10 @@ The Write tool is granted MANDATORY for the COMMIT_DIRECTIVE flow (DEMF-S2). Wit
 |---|---|
 | `/tmp/*` | Tempfile staging for prepared commit messages |
 | `.claude/memory/go-signals/*.json` | GO-signal output after successful commit |
+| `.claude/memory/pipeline/<workstream_id>-commit-commit-output.json` | Gate artifact for commit operations (required by PostToolUse hook) |
+| `.claude/memory/pipeline/<workstream_id>-merge-commit-output.json` | Gate artifact for merge operations (required by PostToolUse hook) |
 
-Deployment-engineer MUST NOT use the Write tool to write to any path outside these two classes. Any Write outside `/tmp/*` or `.claude/memory/go-signals/*.json` is a drift signal and triggers `on_drift: halt_and_alert`.
+Deployment-engineer MUST NOT use the Write tool to write to any path outside these classes. Any Write outside `/tmp/*`, `.claude/memory/go-signals/*.json`, or `.claude/memory/pipeline/<workstream_id>-*-commit-output.json` is a drift signal and triggers `on_drift: halt_and_alert`.
 
 **Shell redirection PROHIBITED for file creation:**
 
@@ -224,15 +228,58 @@ Deployment-engineer MUST use `git commit -F <tempfile>` to commit from the prepa
 git commit -F <output-tempfile>
 ```
 
-**Step 4 — Write go-signal (MANDATORY):**
+**Step 4 — Write pipeline commit-output artifact, then go-signal (MANDATORY):**
+
+Deployment-engineer MUST write TWO artifacts using the Write tool. Order is enforced: pipeline artifact FIRST, go-signal SECOND.
+
+**Step 4a — Write pipeline commit-output (gate artifact):**
+
+Write to `.claude/memory/pipeline/<workstream_id>-commit-commit-output.json` (for commit operations) or `.claude/memory/pipeline/<workstream_id>-merge-commit-output.json` (for merge operations). This file is the PostToolUse gate validation target. Without it, the gate BLOCKs with exit 2.
+
+Required 4-field schema (all fields mandatory):
+
+```json
+{
+  "commit_sha": "<7-40 lowercase hex chars from git commit output>",
+  "trace_id":   "<UUID v4 — use the trace_id from the COMMIT_DIRECTIVE payload>",
+  "files_committed": ["<relative path 1>", "<relative path 2>"],
+  "status":     "success | failed | partial"
+}
+```
+
+Field constraints (gate validates these — mismatch causes BLOCK):
+- `commit_sha`: string, matches `[0-9a-f]{7,40}`. Use the short or full SHA from git output.
+- `trace_id`: string, valid UUID v4 format (`xxxxxxxx-xxxx-4xxx-[89ab]xxx-xxxxxxxxxxxx`).
+- `files_committed`: non-empty array; all elements must be strings.
+- `status`: MUST be outcome vocabulary: `success`, `failed`, or `partial`. NEVER use action vocabulary (`committed`, `merged`, `deployed`) — the gate will BLOCK on any value outside the outcome enum.
+
+**Status vocabulary rule:** `success` = completed without error. `failed` = operation failed (gate validates artifact existence, not commit success — `failed` is a valid value). `partial` = partial success.
+
+**Step 4b — Write go-signal:**
 
 Deployment-engineer MUST use the Write tool directly to write the go-signal JSON to `.claude/memory/go-signals/<workstream-id>-commit.json`. MUST NOT use bash redirection or `teo-memory-write` (which targets existing files) for new go-signal creation.
+
+### Gate Contract
+
+The `teo-deployment-engineer-output-gate.sh` PostToolUse hook fires after every Agent() call and checks:
+
+1. Is the completed agent a `deployment-engineer`? If not, pass-through (exit 0).
+2. Was the pipeline commit-output artifact written? Checks `.claude/memory/pipeline/<phase>-commit-output.json` (V1) or `.claude/memory/pipeline/<phase>-deployment-engineer-output.json` (V2). BLOCKs (exit 2) if missing.
+3. Does the artifact pass schema validation? BLOCKs if any of the 4 required fields are missing or invalid.
+
+The gate does NOT read go-signals. The go-signal is Sage completion indicator; the pipeline commit-output is the gate handshake artifact. They serve different consumers and must both be written.
+
+**Phase filename convention:** For a workstream `WS-foo-bar`, the commit phase is `WS-foo-bar-commit`, so the gate artifact path is `.claude/memory/pipeline/WS-foo-bar-commit-commit-output.json` (the double `-commit` is intentional: phase name `WS-foo-bar-commit` + file suffix `-commit-output.json`).
+
+
 
 **Pipeline MUST clauses (summary):**
 
 - MUST use `teo-prepare-commit-message` — manual tempfile construction via shell redirection (`>`, `>>`, heredoc) is PROHIBITED
 - MUST use `teo-commit-message-verify` between prepare and commit
 - MUST use `git commit -F <tempfile>` — NEVER `-m` with inline message
+- MUST write pipeline commit-output artifact BEFORE go-signal (Step 4a before Step 4b)
+- MUST use outcome vocab in status field (`success`/`failed`/`partial`) — NEVER action vocab (`committed`/`merged`)
 - MUST use Write tool for the go-signal (NOT bash redirection)
 
 ### Drift Signals

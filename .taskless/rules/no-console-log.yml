@@ -1,0 +1,12 @@
+id: no-console-log
+language: typescript
+severity: warning
+message: "Avoid console.log — the CLI writes to process.stdout/stderr explicitly; core modules return data, they don't log."
+note: |
+  The deterministic core returns values and appends telemetry events; it never
+  logs. The CLI layer (src/cli, src/index.ts) owns user-facing output via
+  process.stdout.write. A stray console.log is almost always debug residue.
+files:
+  - "src/**"
+rule:
+  pattern: console.log($$$ARGS)

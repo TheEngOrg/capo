@@ -70,6 +70,35 @@ jobs:
         # If a lint script is absent, this job will fail — intentional. Add the script.
 
   # ---------------------------------------------------------------------------
+  # Job: taskless  (ADVISORY — does not gate merges yet)
+  #
+  # Runs the Taskless rules in .taskless/rules/ against the codebase. Static
+  # analysis only (safe in CI). Rules turn past review corrections into
+  # permanent guards — e.g. no Date.now()/Math.random() in src/core/**.
+  #
+  # ROLLOUT: this job is intentionally NOT in the `gate` job's `needs` list and
+  # uses continue-on-error, so a new/noisy rule can't block PRs while we tune.
+  # TO ENFORCE: (1) remove `continue-on-error`, (2) add `taskless` to the gate
+  # `needs` list and its result loop. Then a rule violation blocks merge.
+  # ---------------------------------------------------------------------------
+  taskless:
+    name: Taskless (advisory)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Set up Node
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: "20"
+
+      - name: Run Taskless rules
+        # Exits 1 on error-severity matches. continue-on-error keeps this advisory
+        # for now — the step still shows red on the PR so violations are visible.
+        run: npx --yes @taskless/cli@0.5.0 check
+
+  # ---------------------------------------------------------------------------
   # Job: typecheck
   # ---------------------------------------------------------------------------
   typecheck:

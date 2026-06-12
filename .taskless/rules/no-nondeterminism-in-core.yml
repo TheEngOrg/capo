@@ -1,0 +1,16 @@
+id: no-nondeterminism-in-core
+language: typescript
+severity: error
+message: "No Date.now(), new Date(), or Math.random() in src/core/** — the deterministic core must be pure and replayable."
+note: |
+  TEO 5's core is deterministic by contract (TEO-5.md §1): given the same plan it
+  must replay identically, which is also what makes runs resumable. Wall-clock and
+  randomness break that. Pass a clock/ts in from the CLI boundary (see how the CLI
+  passes `created_at`) and derive any needed variation from inputs, not Date/Math.random.
+files:
+  - "src/core/**"
+rule:
+  any:
+    - pattern: Date.now()
+    - pattern: new Date($$$)
+    - pattern: Math.random()

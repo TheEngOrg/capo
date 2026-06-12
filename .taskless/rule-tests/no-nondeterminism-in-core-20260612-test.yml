@@ -1,0 +1,11 @@
+id: no-nondeterminism-in-core
+valid:
+  - "const ts = opts.created_at;"
+  - "const now = clock.nowIso();"
+  - "const seed = src.gitRemote ?? src.absPath;"
+  - "function nowIso(): string { return externalClock(); }"
+invalid:
+  - "const ts = new Date().toISOString();"
+  - "const seq = Date.now();"
+  - "const jitter = Math.random() * 100;"
+  - "const id = `x-${Date.now()}`;"

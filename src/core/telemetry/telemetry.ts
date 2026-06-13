@@ -18,7 +18,6 @@ export type Phase =
   | "TASK_OUTPUT"
   | "MECH_VERIFY"
   | "RETRY"
-  | "AGENT_VERIFY"
   | "GATE"
   | "DELIVER"
   | "HUMAN_GATE"

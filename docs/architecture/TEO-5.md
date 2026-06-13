@@ -60,7 +60,6 @@ User Input
 │      ├─ spawn task_actor (agent) ── AGENT PROCESS             │
 │      ├─ capture output                                         │
 │      ├─ MECHANICAL VERIFY: run task.verifications[] (scripts) │
-│      ├─ AGENT VERIFY: actor-verify output meets expectation   │
 │      └─ at a Gate: gate_owner signs (or blocks)               │
 │   emits a telemetry event at every step + handoff             │
 │   OUTPUT: OUTCOME                                              │
@@ -229,7 +228,7 @@ audit and finance read. No event is ever mutated or deleted.
   "task_id": "uuid | null",          // null for stream-level events
   "seq": 42,                          // monotonic per plan; gaps = tamper signal
   "ts": "ISO-8601 UTC",
-  "phase": "PLAN | RUN | TASK_START | TASK_OUTPUT | MECH_VERIFY | AGENT_VERIFY |
+  "phase": "PLAN | RUN | TASK_START | TASK_OUTPUT | MECH_VERIFY | RETRY |
             GATE | DELIVER | HUMAN_GATE | CLOSE | ERROR",
   "actor_id": "sage-001 | eng-003 | human:byazaki | system",
   "actor_type": "SAGE | ENGINEER | QA | CREATE | HUMAN | SYSTEM",
@@ -337,7 +336,7 @@ Build order, each module tests-first:
 | 3 | `signing`             | HMAC sign + verify over the canonical message                         |
 | 4 | `telemetry`           | append-only event writer; seq allocator; finance rollup reader        |
 | 5 | `plan` (schema)       | TEO-EXECUTION-PLAN type, validate, sign, verify, load                  |
-| 6 | `orchestrator`        | plan-loader → step-runner → (SCRIPT: run · AGENT: spawn) → capture → mech-verify → agent-verify → gate |
+| 6 | `orchestrator`        | plan-loader → step-runner → (SCRIPT: run · AGENT: spawn) → capture → mech-verify → gate |
 | 7 | `mechanical-verify`   | run `verifications[]` scripts, map exit code → verdict                 |
 | 8 | `script-runner`       | run a SCRIPT task's `script.path` directly; capture exit/stdout/stderr; 0 tokens |
 | 9 | `agent-spawn`         | the one place an LLM is invoked, fenced by code — AGENT tasks only     |

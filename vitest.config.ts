@@ -9,6 +9,10 @@ export default defineConfig({
     globals: true,
     environment: "node",
     include: ["tests/**/*.{test,spec}.{ts,tsx}"],
+    // Regenerate the demo signing key if absent (clean checkout) so the
+    // acceptance suite's `teo run` can verify the committed demo plans. No-op
+    // when the key already exists. See tests/acceptance/global-setup.ts.
+    globalSetup: ["tests/acceptance/global-setup.ts"],
     // The integration tests each spawn cold `npx tsx` subprocesses. With vitest's
     // default file parallelism, all three integration files race at once and
     // fork-bomb a 2-core CI runner — slow subprocesses overrun buffers / time out

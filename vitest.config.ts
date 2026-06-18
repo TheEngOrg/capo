@@ -27,6 +27,20 @@ export default defineConfig({
           branches: 100,
           statements: 100,
         },
+        // WS-CORE-04: gate.ts and verification.ts are critical-path modules.
+        // gate.ts IS the fail-safe — 100% branch coverage is mandatory.
+        "src/core/gate.ts": {
+          lines: 100,
+          functions: 100,
+          branches: 100,
+          statements: 100,
+        },
+        "src/core/verification.ts": {
+          lines: 100,
+          functions: 100,
+          branches: 100,
+          statements: 100,
+        },
       },
     },
   },

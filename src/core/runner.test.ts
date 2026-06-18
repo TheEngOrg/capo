@@ -32,11 +32,7 @@ function makePlan(tasks: TEOTask[]): Plan {
 }
 
 /** Build a SCRIPT TEOTask. */
-function makeTask(
-  id: string,
-  needs: string[] = [],
-  overrides?: Partial<TEOTask>
-): TEOTask {
+function makeTask(id: string, needs: string[] = [], overrides?: Partial<TEOTask>): TEOTask {
   return {
     id,
     type: "SCRIPT",
@@ -142,17 +138,12 @@ describe("TopologicalRunner run() — cycle detection (defensive)", () => {
     // A → B, B → A: cycle. Plan schema allows it (shape-only); runner must detect.
     // We bypass PlanSchema validation because the schema requires min 1 task but
     // doesn't validate referential integrity (that's validatePlan's job, WS-CORE-02).
-    const plan = makePlan([
-      makeTask("A", ["B"]),
-      makeTask("B", ["A"]),
-    ]);
+    const plan = makePlan([makeTask("A", ["B"]), makeTask("B", ["A"])]);
 
     const result = await runner.run(plan);
     expect(result.overallStatus).toBe("FAILED");
     // At least one step result should reference cycle error in detail
-    const hasCycleDetail = result.steps.some((s) =>
-      s.detail?.toLowerCase().includes("cycle")
-    );
+    const hasCycleDetail = result.steps.some((s) => s.detail?.toLowerCase().includes("cycle"));
     expect(hasCycleDetail).toBe(true);
   });
 
@@ -160,17 +151,11 @@ describe("TopologicalRunner run() — cycle detection (defensive)", () => {
     const executor = makePassExecutor();
     const runner = new TopologicalRunner({ executor });
 
-    const plan = makePlan([
-      makeTask("A", ["C"]),
-      makeTask("B", ["A"]),
-      makeTask("C", ["B"]),
-    ]);
+    const plan = makePlan([makeTask("A", ["C"]), makeTask("B", ["A"]), makeTask("C", ["B"])]);
 
     const result = await runner.run(plan);
     expect(result.overallStatus).toBe("FAILED");
-    const hasCycleDetail = result.steps.some((s) =>
-      s.detail?.toLowerCase().includes("cycle")
-    );
+    const hasCycleDetail = result.steps.some((s) => s.detail?.toLowerCase().includes("cycle"));
     expect(hasCycleDetail).toBe(true);
   });
 });
@@ -299,7 +284,7 @@ describe("TopologicalRunner — executor throws synchronously (boundary)", () =>
   it("handles a non-Error thrown value (e.g. a string) without crashing", async () => {
     // Covers the `err instanceof Error ? err.message : String(err)` else branch.
     const stringThrowExecutor: Executor = async (task) => {
-      throw `string error for ${task.id}`; // eslint-disable-line no-throw-literal
+      throw `string error for ${task.id}`;
     };
     const runner = new TopologicalRunner({ executor: stringThrowExecutor });
     const plan = makePlan([makeTask("Z")]);
@@ -327,9 +312,9 @@ describe("TopologicalRunner — independent branch isolation (boundary)", () => 
     const runner = new TopologicalRunner({ executor: failAExecutor });
 
     const plan = makePlan([
-      makeTask("A"),      // will fail
+      makeTask("A"), // will fail
       makeTask("B", ["A"]), // will be skipped
-      makeTask("C"),      // independent — should PASS
+      makeTask("C"), // independent — should PASS
     ]);
 
     const result = await runner.run(plan);
@@ -438,11 +423,7 @@ describe("TopologicalRunner — maxParallel cap (golden path)", () => {
     const runner = new TopologicalRunner({ executor, maxParallel: 1 });
 
     // All independent — should still run serially (one at a time)
-    const plan = makePlan([
-      makeTask("A"),
-      makeTask("B"),
-      makeTask("C"),
-    ]);
+    const plan = makePlan([makeTask("A"), makeTask("B"), makeTask("C")]);
 
     const result = await runner.run(plan);
     expect(result.overallStatus).toBe("PASS");
@@ -482,11 +463,7 @@ describe("TopologicalRunner — RED-halt cascade (golden path)", () => {
       executor: makeFailExecutorFor("A"),
     });
 
-    const plan = makePlan([
-      makeTask("A"),
-      makeTask("B", ["A"]),
-      makeTask("C", ["B"]),
-    ]);
+    const plan = makePlan([makeTask("A"), makeTask("B", ["A"]), makeTask("C", ["B"])]);
     const result = await runner.run(plan);
 
     const stepA = result.steps.find((s) => s.taskId === "A");
@@ -577,9 +554,7 @@ describe("TopologicalRunner — unknown needs ref (defensive)", () => {
   it("treats a needs[] ref to an unknown task ID as a broken dependency and reports FAILED", async () => {
     // validatePlan would catch this (WS-CORE-02), but the runner defends anyway.
     const runner = new TopologicalRunner({ executor: makePassExecutor() });
-    const plan = makePlan([
-      makeTask("A", ["nonexistent"]),
-    ]);
+    const plan = makePlan([makeTask("A", ["nonexistent"])]);
     const result = await runner.run(plan);
     // A cannot run because its dependency doesn't exist — mark FAILED
     expect(result.overallStatus).toBe("FAILED");

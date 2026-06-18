@@ -1,0 +1,9 @@
+#!/usr/bin/env sh
+# pre-commit hook — runs lint-staged on staged .ts/.js/.json files.
+#
+# Catches: ESLint errors, Prettier formatting issues on staged files.
+# Mirrors CI: ESLint is run in CI as part of the lint step.
+#
+# Emergency bypass: git commit --no-verify (use sparingly)
+
+npx lint-staged

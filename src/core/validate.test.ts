@@ -85,9 +85,7 @@ describe("validatePlan — misuse: structural errors", () => {
   });
 
   it("returns an error when needs[] references a nonexistent task ID", () => {
-    const plan = minimalValidPlan([
-      makeScriptTask("task-A", ["does-not-exist"]),
-    ]);
+    const plan = minimalValidPlan([makeScriptTask("task-A", ["does-not-exist"])]);
     const result = validatePlan(plan);
     expect(result.valid).toBe(false);
     const refError = result.errors.find((e) => e.code === "UNRESOLVED_NEEDS_REF");
@@ -112,10 +110,7 @@ describe("validatePlan — misuse: structural errors", () => {
   });
 
   it("returns a cycle error for a 2-node mutual dependency A↔B", () => {
-    const plan = minimalValidPlan([
-      makeScriptTask("A", ["B"]),
-      makeScriptTask("B", ["A"]),
-    ]);
+    const plan = minimalValidPlan([makeScriptTask("A", ["B"]), makeScriptTask("B", ["A"])]);
     const result = validatePlan(plan);
     expect(result.valid).toBe(false);
     const cycleError = result.errors.find((e) => e.code === "DEPENDENCY_CYCLE");
@@ -190,9 +185,7 @@ describe("validatePlan — boundary: error accumulation", () => {
     ]);
     const result = validatePlan(plan);
     expect(result.valid).toBe(false);
-    const refErrors = result.errors.filter(
-      (e) => e.code === "UNRESOLVED_NEEDS_REF"
-    );
+    const refErrors = result.errors.filter((e) => e.code === "UNRESOLVED_NEEDS_REF");
     expect(refErrors.length).toBeGreaterThanOrEqual(2);
   });
 });
@@ -212,9 +205,7 @@ describe("validatePlan — boundary: plan-quality gate", () => {
   });
 
   it("PQ-02: emits a warning for a plan with 26 tasks — valid:true", () => {
-    const tasks = Array.from({ length: 26 }, (_, i) =>
-      makeScriptTask(`task-${i}`)
-    );
+    const tasks = Array.from({ length: 26 }, (_, i) => makeScriptTask(`task-${i}`));
     const plan = minimalValidPlan(tasks);
     const result = validatePlan(plan);
     expect(result.valid).toBe(true);
@@ -224,9 +215,7 @@ describe("validatePlan — boundary: plan-quality gate", () => {
   });
 
   it("PQ-02: does NOT warn at exactly 25 tasks", () => {
-    const tasks = Array.from({ length: 25 }, (_, i) =>
-      makeScriptTask(`task-${i}`)
-    );
+    const tasks = Array.from({ length: 25 }, (_, i) => makeScriptTask(`task-${i}`));
     const plan = minimalValidPlan(tasks);
     const result = validatePlan(plan);
     expect(result.valid).toBe(true);
@@ -235,10 +224,7 @@ describe("validatePlan — boundary: plan-quality gate", () => {
   });
 
   it("PQ-01: does NOT warn for a 2-task plan (boundary at < 2)", () => {
-    const plan = minimalValidPlan([
-      makeScriptTask("task-A"),
-      makeScriptTask("task-B", ["task-A"]),
-    ]);
+    const plan = minimalValidPlan([makeScriptTask("task-A"), makeScriptTask("task-B", ["task-A"])]);
     const result = validatePlan(plan);
     expect(result.valid).toBe(true);
     const pq01 = result.warnings.find((w) => w.code === "PQ_01_SINGLE_TASK");
@@ -336,10 +322,7 @@ describe("validatePlan — PQ-04: ARCHITECTURAL plan detection", () => {
     // the schema is extended and the `directive` field appears on the plan object.
     // We use a type cast to pass the field without TypeScript errors — this
     // mirrors real-world forward-compat scenarios.
-    const basePlan = minimalValidPlan([
-      makeScriptTask("task-A"),
-      makeScriptTask("task-B"),
-    ]);
+    const basePlan = minimalValidPlan([makeScriptTask("task-A"), makeScriptTask("task-B")]);
     const planWithDirective = {
       ...basePlan,
       directive: "ARCHITECTURAL",
@@ -347,9 +330,7 @@ describe("validatePlan — PQ-04: ARCHITECTURAL plan detection", () => {
 
     const result = validatePlan(planWithDirective);
     expect(result.valid).toBe(true); // PQ-04 is a warning, not an error
-    const pq04 = result.warnings.find(
-      (w) => w.code === "PQ_04_ARCHITECTURAL_SCOPE"
-    );
+    const pq04 = result.warnings.find((w) => w.code === "PQ_04_ARCHITECTURAL_SCOPE");
     expect(pq04).toBeDefined();
   });
 });

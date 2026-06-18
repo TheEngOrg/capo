@@ -1,0 +1,25 @@
+#!/usr/bin/env sh
+# pre-push hook — mirrors the full CI pipeline before pushing.
+#
+# Catches (in order):
+#   1. Type errors (tsc --noEmit)       → mirrors CI "Type check" step
+#   2. Test failures + coverage          → mirrors CI "Test with coverage" step
+#   3. Lockfile drift (package.json vs   → prevents `npm ci` failures in CI
+#      package-lock.json out of sync)
+#
+# Each check maps 1-to-1 with a ci.yml step.
+#
+# Emergency bypass: git push --no-verify (use sparingly; CI will still catch it)
+
+set -e
+
+echo "[pre-push] Running typecheck..."
+npm run typecheck
+
+echo "[pre-push] Running tests with coverage..."
+npm run test:cov
+
+echo "[pre-push] Checking lockfile sync..."
+npm run check-lockfile
+
+echo "[pre-push] All checks passed."

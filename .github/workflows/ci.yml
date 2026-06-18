@@ -27,3 +27,6 @@ jobs:
 
       - name: Test with coverage
         run: npm run test:cov
+
+      - name: Lockfile sync check
+        run: node scripts/check-lockfile.mjs

@@ -21,6 +21,12 @@ export default defineConfig({
           branches: 100,
           statements: 100,
         },
+        "src/core/runner.ts": {
+          lines: 100,
+          functions: 100,
+          branches: 100,
+          statements: 100,
+        },
       },
     },
   },

@@ -1,0 +1,605 @@
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import {
+  TopologicalRunner,
+  type Executor,
+  type RunContext,
+  type StepResult,
+  DEFAULT_STEP_TIMEOUT_MS,
+  DEFAULT_MAX_PARALLEL,
+} from "./runner.js";
+import type { Plan, TEOTask } from "./plan.js";
+
+// =============================================================================
+// runner.test.ts — exhaustive tests for src/core/runner.ts
+//
+// Ordering: misuse → boundary → golden path (per ADR-064 critical-path policy)
+// This module is on the critical path; 100% coverage is required.
+// =============================================================================
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Build a minimal Plan with the given tasks. */
+function makePlan(tasks: TEOTask[]): Plan {
+  return {
+    plan_id: "plan-test",
+    project_id: "proj-test",
+    created_at: "2026-06-18T00:00:00Z",
+    version: "1",
+    tasks,
+  };
+}
+
+/** Build a SCRIPT TEOTask. */
+function makeTask(
+  id: string,
+  needs: string[] = [],
+  overrides?: Partial<TEOTask>
+): TEOTask {
+  return {
+    id,
+    type: "SCRIPT",
+    command: `run-${id}`,
+    needs,
+    gates: [],
+    ...overrides,
+  } as TEOTask;
+}
+
+/** An executor stub that resolves PASS after `delayMs`. */
+function makePassExecutor(delayMs = 0): Executor {
+  return async (_task: TEOTask, _ctx: RunContext): Promise<StepResult> => {
+    if (delayMs > 0) {
+      await new Promise<void>((r) => setTimeout(r, delayMs));
+    }
+    return { taskId: _task.id, status: "PASS" };
+  };
+}
+
+/** An executor stub that resolves FAILED for a specific task ID, PASS for others. */
+function makeFailExecutorFor(failId: string): Executor {
+  return async (task: TEOTask, _ctx: RunContext): Promise<StepResult> => {
+    return { taskId: task.id, status: task.id === failId ? "FAILED" : "PASS" };
+  };
+}
+
+/** An executor stub that throws synchronously. */
+function makeThrowingExecutor(): Executor {
+  return async (task: TEOTask, _ctx: RunContext): Promise<StepResult> => {
+    throw new Error(`Executor threw for task ${task.id}`);
+  };
+}
+
+/** An executor that never resolves (simulates a hung task). */
+function makeHangingExecutor(): Executor {
+  return (_task: TEOTask, _ctx: RunContext): Promise<StepResult> => {
+    return new Promise<StepResult>(() => {
+      // Never resolves — timeout must fire.
+    });
+  };
+}
+
+// ---------------------------------------------------------------------------
+// MISUSE: Constructor validation
+// ---------------------------------------------------------------------------
+
+describe("TopologicalRunner constructor — misuse", () => {
+  it("throws when maxParallel is 0 and coerceZeroToOne is not set (default: throw)", () => {
+    const executor = makePassExecutor();
+    expect(
+      () =>
+        new TopologicalRunner({
+          executor,
+          maxParallel: 0,
+        })
+    ).toThrow(/maxParallel.*must be.*at least 1/i);
+  });
+
+  it("throws when maxParallel is negative", () => {
+    const executor = makePassExecutor();
+    expect(
+      () =>
+        new TopologicalRunner({
+          executor,
+          maxParallel: -1,
+        })
+    ).toThrow(/maxParallel.*must be.*at least 1/i);
+  });
+
+  it("throws when defaultStepTimeoutMs is 0 or negative", () => {
+    const executor = makePassExecutor();
+    expect(
+      () =>
+        new TopologicalRunner({
+          executor,
+          defaultStepTimeoutMs: 0,
+        })
+    ).toThrow(/defaultStepTimeoutMs.*must be.*positive/i);
+  });
+
+  it("throws when defaultStepTimeoutMs is negative", () => {
+    const executor = makePassExecutor();
+    expect(
+      () =>
+        new TopologicalRunner({
+          executor,
+          defaultStepTimeoutMs: -1000,
+        })
+    ).toThrow(/defaultStepTimeoutMs.*must be.*positive/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// MISUSE: Plan with a cycle (defensive — plan should be pre-validated)
+// ---------------------------------------------------------------------------
+
+describe("TopologicalRunner run() — cycle detection (defensive)", () => {
+  it("fails cleanly on a two-node cycle instead of infinite-looping", async () => {
+    const executor = makePassExecutor();
+    const runner = new TopologicalRunner({ executor });
+
+    // A → B, B → A: cycle. Plan schema allows it (shape-only); runner must detect.
+    // We bypass PlanSchema validation because the schema requires min 1 task but
+    // doesn't validate referential integrity (that's validatePlan's job, WS-CORE-02).
+    const plan = makePlan([
+      makeTask("A", ["B"]),
+      makeTask("B", ["A"]),
+    ]);
+
+    const result = await runner.run(plan);
+    expect(result.overallStatus).toBe("FAILED");
+    // At least one step result should reference cycle error in detail
+    const hasCycleDetail = result.steps.some((s) =>
+      s.detail?.toLowerCase().includes("cycle")
+    );
+    expect(hasCycleDetail).toBe(true);
+  });
+
+  it("fails cleanly on a three-node cycle", async () => {
+    const executor = makePassExecutor();
+    const runner = new TopologicalRunner({ executor });
+
+    const plan = makePlan([
+      makeTask("A", ["C"]),
+      makeTask("B", ["A"]),
+      makeTask("C", ["B"]),
+    ]);
+
+    const result = await runner.run(plan);
+    expect(result.overallStatus).toBe("FAILED");
+    const hasCycleDetail = result.steps.some((s) =>
+      s.detail?.toLowerCase().includes("cycle")
+    );
+    expect(hasCycleDetail).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// BOUNDARY: Empty plan
+// ---------------------------------------------------------------------------
+
+describe("TopologicalRunner run() — empty plan (boundary)", () => {
+  it("returns overall PASS with empty steps when the plan has zero tasks", async () => {
+    // PlanSchema requires min 1 task, but we allow empty at the runner level
+    // for defensive completeness. The runner receives a Plan — it doesn't re-validate.
+    const executor = makePassExecutor();
+    const runner = new TopologicalRunner({ executor });
+
+    // Cast to bypass TS — the runner's run() accepts Plan which requires tasks.min(1)
+    // but our defensive posture means we handle it cleanly at runtime.
+    const plan = {
+      plan_id: "plan-empty",
+      project_id: "proj-test",
+      created_at: "2026-06-18T00:00:00Z",
+      version: "1" as const,
+      tasks: [] as unknown as Plan["tasks"],
+    } as Plan;
+
+    const result = await runner.run(plan);
+    expect(result.overallStatus).toBe("PASS");
+    expect(result.steps).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// BOUNDARY: maxParallel=0 behavior
+// ---------------------------------------------------------------------------
+
+describe("TopologicalRunner — maxParallel=0 behavior (documented: throws)", () => {
+  it("throws at construction time when maxParallel=0 is passed", () => {
+    // BOUNDARY DECISION: maxParallel=0 is rejected at construction with a clear
+    // error. We do NOT silently coerce to 1, because silent coercion masks caller
+    // bugs. Callers that want 1 must say 1.
+    expect(
+      () =>
+        new TopologicalRunner({
+          executor: makePassExecutor(),
+          maxParallel: 0,
+        })
+    ).toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// BOUNDARY: per-step timeout fires
+// ---------------------------------------------------------------------------
+
+describe("TopologicalRunner — per-step timeout (boundary)", () => {
+  it("marks a hanging step FAILED (timed out) and does not leave it in flight", async () => {
+    // Use a very short timeout so the test is fast. No fake timers needed —
+    // we just set a 20ms timeout and the hanging executor never resolves.
+    const runner = new TopologicalRunner({
+      executor: makeHangingExecutor(),
+      defaultStepTimeoutMs: 20, // 20ms — fast test, real clock
+    });
+
+    const plan = makePlan([makeTask("A")]);
+    const result = await runner.run(plan);
+
+    expect(result.overallStatus).toBe("FAILED");
+    const stepA = result.steps.find((s) => s.taskId === "A");
+    expect(stepA?.status).toBe("FAILED");
+    expect(stepA?.detail).toMatch(/timed out/i);
+  });
+
+  it("downstream steps are SKIPPED when their dependency times out", async () => {
+    const runner = new TopologicalRunner({
+      executor: makeHangingExecutor(),
+      defaultStepTimeoutMs: 20,
+    });
+
+    const plan = makePlan([makeTask("A"), makeTask("B", ["A"])]);
+    const result = await runner.run(plan);
+
+    const stepA = result.steps.find((s) => s.taskId === "A");
+    const stepB = result.steps.find((s) => s.taskId === "B");
+    expect(stepA?.status).toBe("FAILED");
+    expect(stepB?.status).toBe("SKIPPED");
+  });
+
+  it("uses the default timeout constant (DEFAULT_STEP_TIMEOUT_MS = 60000)", () => {
+    // Verify the exported constant is 60_000 ms (1 minute).
+    expect(DEFAULT_STEP_TIMEOUT_MS).toBe(60_000);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// BOUNDARY: Executor throws synchronously
+// ---------------------------------------------------------------------------
+
+describe("TopologicalRunner — executor throws synchronously (boundary)", () => {
+  it("catches a thrown error and marks the step FAILED without crashing the run loop", async () => {
+    const runner = new TopologicalRunner({
+      executor: makeThrowingExecutor(),
+    });
+
+    const plan = makePlan([makeTask("A"), makeTask("B")]);
+    const result = await runner.run(plan);
+
+    // Both are independent. Both should be FAILED (not a crash).
+    expect(result.overallStatus).toBe("FAILED");
+    for (const step of result.steps) {
+      expect(step.status).toBe("FAILED");
+    }
+  });
+
+  it("step FAILED detail includes the thrown error message", async () => {
+    const runner = new TopologicalRunner({
+      executor: makeThrowingExecutor(),
+    });
+
+    const plan = makePlan([makeTask("X")]);
+    const result = await runner.run(plan);
+
+    const stepX = result.steps.find((s) => s.taskId === "X");
+    expect(stepX?.detail).toMatch(/executor threw/i);
+  });
+
+  it("handles a non-Error thrown value (e.g. a string) without crashing", async () => {
+    // Covers the `err instanceof Error ? err.message : String(err)` else branch.
+    const stringThrowExecutor: Executor = async (task) => {
+      throw `string error for ${task.id}`; // eslint-disable-line no-throw-literal
+    };
+    const runner = new TopologicalRunner({ executor: stringThrowExecutor });
+    const plan = makePlan([makeTask("Z")]);
+    const result = await runner.run(plan);
+
+    const stepZ = result.steps.find((s) => s.taskId === "Z");
+    expect(stepZ?.status).toBe("FAILED");
+    expect(stepZ?.detail).toMatch(/string error for Z/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// BOUNDARY: Unrelated task continues when another branch fails
+// ---------------------------------------------------------------------------
+
+describe("TopologicalRunner — independent branch isolation (boundary)", () => {
+  it("an unrelated task keeps running while a failed branch halts", async () => {
+    // Plan: A and C are independent roots.
+    // B depends on A. A will fail. C should still PASS.
+    const failAExecutor: Executor = async (task) => ({
+      taskId: task.id,
+      status: task.id === "A" ? "FAILED" : "PASS",
+    });
+
+    const runner = new TopologicalRunner({ executor: failAExecutor });
+
+    const plan = makePlan([
+      makeTask("A"),      // will fail
+      makeTask("B", ["A"]), // will be skipped
+      makeTask("C"),      // independent — should PASS
+    ]);
+
+    const result = await runner.run(plan);
+
+    const stepA = result.steps.find((s) => s.taskId === "A");
+    const stepB = result.steps.find((s) => s.taskId === "B");
+    const stepC = result.steps.find((s) => s.taskId === "C");
+
+    expect(stepA?.status).toBe("FAILED");
+    expect(stepB?.status).toBe("SKIPPED");
+    expect(stepC?.status).toBe("PASS");
+    expect(result.overallStatus).toBe("FAILED"); // overall fails if any step failed
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GOLDEN PATH: Diamond DAG ordering
+// ---------------------------------------------------------------------------
+
+describe("TopologicalRunner — diamond DAG (golden path)", () => {
+  it("executes A first, then B and C in parallel, then D last", async () => {
+    // Diamond: A → B, A → C, B → D, C → D
+    const startOrder: string[] = [];
+    const finishOrder: string[] = [];
+
+    const executor: Executor = async (task) => {
+      startOrder.push(task.id);
+      await new Promise<void>((r) => setTimeout(r, 5));
+      finishOrder.push(task.id);
+      return { taskId: task.id, status: "PASS" };
+    };
+
+    const runner = new TopologicalRunner({ executor, maxParallel: 4 });
+    const plan = makePlan([
+      makeTask("A"),
+      makeTask("B", ["A"]),
+      makeTask("C", ["A"]),
+      makeTask("D", ["B", "C"]),
+    ]);
+
+    const result = await runner.run(plan);
+
+    expect(result.overallStatus).toBe("PASS");
+    expect(result.steps).toHaveLength(4);
+    expect(result.steps.every((s) => s.status === "PASS")).toBe(true);
+
+    // A must start before B and C
+    expect(startOrder.indexOf("A")).toBeLessThan(startOrder.indexOf("B"));
+    expect(startOrder.indexOf("A")).toBeLessThan(startOrder.indexOf("C"));
+    // D must start after B and C finish
+    expect(finishOrder.indexOf("B")).toBeLessThan(startOrder.indexOf("D"));
+    expect(finishOrder.indexOf("C")).toBeLessThan(startOrder.indexOf("D"));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GOLDEN PATH: maxParallel cap on fan-out
+// ---------------------------------------------------------------------------
+
+describe("TopologicalRunner — maxParallel cap (golden path)", () => {
+  it("never exceeds maxParallel=2 in flight simultaneously on a fan-out", async () => {
+    // Fan-out: A → B, C, D, E (4 children, maxParallel=2)
+    let inFlight = 0;
+    let maxObservedInFlight = 0;
+
+    const executor: Executor = async (task) => {
+      if (task.id === "A") {
+        return { taskId: task.id, status: "PASS" };
+      }
+      inFlight++;
+      maxObservedInFlight = Math.max(maxObservedInFlight, inFlight);
+      await new Promise<void>((r) => setTimeout(r, 10));
+      inFlight--;
+      return { taskId: task.id, status: "PASS" };
+    };
+
+    const runner = new TopologicalRunner({
+      executor,
+      maxParallel: 2,
+    });
+
+    const plan = makePlan([
+      makeTask("A"),
+      makeTask("B", ["A"]),
+      makeTask("C", ["A"]),
+      makeTask("D", ["A"]),
+      makeTask("E", ["A"]),
+    ]);
+
+    const result = await runner.run(plan);
+
+    expect(result.overallStatus).toBe("PASS");
+    expect(maxObservedInFlight).toBeLessThanOrEqual(2);
+    expect(maxObservedInFlight).toBeGreaterThanOrEqual(1);
+  });
+
+  it("respects maxParallel=1 (serial execution)", async () => {
+    const finishOrder: string[] = [];
+
+    const executor: Executor = async (task) => {
+      await new Promise<void>((r) => setTimeout(r, 5));
+      finishOrder.push(task.id);
+      return { taskId: task.id, status: "PASS" };
+    };
+
+    const runner = new TopologicalRunner({ executor, maxParallel: 1 });
+
+    // All independent — should still run serially (one at a time)
+    const plan = makePlan([
+      makeTask("A"),
+      makeTask("B"),
+      makeTask("C"),
+    ]);
+
+    const result = await runner.run(plan);
+    expect(result.overallStatus).toBe("PASS");
+    expect(finishOrder).toHaveLength(3);
+  });
+
+  it("uses DEFAULT_MAX_PARALLEL=4 when not specified", () => {
+    expect(DEFAULT_MAX_PARALLEL).toBe(4);
+    // Construction should succeed with default maxParallel
+    const runner = new TopologicalRunner({ executor: makePassExecutor() });
+    expect(runner).toBeDefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GOLDEN PATH: RED-halt cascading (failing step skips downstream)
+// ---------------------------------------------------------------------------
+
+describe("TopologicalRunner — RED-halt cascade (golden path)", () => {
+  it("B→C chain: failure on B causes C to be SKIPPED, not FAILED", async () => {
+    const runner = new TopologicalRunner({
+      executor: makeFailExecutorFor("B"),
+    });
+
+    const plan = makePlan([makeTask("B"), makeTask("C", ["B"])]);
+    const result = await runner.run(plan);
+
+    const stepB = result.steps.find((s) => s.taskId === "B");
+    const stepC = result.steps.find((s) => s.taskId === "C");
+    expect(stepB?.status).toBe("FAILED");
+    expect(stepC?.status).toBe("SKIPPED");
+    expect(result.overallStatus).toBe("FAILED");
+  });
+
+  it("multi-hop cascade: A→B→C, A fails — B and C both SKIPPED", async () => {
+    const runner = new TopologicalRunner({
+      executor: makeFailExecutorFor("A"),
+    });
+
+    const plan = makePlan([
+      makeTask("A"),
+      makeTask("B", ["A"]),
+      makeTask("C", ["B"]),
+    ]);
+    const result = await runner.run(plan);
+
+    const stepA = result.steps.find((s) => s.taskId === "A");
+    const stepB = result.steps.find((s) => s.taskId === "B");
+    const stepC = result.steps.find((s) => s.taskId === "C");
+    expect(stepA?.status).toBe("FAILED");
+    expect(stepB?.status).toBe("SKIPPED");
+    expect(stepC?.status).toBe("SKIPPED");
+  });
+
+  it("overallStatus is PASS when all steps pass", async () => {
+    const runner = new TopologicalRunner({ executor: makePassExecutor() });
+    const plan = makePlan([makeTask("A"), makeTask("B", ["A"])]);
+    const result = await runner.run(plan);
+    expect(result.overallStatus).toBe("PASS");
+    expect(result.steps.every((s) => s.status === "PASS")).toBe(true);
+  });
+
+  it("overallStatus is FAILED when any step fails", async () => {
+    const runner = new TopologicalRunner({
+      executor: makeFailExecutorFor("A"),
+    });
+    const plan = makePlan([makeTask("A"), makeTask("B", ["A"])]);
+    const result = await runner.run(plan);
+    expect(result.overallStatus).toBe("FAILED");
+  });
+
+  it("skipped step detail indicates it was skipped due to upstream failure", async () => {
+    const runner = new TopologicalRunner({
+      executor: makeFailExecutorFor("A"),
+    });
+    const plan = makePlan([makeTask("A"), makeTask("B", ["A"])]);
+    const result = await runner.run(plan);
+
+    const stepB = result.steps.find((s) => s.taskId === "B");
+    expect(stepB?.detail).toMatch(/skip/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GOLDEN PATH: Single task
+// ---------------------------------------------------------------------------
+
+describe("TopologicalRunner — single task (golden path)", () => {
+  it("runs a single task and returns PASS", async () => {
+    const runner = new TopologicalRunner({ executor: makePassExecutor() });
+    const plan = makePlan([makeTask("only")]);
+    const result = await runner.run(plan);
+    expect(result.overallStatus).toBe("PASS");
+    expect(result.steps).toHaveLength(1);
+    expect(result.steps[0]?.status).toBe("PASS");
+    expect(result.steps[0]?.taskId).toBe("only");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GOLDEN PATH: RunResult structure
+// ---------------------------------------------------------------------------
+
+describe("TopologicalRunner — RunResult structure", () => {
+  it("RunResult contains steps array and overallStatus", async () => {
+    const runner = new TopologicalRunner({ executor: makePassExecutor() });
+    const plan = makePlan([makeTask("A"), makeTask("B", ["A"])]);
+    const result = await runner.run(plan);
+
+    expect(result).toHaveProperty("steps");
+    expect(result).toHaveProperty("overallStatus");
+    expect(Array.isArray(result.steps)).toBe(true);
+    expect(["PASS", "FAILED"]).toContain(result.overallStatus);
+  });
+
+  it("each StepResult has taskId, status, and optional detail", async () => {
+    const runner = new TopologicalRunner({ executor: makePassExecutor() });
+    const plan = makePlan([makeTask("A")]);
+    const result = await runner.run(plan);
+    const step = result.steps[0]!;
+    expect(step).toHaveProperty("taskId", "A");
+    expect(step).toHaveProperty("status");
+    expect(["PASS", "FAILED", "SKIPPED"]).toContain(step.status);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GOLDEN PATH: Needs ref to unknown task ID is tolerated defensively
+// ---------------------------------------------------------------------------
+
+describe("TopologicalRunner — unknown needs ref (defensive)", () => {
+  it("treats a needs[] ref to an unknown task ID as a broken dependency and reports FAILED", async () => {
+    // validatePlan would catch this (WS-CORE-02), but the runner defends anyway.
+    const runner = new TopologicalRunner({ executor: makePassExecutor() });
+    const plan = makePlan([
+      makeTask("A", ["nonexistent"]),
+    ]);
+    const result = await runner.run(plan);
+    // A cannot run because its dependency doesn't exist — mark FAILED
+    expect(result.overallStatus).toBe("FAILED");
+    const stepA = result.steps.find((s) => s.taskId === "A");
+    expect(stepA?.status).toBe("FAILED");
+  });
+
+  it("tasks without unknown refs are returned as PASS in the same early-exit batch", async () => {
+    // A has a bad ref; B is independent and valid.
+    // The runner returns early (both in same unknown-refs pass) — B gets PASS.
+    const runner = new TopologicalRunner({ executor: makePassExecutor() });
+    const plan = makePlan([
+      makeTask("A", ["nonexistent"]),
+      makeTask("B"), // independent, no bad refs
+    ]);
+    const result = await runner.run(plan);
+    expect(result.overallStatus).toBe("FAILED");
+    const stepA = result.steps.find((s) => s.taskId === "A");
+    const stepB = result.steps.find((s) => s.taskId === "B");
+    expect(stepA?.status).toBe("FAILED");
+    expect(stepB?.status).toBe("PASS");
+  });
+});

@@ -41,6 +41,15 @@ export default defineConfig({
           branches: 100,
           statements: 100,
         },
+        // WS-CORE-05: ledger.ts is critical-path — append-only JSONL writer.
+        // Production-only branches (homedir fallback, non-Error throw shape)
+        // are guarded with /* c8 ignore next */ per the established pattern.
+        "src/core/ledger.ts": {
+          lines: 100,
+          functions: 100,
+          branches: 100,
+          statements: 100,
+        },
       },
     },
   },

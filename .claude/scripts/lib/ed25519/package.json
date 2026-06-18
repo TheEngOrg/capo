@@ -1,9 +1,0 @@
-{
-  "name": "teo-key-ed25519-lib",
-  "version": "1.0.0",
-  "private": true,
-  "type": "module",
-  "dependencies": {
-    "@noble/ed25519": "3.1.0"
-  }
-}

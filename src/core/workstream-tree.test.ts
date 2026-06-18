@@ -2,12 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
-import {
-  WorkstreamTree,
-  type WorktreeHandle,
-  type WorktreeRecord,
-  type Backend,
-} from "./workstream-tree.js";
+import { WorkstreamTree, type WorktreeRecord } from "./workstream-tree.js";
 
 // =============================================================================
 // workstream-tree.test.ts — exhaustive tests for src/core/workstream-tree.ts
@@ -68,23 +63,17 @@ function makeTree(projectId = "proj-test"): WorkstreamTree {
 describe("WorkstreamTree — misuse: wsId sanitization", () => {
   it("rejects a wsId containing '..'", async () => {
     const tree = makeTree();
-    await expect(tree.allocate("../evil", "none")).rejects.toThrow(
-      /invalid wsId/i
-    );
+    await expect(tree.allocate("../evil", "none")).rejects.toThrow(/invalid wsId/i);
   });
 
   it("rejects a wsId containing a forward slash", async () => {
     const tree = makeTree();
-    await expect(tree.allocate("ws/nested", "none")).rejects.toThrow(
-      /invalid wsId/i
-    );
+    await expect(tree.allocate("ws/nested", "none")).rejects.toThrow(/invalid wsId/i);
   });
 
   it("rejects a wsId containing a backslash", async () => {
     const tree = makeTree();
-    await expect(tree.allocate("ws\\evil", "none")).rejects.toThrow(
-      /invalid wsId/i
-    );
+    await expect(tree.allocate("ws\\evil", "none")).rejects.toThrow(/invalid wsId/i);
   });
 
   it("rejects an empty wsId", async () => {
@@ -115,13 +104,10 @@ describe("WorkstreamTree — misuse: duplicate allocate", () => {
   it("sandbox backend: second allocate for same wsId throws ALREADY_ALLOCATED", async () => {
     const tree = makeTree();
     await tree.allocate("ws-dup-sb", "sandbox");
-    await expect(tree.allocate("ws-dup-sb", "sandbox")).rejects.toThrow(
-      /already allocated/i
-    );
+    await expect(tree.allocate("ws-dup-sb", "sandbox")).rejects.toThrow(/already allocated/i);
     await tree.close("ws-dup-sb");
   });
 });
-
 
 // ---------------------------------------------------------------------------
 // MISUSE — close on never-allocated wsId (no crash)
@@ -435,7 +421,7 @@ function hasGit(): boolean {
 // The git tests require a real git repo, so they create one in tmpProjectDir.
 function await_require_execSync(): { execSync: typeof import("child_process").execSync } {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  return require("node:child_process");
+  return require("node:child_process") as { execSync: typeof import("child_process").execSync };
 }
 
 describe.skipIf(!hasGit())("WorkstreamTree — git backend (integration)", () => {
@@ -475,7 +461,7 @@ describe.skipIf(!hasGit())("WorkstreamTree — git backend (integration)", () =>
 
   it("git backend: the branch teo/ws-<wsId> is created", async () => {
     const { execSync } = await_require_execSync();
-    const handle = await gitTree.allocate("ws-git-branch", "git");
+    await gitTree.allocate("ws-git-branch", "git");
 
     // List branches in the git worktree
     const branches = execSync("git branch --list teo/ws-ws-git-branch", {
@@ -499,9 +485,7 @@ describe.skipIf(!hasGit())("WorkstreamTree — git backend (integration)", () =>
     // Pre-create the branch so git worktree add -b fails on branch already exists
     execSync("git branch teo/ws-ws-git-conflict", { cwd: gitProjectDir, stdio: "ignore" });
 
-    await expect(gitTree.allocate("ws-git-conflict", "git")).rejects.toThrow(
-      /GIT_ERROR/i
-    );
+    await expect(gitTree.allocate("ws-git-conflict", "git")).rejects.toThrow(/GIT_ERROR/i);
   });
 
   it("git backend: allocate() throws 'already allocated' when worktree dir exists on disk", async () => {
@@ -509,9 +493,7 @@ describe.skipIf(!hasGit())("WorkstreamTree — git backend (integration)", () =>
     const worktreeDir = path.join(tmpHome, ".teo", "worktrees", "proj-git-test", "ws-git-stale");
     fs.mkdirSync(worktreeDir, { recursive: true });
 
-    await expect(gitTree.allocate("ws-git-stale", "git")).rejects.toThrow(
-      /already allocated/i
-    );
+    await expect(gitTree.allocate("ws-git-stale", "git")).rejects.toThrow(/already allocated/i);
   });
 
   it("git backend: close() falls back to fs.rmSync when git worktree remove fails", async () => {
@@ -521,7 +503,6 @@ describe.skipIf(!hasGit())("WorkstreamTree — git backend (integration)", () =>
 
     // Destroy the main repo's git state so `git worktree remove` will fail,
     // which triggers the fs.rmSync fallback in closeGit().
-    const { execSync } = await_require_execSync();
     // Corrupt git by removing its objects dir — worktree remove will error
     const gitDir = path.join(gitProjectDir, ".git");
     fs.rmSync(path.join(gitDir, "config"), { force: true });

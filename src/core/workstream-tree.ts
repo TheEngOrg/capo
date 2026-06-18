@@ -272,11 +272,7 @@ function closeSandbox(wsId: string, worktreesDir: string): void {
  *
  * If the projectDir is NOT a git repo, throws with "GIT_ERROR: not a git repo".
  */
-function allocateGit(
-  wsId: string,
-  projectDir: string,
-  worktreesDir: string
-): WorktreeHandle {
+function allocateGit(wsId: string, projectDir: string, worktreesDir: string): WorktreeHandle {
   // Verify the project dir is a git repo
   try {
     execSync("git rev-parse --git-dir", { cwd: projectDir, stdio: "pipe" });
@@ -299,13 +295,13 @@ function allocateGit(
   fs.mkdirSync(worktreesDir, { recursive: true });
 
   try {
-    execSync(
-      `git worktree add -b "${branchName}" "${worktreePath}"`,
-      { cwd: projectDir, stdio: "pipe" }
-    );
+    execSync(`git worktree add -b "${branchName}" "${worktreePath}"`, {
+      cwd: projectDir,
+      stdio: "pipe",
+    });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    throw new Error(`GIT_ERROR: git worktree add failed: ${msg}`);
+    throw new Error(`GIT_ERROR: git worktree add failed: ${msg}`, { cause: err });
   }
 
   return { wsId, backend: "git", cwd: worktreePath };
@@ -371,49 +367,47 @@ export class WorkstreamTree {
    * @returns A WorktreeHandle with the `cwd` to use for agent execution.
    * @throws If wsId is invalid, already allocated, or git fails.
    */
-  async allocate(wsId: string, backend: Backend): Promise<WorktreeHandle> {
-    assertSafeWsId(wsId);
+  allocate(wsId: string, backend: Backend): Promise<WorktreeHandle> {
+    // Wrap in Promise constructor so synchronous throws become rejections,
+    // allowing callers to use `await allocate(...)` or `.catch(...)` uniformly.
+    return new Promise<WorktreeHandle>((resolve, reject) => {
+      try {
+        assertSafeWsId(wsId);
 
-    let handle: WorktreeHandle;
+        let handle: WorktreeHandle;
 
-    switch (backend) {
-      case "none":
-        handle = allocateNone(
+        switch (backend) {
+          case "none":
+            handle = allocateNone(wsId, this.projectId, this.projectDir, this.dirs.locksDir);
+            break;
+          case "sandbox":
+            handle = allocateSandbox(wsId, this.projectId, this.projectDir, this.dirs.worktreesDir);
+            break;
+          case "git":
+            handle = allocateGit(wsId, this.projectDir, this.dirs.worktreesDir);
+            break;
+          default: {
+            // TypeScript exhaustiveness check
+            const _never: never = backend;
+            throw new Error(`Unknown backend: ${String(_never)}`);
+          }
+        }
+
+        const record: WorktreeRecord = {
           wsId,
-          this.projectId,
-          this.projectDir,
-          this.dirs.locksDir
-        );
-        break;
-      case "sandbox":
-        handle = allocateSandbox(
-          wsId,
-          this.projectId,
-          this.projectDir,
-          this.dirs.worktreesDir
-        );
-        break;
-      case "git":
-        handle = allocateGit(wsId, this.projectDir, this.dirs.worktreesDir);
-        break;
-      default: {
-        // TypeScript exhaustiveness check
-        const _never: never = backend;
-        throw new Error(`Unknown backend: ${String(_never)}`);
+          projectId: this.projectId,
+          backend,
+          event: "created",
+          timestamp: new Date().toISOString(),
+          cwd: handle.cwd,
+        };
+        appendRegistry(this.dirs.registryPath, record);
+
+        resolve(handle);
+      } catch (err) {
+        reject(err instanceof Error ? err : new Error(String(err)));
       }
-    }
-
-    const record: WorktreeRecord = {
-      wsId,
-      projectId: this.projectId,
-      backend,
-      event: "created",
-      timestamp: new Date().toISOString(),
-      cwd: handle.cwd,
-    };
-    appendRegistry(this.dirs.registryPath, record);
-
-    return handle;
+    });
   }
 
   /**
@@ -424,65 +418,65 @@ export class WorkstreamTree {
    *
    * @param wsId — The workstream ID to close.
    */
-  async close(wsId: string): Promise<void> {
-    // We don't assertSafeWsId here — close() is best-effort cleanup and
-    // an invalid wsId simply won't match anything anyway. We do a mild check
-    // to avoid exploiting fs.existsSync with a path traversal in the lockPath.
-    // Safe check: if wsId contains path separators, treat as no-op.
-    if (
-      !wsId ||
-      wsId.includes("/") ||
-      wsId.includes("\\") ||
-      wsId.includes("..")
-    ) {
-      return;
-    }
+  close(wsId: string): Promise<void> {
+    // Wrap in Promise constructor so synchronous throws become rejections.
+    // close() is best-effort — callers rely on it resolving (not throwing) for
+    // unknown wsIds. All error paths here are no-ops that resolve(undefined).
+    return new Promise<void>((resolve) => {
+      // We don't assertSafeWsId here — close() is best-effort cleanup and
+      // an invalid wsId simply won't match anything anyway. We do a mild check
+      // to avoid exploiting fs.existsSync with a path traversal in the lockPath.
+      // Safe check: if wsId contains path separators, treat as no-op.
+      if (!wsId || wsId.includes("/") || wsId.includes("\\") || wsId.includes("..")) {
+        resolve();
+        return;
+      }
 
-    // Determine which backend was used by reading the registry
-    const records = readRegistry(this.dirs.registryPath);
-    const lastCreated = records
-      .filter((r) => r.wsId === wsId && r.event === "created")
-      .at(-1);
+      // Determine which backend was used by reading the registry
+      const records = readRegistry(this.dirs.registryPath);
+      const lastCreated = records.filter((r) => r.wsId === wsId && r.event === "created").at(-1);
 
-    if (!lastCreated) {
-      // Never allocated — no-op
-      return;
-    }
+      if (!lastCreated) {
+        // Never allocated — no-op
+        resolve();
+        return;
+      }
 
-    // Check if already closed
-    const closedAfterLastCreate = records
-      .filter((r) => r.wsId === wsId && r.event === "closed")
-      .some(
-        (r) =>
-          new Date(r.timestamp) >= new Date(lastCreated.timestamp)
-      );
+      // Check if already closed
+      const closedAfterLastCreate = records
+        .filter((r) => r.wsId === wsId && r.event === "closed")
+        .some((r) => new Date(r.timestamp) >= new Date(lastCreated.timestamp));
 
-    if (closedAfterLastCreate) {
-      // Already closed — no-op
-      return;
-    }
+      if (closedAfterLastCreate) {
+        // Already closed — no-op
+        resolve();
+        return;
+      }
 
-    switch (lastCreated.backend) {
-      case "none":
-        closeNone(wsId, this.dirs.locksDir);
-        break;
-      case "sandbox":
-        closeSandbox(wsId, this.dirs.worktreesDir);
-        break;
-      case "git":
-        closeGit(wsId, this.projectDir, this.dirs.worktreesDir);
-        break;
-    }
+      switch (lastCreated.backend) {
+        case "none":
+          closeNone(wsId, this.dirs.locksDir);
+          break;
+        case "sandbox":
+          closeSandbox(wsId, this.dirs.worktreesDir);
+          break;
+        case "git":
+          closeGit(wsId, this.projectDir, this.dirs.worktreesDir);
+          break;
+      }
 
-    const record: WorktreeRecord = {
-      wsId,
-      projectId: this.projectId,
-      backend: lastCreated.backend,
-      event: "closed",
-      timestamp: new Date().toISOString(),
-      cwd: lastCreated.cwd,
-    };
-    appendRegistry(this.dirs.registryPath, record);
+      const record: WorktreeRecord = {
+        wsId,
+        projectId: this.projectId,
+        backend: lastCreated.backend,
+        event: "closed",
+        timestamp: new Date().toISOString(),
+        cwd: lastCreated.cwd,
+      };
+      appendRegistry(this.dirs.registryPath, record);
+
+      resolve();
+    });
   }
 
   /**
@@ -491,8 +485,14 @@ export class WorkstreamTree {
    *
    * @param projectId — The project ID to read registry for.
    */
-  async list(projectId: string): Promise<WorktreeRecord[]> {
+  list(projectId: string): Promise<WorktreeRecord[]> {
     const dirs = buildTeoDirs(this.baseDir, projectId);
-    return readRegistry(dirs.registryPath);
+    return new Promise<WorktreeRecord[]>((resolve, reject) => {
+      try {
+        resolve(readRegistry(dirs.registryPath));
+      } catch (err) {
+        reject(err instanceof Error ? err : new Error(String(err)));
+      }
+    });
   }
 }

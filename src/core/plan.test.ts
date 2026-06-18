@@ -43,15 +43,11 @@ const minimalValidPlan = {
 // ---------------------------------------------------------------------------
 describe("GateRefSchema", () => {
   it("rejects missing name", () => {
-    expect(() =>
-      GateRefSchema.parse({ on_fail: "block" })
-    ).toThrow();
+    expect(() => GateRefSchema.parse({ on_fail: "block" })).toThrow();
   });
 
   it("rejects invalid on_fail value", () => {
-    expect(() =>
-      GateRefSchema.parse({ name: "sec", on_fail: "ignore" })
-    ).toThrow();
+    expect(() => GateRefSchema.parse({ name: "sec", on_fail: "ignore" })).toThrow();
   });
 
   it("parses a valid block gate ref", () => {
@@ -105,15 +101,11 @@ describe("TEOTaskSchema — discriminated union misuse", () => {
   });
 
   it("rejects an AGENT task with an empty prompt", () => {
-    expect(() =>
-      TEOTaskSchema.parse({ ...validAgentTask, prompt: "" })
-    ).toThrow();
+    expect(() => TEOTaskSchema.parse({ ...validAgentTask, prompt: "" })).toThrow();
   });
 
   it("rejects a task with unknown type", () => {
-    expect(() =>
-      TEOTaskSchema.parse({ ...validScriptTask, type: "UNKNOWN" })
-    ).toThrow();
+    expect(() => TEOTaskSchema.parse({ ...validScriptTask, type: "UNKNOWN" })).toThrow();
   });
 });
 
@@ -122,27 +114,19 @@ describe("TEOTaskSchema — discriminated union misuse", () => {
 // ---------------------------------------------------------------------------
 describe("TEOTaskSchema — empty string boundaries", () => {
   it("rejects a SCRIPT task with empty id", () => {
-    expect(() =>
-      TEOTaskSchema.parse({ ...validScriptTask, id: "" })
-    ).toThrow();
+    expect(() => TEOTaskSchema.parse({ ...validScriptTask, id: "" })).toThrow();
   });
 
   it("rejects a SCRIPT task with empty command", () => {
-    expect(() =>
-      TEOTaskSchema.parse({ ...validScriptTask, command: "" })
-    ).toThrow();
+    expect(() => TEOTaskSchema.parse({ ...validScriptTask, command: "" })).toThrow();
   });
 
   it("rejects an AGENT task with empty id", () => {
-    expect(() =>
-      TEOTaskSchema.parse({ ...validAgentTask, id: "" })
-    ).toThrow();
+    expect(() => TEOTaskSchema.parse({ ...validAgentTask, id: "" })).toThrow();
   });
 
   it("rejects an AGENT task with empty agent_id", () => {
-    expect(() =>
-      TEOTaskSchema.parse({ ...validAgentTask, agent_id: "" })
-    ).toThrow();
+    expect(() => TEOTaskSchema.parse({ ...validAgentTask, agent_id: "" })).toThrow();
   });
 });
 
@@ -223,22 +207,16 @@ describe("TEOTaskSchema — golden path", () => {
 // ---------------------------------------------------------------------------
 describe("PlanSchema — misuse", () => {
   it("rejects a plan with empty plan_id", () => {
-    expect(() =>
-      PlanSchema.parse({ ...minimalValidPlan, plan_id: "" })
-    ).toThrow();
+    expect(() => PlanSchema.parse({ ...minimalValidPlan, plan_id: "" })).toThrow();
   });
 
   it("rejects a plan with empty project_id", () => {
-    expect(() =>
-      PlanSchema.parse({ ...minimalValidPlan, project_id: "" })
-    ).toThrow();
+    expect(() => PlanSchema.parse({ ...minimalValidPlan, project_id: "" })).toThrow();
   });
 
   it("rejects a plan with an empty tasks array", () => {
     // A plan with no tasks is invalid — there's nothing to run.
-    expect(() =>
-      PlanSchema.parse({ ...minimalValidPlan, tasks: [] })
-    ).toThrow();
+    expect(() => PlanSchema.parse({ ...minimalValidPlan, tasks: [] })).toThrow();
   });
 
   it("rejects a plan with a wrong version string", () => {

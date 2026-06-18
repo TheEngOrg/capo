@@ -154,7 +154,7 @@ export class TopologicalRunner {
    * - Independent branches continue despite a failure in another branch.
    */
   async run(plan: Plan): Promise<RunResult> {
-    const tasks = plan.tasks as TEOTask[];
+    const tasks = plan.tasks;
 
     // Empty plan: succeed immediately with no steps.
     if (tasks.length === 0) {
@@ -229,8 +229,7 @@ export class TopologicalRunner {
 
     const isCompleted = (id: string): boolean => results.has(id);
 
-    const isReady = (task: TEOTask): boolean =>
-      task.needs.every((dep) => isCompleted(dep));
+    const isReady = (task: TEOTask): boolean => task.needs.every((dep) => isCompleted(dep));
 
     const hasFailedDep = (task: TEOTask): boolean =>
       task.needs.some((dep) => {
@@ -249,12 +248,10 @@ export class TopologicalRunner {
         });
         return;
       }
-      const p: Promise<void> = this.runStep(task, context).then(
-        (stepResult) => {
-          results.set(task.id, stepResult);
-          inFlight.delete(p);
-        }
-      );
+      const p: Promise<void> = this.runStep(task, context).then((stepResult) => {
+        results.set(task.id, stepResult);
+        inFlight.delete(p);
+      });
       inFlight.add(p);
     };
 
@@ -264,7 +261,7 @@ export class TopologicalRunner {
 
       for (const task of order) {
         if (dispatched.has(task.id)) continue; // already handled
-        if (!isReady(task)) continue;          // deps not done yet
+        if (!isReady(task)) continue; // deps not done yet
         if (inFlight.size >= this.maxParallel) break; // at capacity
 
         dispatchTask(task);
@@ -293,9 +290,7 @@ export class TopologicalRunner {
       }
       return r;
     });
-    const overallStatus = steps.every((s) => s.status === "PASS")
-      ? "PASS"
-      : "FAILED";
+    const overallStatus = steps.every((s) => s.status === "PASS") ? "PASS" : "FAILED";
 
     return { steps, overallStatus };
   }
@@ -319,17 +314,14 @@ export class TopologicalRunner {
     });
 
     try {
-      const executorPromise = Promise.resolve(
-        this.executor(task, context)
-      ).then(
+      const executorPromise = Promise.resolve(this.executor(task, context)).then(
         (result) => {
           clearTimeout(timer);
           return result;
         },
         (err: unknown) => {
           clearTimeout(timer);
-          const message =
-            err instanceof Error ? err.message : String(err);
+          const message = err instanceof Error ? err.message : String(err);
           return {
             taskId: task.id,
             status: "FAILED" as const,

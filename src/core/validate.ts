@@ -279,11 +279,12 @@ export function validatePlan(plan: Plan): ValidationResult {
 
   // PQ-04 is intentionally omitted — see TODO above. The guard below
   // ensures we never false-positive on the current schema.
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+
   if ("directive" in plan && (plan as Record<string, unknown>)["directive"] === "ARCHITECTURAL") {
     warnings.push({
       code: "PQ_04_ARCHITECTURAL_SCOPE",
-      message: "Plan has directive 'ARCHITECTURAL'. Architectural plans warrant extra staff-engineer review before execution.",
+      message:
+        "Plan has directive 'ARCHITECTURAL'. Architectural plans warrant extra staff-engineer review before execution.",
     });
   }
 

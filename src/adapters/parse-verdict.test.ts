@@ -3,18 +3,26 @@
 // Implementation lives in src/adapters/parse-verdict.ts.
 //
 // Tests for:
-//   export function parseVerdict(output: string): "PASS" | "FAIL" | null
+//   export interface VerdictResult {
+//     verdict: "PASS" | "FAIL" | null;
+//     passCount: number;
+//     failCount: number;
+//   }
+//   export function parseVerdict(output: string): VerdictResult
 //
 // Location: src/adapters/parse-verdict.ts
 //
 // CONTRACT:
-//   Scans `output` for lines matching /^VERDICT:\s+(PASS|FAIL)\s*$/m
+//   Scans `output` for lines matching /^VERDICT:\s+(PASS|FAIL)\s*$/gm
 //   (case-sensitive, line-anchored, one-or-more spaces after colon).
 //
-//   - One or more VERDICT: PASS lines, zero VERDICT: FAIL lines → "PASS"
-//   - One or more VERDICT: FAIL lines, zero VERDICT: PASS lines → "FAIL"
-//   - Both VERDICT: PASS AND VERDICT: FAIL found (conflict) → null
-//   - Neither found → null
+//   passCount: count of VERDICT: PASS lines matched
+//   failCount: count of VERDICT: FAIL lines matched
+//
+//   - passCount > 0 && failCount === 0 → verdict "PASS"
+//   - failCount > 0 && passCount === 0 → verdict "FAIL"
+//   - Both present (conflict) → verdict null, counts reflect actual matches
+//   - Neither found → verdict null, passCount: 0, failCount: 0
 //   - Trailing whitespace on verdict line is accepted (\s*$ allows it)
 //
 // ============================================================================
@@ -33,14 +41,20 @@ describe("parseVerdict — misuse", () => {
   // Empty string: no lines, no verdict possible.
   // -------------------------------------------------------------------------
   it("returns null for empty string input", () => {
-    expect(parseVerdict("")).toBeNull();
+    const result = parseVerdict("");
+    expect(result.verdict).toBeNull();
+    expect(result.passCount).toBe(0);
+    expect(result.failCount).toBe(0);
   });
 
   // -------------------------------------------------------------------------
   // Whitespace-only: blank lines do not constitute a verdict.
   // -------------------------------------------------------------------------
   it("returns null for whitespace-only string", () => {
-    expect(parseVerdict("   \n\t\n   ")).toBeNull();
+    const result = parseVerdict("   \n\t\n   ");
+    expect(result.verdict).toBeNull();
+    expect(result.passCount).toBe(0);
+    expect(result.failCount).toBe(0);
   });
 });
 
@@ -54,7 +68,10 @@ describe("parseVerdict — boundary: no-space-after-colon", () => {
   // one-or-more spaces (\s+), so this must NOT match.
   // -------------------------------------------------------------------------
   it("returns null for VERDICT:PASS with no space after colon", () => {
-    expect(parseVerdict("VERDICT:PASS")).toBeNull();
+    const result = parseVerdict("VERDICT:PASS");
+    expect(result.verdict).toBeNull();
+    expect(result.passCount).toBe(0);
+    expect(result.failCount).toBe(0);
   });
 });
 
@@ -63,14 +80,20 @@ describe("parseVerdict — boundary: case-sensitivity", () => {
   // The regex is case-sensitive. Lowercase value must NOT match.
   // -------------------------------------------------------------------------
   it("returns null for VERDICT: pass (lowercase value)", () => {
-    expect(parseVerdict("VERDICT: pass")).toBeNull();
+    const result = parseVerdict("VERDICT: pass");
+    expect(result.verdict).toBeNull();
+    expect(result.passCount).toBe(0);
+    expect(result.failCount).toBe(0);
   });
 
   // -------------------------------------------------------------------------
   // Lowercase keyword must NOT match.
   // -------------------------------------------------------------------------
   it("returns null for verdict: PASS (lowercase keyword)", () => {
-    expect(parseVerdict("verdict: PASS")).toBeNull();
+    const result = parseVerdict("verdict: PASS");
+    expect(result.verdict).toBeNull();
+    expect(result.passCount).toBe(0);
+    expect(result.failCount).toBe(0);
   });
 });
 
@@ -80,14 +103,17 @@ describe("parseVerdict — boundary: extra suffix", () => {
   // The regex requires \s*$ after the value — "PASSED" does not match.
   // -------------------------------------------------------------------------
   it("returns null for VERDICT: PASSED (extra suffix, not a bare PASS token)", () => {
-    expect(parseVerdict("VERDICT: PASSED")).toBeNull();
+    const result = parseVerdict("VERDICT: PASSED");
+    expect(result.verdict).toBeNull();
+    expect(result.passCount).toBe(0);
+    expect(result.failCount).toBe(0);
   });
 });
 
 describe("parseVerdict — boundary: conflict", () => {
   // -------------------------------------------------------------------------
   // When both VERDICT: PASS and VERDICT: FAIL appear in the same output
-  // the result is ambiguous → null.
+  // the result is ambiguous → null. Counts reflect actual matches (1 each).
   // -------------------------------------------------------------------------
   it("returns null when both VERDICT: PASS and VERDICT: FAIL are present (conflict)", () => {
     const output =
@@ -95,18 +121,24 @@ describe("parseVerdict — boundary: conflict", () => {
       "VERDICT: PASS\n" +
       "Wait, actually things failed.\n" +
       "VERDICT: FAIL\n";
-    expect(parseVerdict(output)).toBeNull();
+    const result = parseVerdict(output);
+    expect(result.verdict).toBeNull();
+    expect(result.passCount).toBe(1);
+    expect(result.failCount).toBe(1);
   });
 });
 
 describe("parseVerdict — boundary: multiple same-value lines", () => {
   // -------------------------------------------------------------------------
   // Multiple VERDICT: PASS lines with no FAIL → still "PASS".
-  // Multiple matches on the same value are acceptable.
+  // passCount reflects the actual count of matching lines (2).
   // -------------------------------------------------------------------------
   it("returns PASS when multiple VERDICT: PASS lines are present and no FAIL", () => {
     const output = "VERDICT: PASS\nsome noise\nVERDICT: PASS\n";
-    expect(parseVerdict(output)).toBe("PASS");
+    const result = parseVerdict(output);
+    expect(result.verdict).toBe("PASS");
+    expect(result.passCount).toBe(2);
+    expect(result.failCount).toBe(0);
   });
 });
 
@@ -116,7 +148,10 @@ describe("parseVerdict — boundary: mid-line embedding", () => {
   // match because the regex is anchored at line start (^).
   // -------------------------------------------------------------------------
   it("returns null when VERDICT: PASS appears mid-line (not at line start)", () => {
-    expect(parseVerdict("The VERDICT: PASS is confirmed")).toBeNull();
+    const result = parseVerdict("The VERDICT: PASS is confirmed");
+    expect(result.verdict).toBeNull();
+    expect(result.passCount).toBe(0);
+    expect(result.failCount).toBe(0);
   });
 });
 
@@ -125,11 +160,17 @@ describe("parseVerdict — boundary: trailing whitespace", () => {
   // Trailing whitespace after PASS or FAIL is accepted by \s*$.
   // -------------------------------------------------------------------------
   it("returns PASS for VERDICT: PASS with trailing spaces before newline", () => {
-    expect(parseVerdict("VERDICT: PASS   \n")).toBe("PASS");
+    const result = parseVerdict("VERDICT: PASS   \n");
+    expect(result.verdict).toBe("PASS");
+    expect(result.passCount).toBe(1);
+    expect(result.failCount).toBe(0);
   });
 
   it("returns FAIL for VERDICT: FAIL with trailing spaces before newline", () => {
-    expect(parseVerdict("VERDICT: FAIL  \n")).toBe("FAIL");
+    const result = parseVerdict("VERDICT: FAIL  \n");
+    expect(result.verdict).toBe("FAIL");
+    expect(result.passCount).toBe(0);
+    expect(result.failCount).toBe(1);
   });
 });
 
@@ -142,14 +183,20 @@ describe("parseVerdict — golden", () => {
   // Clean VERDICT: PASS with trailing newline.
   // -------------------------------------------------------------------------
   it("returns PASS for clean VERDICT: PASS\\n", () => {
-    expect(parseVerdict("VERDICT: PASS\n")).toBe("PASS");
+    const result = parseVerdict("VERDICT: PASS\n");
+    expect(result.verdict).toBe("PASS");
+    expect(result.passCount).toBe(1);
+    expect(result.failCount).toBe(0);
   });
 
   // -------------------------------------------------------------------------
   // Clean VERDICT: FAIL with trailing newline.
   // -------------------------------------------------------------------------
   it("returns FAIL for clean VERDICT: FAIL\\n", () => {
-    expect(parseVerdict("VERDICT: FAIL\n")).toBe("FAIL");
+    const result = parseVerdict("VERDICT: FAIL\n");
+    expect(result.verdict).toBe("FAIL");
+    expect(result.passCount).toBe(0);
+    expect(result.failCount).toBe(1);
   });
 
   // -------------------------------------------------------------------------
@@ -162,12 +209,18 @@ describe("parseVerdict — golden", () => {
       "Coverage: 99.2%\n" +
       "VERDICT: PASS\n" +
       "Done.\n";
-    expect(parseVerdict(output)).toBe("PASS");
+    const result = parseVerdict(output);
+    expect(result.verdict).toBe("PASS");
+    expect(result.passCount).toBe(1);
+    expect(result.failCount).toBe(0);
   });
 
   it("returns FAIL when verdict appears on its own line amid surrounding output", () => {
     const output = "Running tests...\n" + "3 tests failed.\n" + "VERDICT: FAIL\n" + "Exiting.\n";
-    expect(parseVerdict(output)).toBe("FAIL");
+    const result = parseVerdict(output);
+    expect(result.verdict).toBe("FAIL");
+    expect(result.passCount).toBe(0);
+    expect(result.failCount).toBe(1);
   });
 
   // -------------------------------------------------------------------------
@@ -175,6 +228,9 @@ describe("parseVerdict — golden", () => {
   // The multiline flag handles this — $ matches end-of-string too.
   // -------------------------------------------------------------------------
   it("returns PASS for VERDICT: PASS with no trailing newline (end of string)", () => {
-    expect(parseVerdict("VERDICT: PASS")).toBe("PASS");
+    const result = parseVerdict("VERDICT: PASS");
+    expect(result.verdict).toBe("PASS");
+    expect(result.passCount).toBe(1);
+    expect(result.failCount).toBe(0);
   });
 });

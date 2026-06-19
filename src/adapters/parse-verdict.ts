@@ -4,7 +4,19 @@
 // Extracted from claude-code.ts spawnAgent() inline regex. This module owns
 // the canonical VERDICT line parsing contract so it can be tested in isolation
 // and reused by any future spawner or adapter.
+//
+// Return shape updated to expose passCount/failCount so callers can distinguish
+// conflict from no-verdict without re-parsing.
 // =============================================================================
+
+export interface VerdictResult {
+  /** "PASS" when passCount > 0 && failCount === 0; "FAIL" when failCount > 0 && passCount === 0; null otherwise (conflict or no match). */
+  verdict: "PASS" | "FAIL" | null;
+  /** Number of VERDICT: PASS lines found. */
+  passCount: number;
+  /** Number of VERDICT: FAIL lines found. */
+  failCount: number;
+}
 
 /**
  * Scan `output` for lines matching the VERDICT protocol.
@@ -14,13 +26,8 @@
  *   - Line-anchored (^ and $ with multiline flag)
  *   - One-or-more spaces required after colon (\s+)
  *   - Trailing whitespace allowed (\s*)
- *
- * Returns:
- *   "PASS"  — one or more VERDICT: PASS lines found, zero VERDICT: FAIL lines
- *   "FAIL"  — one or more VERDICT: FAIL lines found, zero VERDICT: PASS lines
- *   null    — both found (conflict), or neither found
  */
-export function parseVerdict(output: string): "PASS" | "FAIL" | null {
+export function parseVerdict(output: string): VerdictResult {
   const verdictRe = /^VERDICT:\s+(PASS|FAIL)\s*$/gm;
   const matches: string[] = [];
   let m: RegExpExecArray | null;
@@ -32,12 +39,12 @@ export function parseVerdict(output: string): "PASS" | "FAIL" | null {
   const passCount = matches.filter((v) => v === "PASS").length;
   const failCount = matches.filter((v) => v === "FAIL").length;
 
+  let verdict: "PASS" | "FAIL" | null = null;
   if (passCount > 0 && failCount === 0) {
-    return "PASS";
+    verdict = "PASS";
+  } else if (failCount > 0 && passCount === 0) {
+    verdict = "FAIL";
   }
-  if (failCount > 0 && passCount === 0) {
-    return "FAIL";
-  }
-  // Both present (conflict) or neither found → null
-  return null;
+
+  return { verdict, passCount, failCount };
 }

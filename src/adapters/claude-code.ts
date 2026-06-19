@@ -431,10 +431,10 @@ export class ClaudeCodeAdapter implements TEOAdapter {
       };
     }
 
-    // 5. Parse verdict — use parseVerdict utility (extracted from inline regex, WS-P1-05 refactor)
-    const verdict = parseVerdict(raw.output);
+    // 5. Parse verdict — parseVerdict returns passCount/failCount so we never re-parse.
+    const { verdict, passCount, failCount } = parseVerdict(raw.output);
 
-    if (raw.errored === true && verdict === null) {
+    if (raw.errored === true && verdict === null && passCount === 0 && failCount === 0) {
       return {
         taskId: task.id,
         status: "FAILED",
@@ -448,17 +448,6 @@ export class ClaudeCodeAdapter implements TEOAdapter {
     if (verdict === "FAIL") {
       return { taskId: task.id, status: "FAILED" };
     }
-
-    // verdict === null here: either no verdict or conflict.
-    // Distinguish with a second pass for the BLOCKED detail message.
-    const verdictRe = /^VERDICT:\s+(PASS|FAIL)\s*$/gm;
-    const matches: string[] = [];
-    let m: RegExpExecArray | null;
-    while ((m = verdictRe.exec(raw.output)) !== null) {
-      matches.push(m[1] as string);
-    }
-    const passCount = matches.filter((v) => v === "PASS").length;
-    const failCount = matches.filter((v) => v === "FAIL").length;
 
     if (passCount > 0 && failCount > 0) {
       return {

@@ -63,10 +63,9 @@ import { validatePlan } from "../core/validate.js";
 import type { Plan, TEOTask } from "../core/plan.js";
 import type { StepResult } from "../core/runner.js";
 
-// NOTE (gate-1 state): These imports reference modules that do not exist yet.
-// tsc will emit TS2307 "Cannot find module" errors for ./types.js and ./stub.js.
-// That is the correct gate-1 red state — these errors are resolved when
-// software-engineer implements the files.
+// NOTE (gate-2 state): These imports reference modules implemented in gate-2.
+// ./types.ts exports TEOAdapter, PlanningContext, AgentContext interfaces.
+// ./stub.ts exports StubAdapter (implements TEOAdapter, drives PlanBuilder).
 import type { TEOAdapter, PlanningContext, AgentContext } from "./types.js";
 import { StubAdapter } from "./stub.js";
 
@@ -617,13 +616,12 @@ describe("StubAdapter — builder coupling", () => {
 });
 
 // =============================================================================
-// Import-level notes for implementer
+// Import-level notes (post gate-2 implementation)
 //
-// tsc (--noEmit) will emit TS2307 "Cannot find module './types.js'" and
-// "Cannot find module './stub.js'" until the implementation files exist.
-// These errors are the gate-1 expected red state. Run:
+// ./types.ts and ./stub.ts are implemented. tsc resolves both modules cleanly.
+// Run:
 //
 //   npx vitest run src/adapters/stub.test.ts
 //
-// to confirm tests fail with import errors (correct) rather than logic errors.
+// to confirm all 27 tests pass.
 // =============================================================================

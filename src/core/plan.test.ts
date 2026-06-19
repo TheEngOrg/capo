@@ -296,3 +296,65 @@ describe("PlanSchema — golden path", () => {
     expect(result.plan_id.length).toBeGreaterThan(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// WS-P1-01: PlanSchema.directive — MISUSE (tests are INTENTIONALLY FAILING
+// until dev adds `directive` to PlanSchema in plan.ts)
+// ---------------------------------------------------------------------------
+describe("PlanSchema — directive field misuse (WS-P1-01)", () => {
+  it("rejects an unknown directive value — Zod enum rejects anything outside the five allowed values", () => {
+    // directive: "INVALID" is not in the enum — Zod must throw.
+    // FAILS NOW: PlanSchema has no `directive` field yet, so unknown keys are
+    // silently stripped (not an object with .strict()). Once dev adds the field
+    // as z.enum([...]).optional(), Zod will validate the value and reject this.
+    expect(() =>
+      PlanSchema.parse({
+        ...minimalValidPlan,
+        directive: "INVALID",
+      })
+    ).toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// WS-P1-01: PlanSchema.directive — BOUNDARY
+// ---------------------------------------------------------------------------
+describe("PlanSchema — directive field boundary (WS-P1-01)", () => {
+  it("parses a plan with no directive field — field is optional, must not be required", () => {
+    // No directive present → plan still parses. This is the zero-change path.
+    // PASSES NOW (no directive field exists, extra keys are ignored), but once
+    // dev adds the optional field the parsed result should have directive: undefined.
+    const result = PlanSchema.parse(minimalValidPlan);
+    // After implementation, directive must be absent/undefined — not defaulted to anything.
+    expect((result as Record<string, unknown>)["directive"]).toBeUndefined();
+  });
+
+  it("parses a plan with directive: 'ARCHITECTURAL' — valid enum member must be accepted", () => {
+    // FAILS NOW: PlanSchema strips unknown keys; once dev adds the field, this
+    // must round-trip the value correctly.
+    const result = PlanSchema.parse({
+      ...minimalValidPlan,
+      directive: "ARCHITECTURAL",
+    });
+    expect((result as Record<string, unknown>)["directive"]).toBe("ARCHITECTURAL");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// WS-P1-01: PlanSchema.directive — GOLDEN PATH (all five enum members)
+// ---------------------------------------------------------------------------
+describe("PlanSchema — directive field golden path (WS-P1-01)", () => {
+  const validDirectives = ["BUILD", "FIX", "REVIEW", "PLAN", "ARCHITECTURAL"] as const;
+
+  for (const directive of validDirectives) {
+    it(`parses successfully with directive: '${directive}'`, () => {
+      // FAILS NOW for the reason above (fields stripped, value not preserved).
+      // After dev adds the enum field, each of these must parse and round-trip.
+      const result = PlanSchema.parse({
+        ...minimalValidPlan,
+        directive,
+      });
+      expect((result as Record<string, unknown>)["directive"]).toBe(directive);
+    });
+  }
+});

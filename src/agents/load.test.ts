@@ -6,7 +6,7 @@ import * as os from "node:os";
 // =============================================================================
 // load.test.ts — FAILING specs for src/agents/load.ts (WS-P1-06)
 //
-// These tests are RED by design. Dev implements load.ts and the 8 agent .md
+// These tests are RED by design. Dev implements load.ts and the 10 agent .md
 // files to make them green. DO NOT add implementation here.
 //
 // Ordering: misuse → boundary → golden path (ADR-064 critical-path policy)
@@ -60,7 +60,7 @@ import * as os from "node:os";
 // --- COVERAGE NOTE FOR DEV ---------------------------------------------------
 //
 //   load.ts must be added to vitest.config.ts perFile thresholds at 100% lines/
-//   branches/functions/statements. The 8 .md data files are NOT TypeScript — they
+//   branches/functions/statements. The 10 .md data files are NOT TypeScript — they
 //   are not instrumented and need no coverage entry.
 //
 // =============================================================================
@@ -74,16 +74,18 @@ import type { AgentDefinition } from "./load.js";
 // Constants
 // ---------------------------------------------------------------------------
 
-/** The 8 canonical agent ids TEO provisions. */
+/** The 10 canonical agent ids TEO provisions. */
 const EXPECTED_AGENT_IDS: readonly string[] = [
+  "software-engineer",
+  "frontend-engineer",
+  "data-engineer",
+  "devops-engineer",
   "sage",
-  "staff-engineer",
-  "dev",
   "qa",
+  "staff-engineer",
   "security-engineer",
   "coordinator",
-  "engineering-director",
-  "cto",
+  "technical-writer",
 ] as const;
 
 /**
@@ -358,13 +360,13 @@ describe("listAgentIds — boundary: injectable dir", () => {
 });
 
 // =============================================================================
-// GOLDEN PATH — all 8 canonical agents load successfully
+// GOLDEN PATH — all 10 canonical agents load successfully
 // =============================================================================
 
 describe("listAgentIds — golden: bundled src/agents/ directory", () => {
-  it("returns exactly the 8 expected agent ids", () => {
+  it("returns exactly the 10 expected agent ids", () => {
     // The bundled dir default is used — no injected dir.
-    // Will FAIL until dev creates all 8 .md files.
+    // Will FAIL until dev creates all 10 .md files.
     const ids = listAgentIds();
     const sorted = [...ids].sort();
     const expectedSorted = [...EXPECTED_AGENT_IDS].sort();
@@ -380,9 +382,9 @@ describe("listAgentIds — golden: bundled src/agents/ directory", () => {
   });
 });
 
-describe("loadAgentDefinition — golden: each of the 8 agents loads successfully", () => {
+describe("loadAgentDefinition — golden: each of the 10 agents loads successfully", () => {
   it.each([...EXPECTED_AGENT_IDS])("agent '%s' loads without throwing", (id) => {
-    // Will FAIL until dev creates all 8 .md files and load.ts.
+    // Will FAIL until dev creates all 10 .md files and load.ts.
     expect(() => loadAgentDefinition(id)).not.toThrow();
   });
 
@@ -429,7 +431,8 @@ describe("AgentDefinition — golden: shape contract", () => {
     // Validate the full shape of the returned object.
     // This test exists so that if dev adds fields to AgentDefinition they do it
     // intentionally and update the type export — callers rely on this shape.
-    const def: AgentDefinition = loadAgentDefinition("dev");
+    // Uses "qa" — a stable executor agent present in every roster revision.
+    const def: AgentDefinition = loadAgentDefinition("qa");
     expect(def).toHaveProperty("agent_id");
     expect(def).toHaveProperty("name");
     expect(def).toHaveProperty("role");

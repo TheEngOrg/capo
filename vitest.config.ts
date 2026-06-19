@@ -97,6 +97,14 @@ export default defineConfig({
           branches: 100,
           statements: 100,
         },
+        // WS-P1-03a: plan-builder.ts is critical-path — incremental PlanBuilder feeds
+        // the schema→validate→runner chain. 100% branch coverage is mandatory.
+        "src/core/plan-builder.ts": {
+          lines: 100,
+          functions: 100,
+          branches: 100,
+          statements: 100,
+        },
       },
     },
   },

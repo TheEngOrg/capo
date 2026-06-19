@@ -182,6 +182,10 @@ export function validatePlan(plan: Plan): ValidationResult {
   function dfs(id: string, path: string[]): void {
     color.set(id, GRAY);
     const task = taskById.get(id);
+    // taskById is keyed from seenIds (same set DFS iterates), so every id in
+    // seenIds has an entry. This guard is a defensive fallback — unreachable
+    // in practice, but protects against future refactoring regressions.
+    /* c8 ignore next */
     if (!task) return;
 
     for (const needsId of task.needs) {

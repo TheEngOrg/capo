@@ -1,0 +1,104 @@
+{
+  "scenarioId": "demo-08-gate-blocked",
+  "planId": "demo-08-gate-blocked",
+  "overallStatus": "FAILED",
+  "events": [
+    {
+      "seq": 1,
+      "session_id": "demo-08-gate-blocked",
+      "workflow_id": "demo-08-gate-blocked",
+      "task_id": null,
+      "turn_id": null,
+      "actor_id": "SYSTEM",
+      "actor_type": "SYSTEM",
+      "phase": "PLAN",
+      "verdict": null,
+      "detail": {
+        "plan_id": "demo-08-gate-blocked",
+        "task_count": 1
+      },
+      "event_id": "<uuid>",
+      "ts": "<timestamp>"
+    },
+    {
+      "seq": 2,
+      "session_id": "demo-08-gate-blocked",
+      "workflow_id": "demo-08-gate-blocked",
+      "task_id": "blocked-verify",
+      "turn_id": null,
+      "actor_id": "run-blocked-verify",
+      "actor_type": "SCRIPT",
+      "phase": "EXECUTE",
+      "verdict": "BLOCKED",
+      "detail": {
+        "gate_verdict": "BLOCKED"
+      },
+      "event_id": "<uuid>",
+      "ts": "<timestamp>"
+    },
+    {
+      "seq": 3,
+      "session_id": "demo-08-gate-blocked",
+      "workflow_id": "demo-08-gate-blocked",
+      "task_id": "blocked-verify",
+      "turn_id": null,
+      "actor_id": "SYSTEM",
+      "actor_type": "SYSTEM",
+      "phase": "GATE",
+      "verdict": "BLOCKED",
+      "detail": {
+        "gate_verdict": "BLOCKED"
+      },
+      "event_id": "<uuid>",
+      "ts": "<timestamp>"
+    },
+    {
+      "seq": 4,
+      "session_id": "demo-08-gate-blocked",
+      "workflow_id": "demo-08-gate-blocked",
+      "task_id": "blocked-verify",
+      "turn_id": null,
+      "actor_id": "SYSTEM",
+      "actor_type": "SYSTEM",
+      "phase": "SIGN",
+      "verdict": "BLOCKED",
+      "detail": {
+        "signed": true,
+        "verified": true,
+        "sig_len": 64
+      },
+      "event_id": "<uuid>",
+      "ts": "<timestamp>"
+    },
+    {
+      "seq": 5,
+      "session_id": "demo-08-gate-blocked",
+      "workflow_id": "demo-08-gate-blocked",
+      "task_id": null,
+      "turn_id": null,
+      "actor_id": "SYSTEM",
+      "actor_type": "SYSTEM",
+      "phase": "CLOSE",
+      "verdict": null,
+      "detail": {
+        "task_count": 1,
+        "pass": 0,
+        "fail": 0,
+        "skipped": 0,
+        "tokens": 0,
+        "cost_usd": 0
+      },
+      "event_id": "<uuid>",
+      "ts": "<timestamp>"
+    }
+  ],
+  "signatures": [
+    {
+      "seq": 3,
+      "task_id": "blocked-verify",
+      "signatureFormat": "<hmac-sha256-hex-64>",
+      "verified": true
+    }
+  ],
+  "validationWarnings": []
+}

@@ -1,0 +1,106 @@
+{
+  "scenarioId": "demo-10-pq-warning",
+  "planId": "demo-10-pq-warning",
+  "overallStatus": "PASS",
+  "events": [
+    {
+      "seq": 1,
+      "session_id": "demo-10-pq-warning",
+      "workflow_id": "demo-10-pq-warning",
+      "task_id": null,
+      "turn_id": null,
+      "actor_id": "SYSTEM",
+      "actor_type": "SYSTEM",
+      "phase": "PLAN",
+      "verdict": null,
+      "detail": {
+        "plan_id": "demo-10-pq-warning",
+        "project_id": "golden-harness",
+        "task_count": 1
+      },
+      "event_id": "<uuid>",
+      "ts": "<timestamp>"
+    },
+    {
+      "seq": 2,
+      "session_id": "demo-10-pq-warning",
+      "workflow_id": "demo-10-pq-warning",
+      "task_id": "only-task",
+      "turn_id": null,
+      "actor_id": "run-only-task",
+      "actor_type": "SCRIPT",
+      "phase": "EXECUTE",
+      "verdict": "PASS",
+      "detail": {
+        "task_type": "SCRIPT",
+        "gate_verdict": "PASS"
+      },
+      "event_id": "<uuid>",
+      "ts": "<timestamp>"
+    },
+    {
+      "seq": 3,
+      "session_id": "demo-10-pq-warning",
+      "workflow_id": "demo-10-pq-warning",
+      "task_id": "only-task",
+      "turn_id": null,
+      "actor_id": "SYSTEM",
+      "actor_type": "SYSTEM",
+      "phase": "GATE",
+      "verdict": "PASS",
+      "detail": {
+        "gate_verdict": "PASS"
+      },
+      "event_id": "<uuid>",
+      "ts": "<timestamp>"
+    },
+    {
+      "seq": 4,
+      "session_id": "demo-10-pq-warning",
+      "workflow_id": "demo-10-pq-warning",
+      "task_id": "only-task",
+      "turn_id": null,
+      "actor_id": "SYSTEM",
+      "actor_type": "SYSTEM",
+      "phase": "SIGN",
+      "verdict": "PASS",
+      "detail": {
+        "signed": true,
+        "verified": true,
+        "sig_len": 64
+      },
+      "event_id": "<uuid>",
+      "ts": "<timestamp>"
+    },
+    {
+      "seq": 5,
+      "session_id": "demo-10-pq-warning",
+      "workflow_id": "demo-10-pq-warning",
+      "task_id": null,
+      "turn_id": null,
+      "actor_id": "SYSTEM",
+      "actor_type": "SYSTEM",
+      "phase": "CLOSE",
+      "verdict": null,
+      "detail": {
+        "task_count": 1,
+        "pass": 1,
+        "fail": 0,
+        "skipped": 0,
+        "tokens": 0,
+        "cost_usd": 0
+      },
+      "event_id": "<uuid>",
+      "ts": "<timestamp>"
+    }
+  ],
+  "signatures": [
+    {
+      "seq": 3,
+      "task_id": "only-task",
+      "signatureFormat": "<hmac-sha256-hex-64>",
+      "verified": true
+    }
+  ],
+  "validationWarnings": ["PQ_01_SINGLE_TASK"]
+}

@@ -1,0 +1,334 @@
+{
+  "scenarioId": "demo-04-fanout-parallel",
+  "planId": "demo-04-fanout-parallel",
+  "overallStatus": "PASS",
+  "events": [
+    {
+      "seq": 1,
+      "session_id": "demo-04-fanout-parallel",
+      "workflow_id": "demo-04-fanout-parallel",
+      "task_id": null,
+      "turn_id": null,
+      "actor_id": "SYSTEM",
+      "actor_type": "SYSTEM",
+      "phase": "PLAN",
+      "verdict": null,
+      "detail": {
+        "plan_id": "demo-04-fanout-parallel",
+        "project_id": "golden-harness",
+        "task_count": 5
+      },
+      "event_id": "<uuid>",
+      "ts": "<timestamp>"
+    },
+    {
+      "seq": 2,
+      "session_id": "demo-04-fanout-parallel",
+      "workflow_id": "demo-04-fanout-parallel",
+      "task_id": "p1",
+      "turn_id": null,
+      "actor_id": "run-p1",
+      "actor_type": "SCRIPT",
+      "phase": "EXECUTE",
+      "verdict": "PASS",
+      "detail": {
+        "task_type": "SCRIPT",
+        "gate_verdict": "PASS"
+      },
+      "event_id": "<uuid>",
+      "ts": "<timestamp>"
+    },
+    {
+      "seq": 3,
+      "session_id": "demo-04-fanout-parallel",
+      "workflow_id": "demo-04-fanout-parallel",
+      "task_id": "p1",
+      "turn_id": null,
+      "actor_id": "SYSTEM",
+      "actor_type": "SYSTEM",
+      "phase": "GATE",
+      "verdict": "PASS",
+      "detail": {
+        "gate_verdict": "PASS"
+      },
+      "event_id": "<uuid>",
+      "ts": "<timestamp>"
+    },
+    {
+      "seq": 4,
+      "session_id": "demo-04-fanout-parallel",
+      "workflow_id": "demo-04-fanout-parallel",
+      "task_id": "p2",
+      "turn_id": null,
+      "actor_id": "run-p2",
+      "actor_type": "SCRIPT",
+      "phase": "EXECUTE",
+      "verdict": "PASS",
+      "detail": {
+        "task_type": "SCRIPT",
+        "gate_verdict": "PASS"
+      },
+      "event_id": "<uuid>",
+      "ts": "<timestamp>"
+    },
+    {
+      "seq": 5,
+      "session_id": "demo-04-fanout-parallel",
+      "workflow_id": "demo-04-fanout-parallel",
+      "task_id": "p2",
+      "turn_id": null,
+      "actor_id": "SYSTEM",
+      "actor_type": "SYSTEM",
+      "phase": "GATE",
+      "verdict": "PASS",
+      "detail": {
+        "gate_verdict": "PASS"
+      },
+      "event_id": "<uuid>",
+      "ts": "<timestamp>"
+    },
+    {
+      "seq": 6,
+      "session_id": "demo-04-fanout-parallel",
+      "workflow_id": "demo-04-fanout-parallel",
+      "task_id": "p3",
+      "turn_id": null,
+      "actor_id": "run-p3",
+      "actor_type": "SCRIPT",
+      "phase": "EXECUTE",
+      "verdict": "PASS",
+      "detail": {
+        "task_type": "SCRIPT",
+        "gate_verdict": "PASS"
+      },
+      "event_id": "<uuid>",
+      "ts": "<timestamp>"
+    },
+    {
+      "seq": 7,
+      "session_id": "demo-04-fanout-parallel",
+      "workflow_id": "demo-04-fanout-parallel",
+      "task_id": "p3",
+      "turn_id": null,
+      "actor_id": "SYSTEM",
+      "actor_type": "SYSTEM",
+      "phase": "GATE",
+      "verdict": "PASS",
+      "detail": {
+        "gate_verdict": "PASS"
+      },
+      "event_id": "<uuid>",
+      "ts": "<timestamp>"
+    },
+    {
+      "seq": 8,
+      "session_id": "demo-04-fanout-parallel",
+      "workflow_id": "demo-04-fanout-parallel",
+      "task_id": "p4",
+      "turn_id": null,
+      "actor_id": "run-p4",
+      "actor_type": "SCRIPT",
+      "phase": "EXECUTE",
+      "verdict": "PASS",
+      "detail": {
+        "task_type": "SCRIPT",
+        "gate_verdict": "PASS"
+      },
+      "event_id": "<uuid>",
+      "ts": "<timestamp>"
+    },
+    {
+      "seq": 9,
+      "session_id": "demo-04-fanout-parallel",
+      "workflow_id": "demo-04-fanout-parallel",
+      "task_id": "p4",
+      "turn_id": null,
+      "actor_id": "SYSTEM",
+      "actor_type": "SYSTEM",
+      "phase": "GATE",
+      "verdict": "PASS",
+      "detail": {
+        "gate_verdict": "PASS"
+      },
+      "event_id": "<uuid>",
+      "ts": "<timestamp>"
+    },
+    {
+      "seq": 10,
+      "session_id": "demo-04-fanout-parallel",
+      "workflow_id": "demo-04-fanout-parallel",
+      "task_id": "p5",
+      "turn_id": null,
+      "actor_id": "run-p5",
+      "actor_type": "SCRIPT",
+      "phase": "EXECUTE",
+      "verdict": "PASS",
+      "detail": {
+        "task_type": "SCRIPT",
+        "gate_verdict": "PASS"
+      },
+      "event_id": "<uuid>",
+      "ts": "<timestamp>"
+    },
+    {
+      "seq": 11,
+      "session_id": "demo-04-fanout-parallel",
+      "workflow_id": "demo-04-fanout-parallel",
+      "task_id": "p5",
+      "turn_id": null,
+      "actor_id": "SYSTEM",
+      "actor_type": "SYSTEM",
+      "phase": "GATE",
+      "verdict": "PASS",
+      "detail": {
+        "gate_verdict": "PASS"
+      },
+      "event_id": "<uuid>",
+      "ts": "<timestamp>"
+    },
+    {
+      "seq": 12,
+      "session_id": "demo-04-fanout-parallel",
+      "workflow_id": "demo-04-fanout-parallel",
+      "task_id": "p1",
+      "turn_id": null,
+      "actor_id": "SYSTEM",
+      "actor_type": "SYSTEM",
+      "phase": "SIGN",
+      "verdict": "PASS",
+      "detail": {
+        "signed": true,
+        "verified": true,
+        "sig_len": 64
+      },
+      "event_id": "<uuid>",
+      "ts": "<timestamp>"
+    },
+    {
+      "seq": 13,
+      "session_id": "demo-04-fanout-parallel",
+      "workflow_id": "demo-04-fanout-parallel",
+      "task_id": "p2",
+      "turn_id": null,
+      "actor_id": "SYSTEM",
+      "actor_type": "SYSTEM",
+      "phase": "SIGN",
+      "verdict": "PASS",
+      "detail": {
+        "signed": true,
+        "verified": true,
+        "sig_len": 64
+      },
+      "event_id": "<uuid>",
+      "ts": "<timestamp>"
+    },
+    {
+      "seq": 14,
+      "session_id": "demo-04-fanout-parallel",
+      "workflow_id": "demo-04-fanout-parallel",
+      "task_id": "p3",
+      "turn_id": null,
+      "actor_id": "SYSTEM",
+      "actor_type": "SYSTEM",
+      "phase": "SIGN",
+      "verdict": "PASS",
+      "detail": {
+        "signed": true,
+        "verified": true,
+        "sig_len": 64
+      },
+      "event_id": "<uuid>",
+      "ts": "<timestamp>"
+    },
+    {
+      "seq": 15,
+      "session_id": "demo-04-fanout-parallel",
+      "workflow_id": "demo-04-fanout-parallel",
+      "task_id": "p4",
+      "turn_id": null,
+      "actor_id": "SYSTEM",
+      "actor_type": "SYSTEM",
+      "phase": "SIGN",
+      "verdict": "PASS",
+      "detail": {
+        "signed": true,
+        "verified": true,
+        "sig_len": 64
+      },
+      "event_id": "<uuid>",
+      "ts": "<timestamp>"
+    },
+    {
+      "seq": 16,
+      "session_id": "demo-04-fanout-parallel",
+      "workflow_id": "demo-04-fanout-parallel",
+      "task_id": "p5",
+      "turn_id": null,
+      "actor_id": "SYSTEM",
+      "actor_type": "SYSTEM",
+      "phase": "SIGN",
+      "verdict": "PASS",
+      "detail": {
+        "signed": true,
+        "verified": true,
+        "sig_len": 64
+      },
+      "event_id": "<uuid>",
+      "ts": "<timestamp>"
+    },
+    {
+      "seq": 17,
+      "session_id": "demo-04-fanout-parallel",
+      "workflow_id": "demo-04-fanout-parallel",
+      "task_id": null,
+      "turn_id": null,
+      "actor_id": "SYSTEM",
+      "actor_type": "SYSTEM",
+      "phase": "CLOSE",
+      "verdict": null,
+      "detail": {
+        "task_count": 5,
+        "pass": 5,
+        "fail": 0,
+        "skipped": 0,
+        "tokens": 0,
+        "cost_usd": 0
+      },
+      "event_id": "<uuid>",
+      "ts": "<timestamp>"
+    }
+  ],
+  "signatures": [
+    {
+      "seq": 3,
+      "task_id": "p1",
+      "signatureFormat": "<hmac-sha256-hex-64>",
+      "verified": true
+    },
+    {
+      "seq": 5,
+      "task_id": "p2",
+      "signatureFormat": "<hmac-sha256-hex-64>",
+      "verified": true
+    },
+    {
+      "seq": 7,
+      "task_id": "p3",
+      "signatureFormat": "<hmac-sha256-hex-64>",
+      "verified": true
+    },
+    {
+      "seq": 9,
+      "task_id": "p4",
+      "signatureFormat": "<hmac-sha256-hex-64>",
+      "verified": true
+    },
+    {
+      "seq": 11,
+      "task_id": "p5",
+      "signatureFormat": "<hmac-sha256-hex-64>",
+      "verified": true
+    }
+  ],
+  "validationWarnings": []
+}

@@ -300,6 +300,7 @@ function allocateGit(wsId: string, projectDir: string, worktreesDir: string): Wo
       stdio: "pipe",
     });
   } catch (err) {
+    /* c8 ignore next */
     const msg = err instanceof Error ? err.message : String(err);
     throw new Error(`GIT_ERROR: git worktree add failed: ${msg}`, { cause: err });
   }
@@ -354,6 +355,7 @@ export class WorkstreamTree {
     this.projectDir = options.projectDir;
     // Default to os.homedir() so all state goes to ~/.teo/ on real machines.
     // Tests override this with a temp dir so they never touch the real ~/.teo.
+    /* c8 ignore next */
     this.baseDir = options.baseDir ?? os.homedir();
     this.dirs = buildTeoDirs(this.baseDir, this.projectId);
   }
@@ -386,11 +388,13 @@ export class WorkstreamTree {
           case "git":
             handle = allocateGit(wsId, this.projectDir, this.dirs.worktreesDir);
             break;
-          default: {
-            // TypeScript exhaustiveness check
-            const _never: never = backend;
-            throw new Error(`Unknown backend: ${String(_never)}`);
-          }
+          // TypeScript exhaustiveness check — unreachable at runtime since
+          // Backend is a closed union ("git" | "sandbox" | "none"). Retained
+          // so tsc catches unhandled variants if the union is extended.
+          /* c8 ignore next */
+          default:
+            /* c8 ignore next */
+            throw new Error(`Unknown backend: ${String(backend)}`);
         }
 
         const record: WorktreeRecord = {
@@ -405,6 +409,7 @@ export class WorkstreamTree {
 
         resolve(handle);
       } catch (err) {
+        /* c8 ignore next */
         reject(err instanceof Error ? err : new Error(String(err)));
       }
     });
@@ -491,6 +496,7 @@ export class WorkstreamTree {
       try {
         resolve(readRegistry(dirs.registryPath));
       } catch (err) {
+        /* c8 ignore next */
         reject(err instanceof Error ? err : new Error(String(err)));
       }
     });

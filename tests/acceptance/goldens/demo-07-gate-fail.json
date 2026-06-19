@@ -1,0 +1,107 @@
+{
+  "scenarioId": "demo-07-gate-fail",
+  "planId": "demo-07-gate-fail",
+  "overallStatus": "FAILED",
+  "events": [
+    {
+      "seq": 1,
+      "session_id": "demo-07-gate-fail",
+      "workflow_id": "demo-07-gate-fail",
+      "task_id": null,
+      "turn_id": null,
+      "actor_id": "SYSTEM",
+      "actor_type": "SYSTEM",
+      "phase": "PLAN",
+      "verdict": null,
+      "detail": {
+        "plan_id": "demo-07-gate-fail",
+        "project_id": "golden-harness",
+        "task_count": 1
+      },
+      "event_id": "<uuid>",
+      "ts": "<timestamp>"
+    },
+    {
+      "seq": 2,
+      "session_id": "demo-07-gate-fail",
+      "workflow_id": "demo-07-gate-fail",
+      "task_id": "failing-verify",
+      "turn_id": null,
+      "actor_id": "run-failing-verify",
+      "actor_type": "SCRIPT",
+      "phase": "EXECUTE",
+      "verdict": "FAIL",
+      "detail": {
+        "task_type": "SCRIPT",
+        "gate_verdict": "FAIL",
+        "evidence": "exit code 2: task failing-verify failed"
+      },
+      "event_id": "<uuid>",
+      "ts": "<timestamp>"
+    },
+    {
+      "seq": 3,
+      "session_id": "demo-07-gate-fail",
+      "workflow_id": "demo-07-gate-fail",
+      "task_id": "failing-verify",
+      "turn_id": null,
+      "actor_id": "SYSTEM",
+      "actor_type": "SYSTEM",
+      "phase": "GATE",
+      "verdict": "FAIL",
+      "detail": {
+        "gate_verdict": "FAIL"
+      },
+      "event_id": "<uuid>",
+      "ts": "<timestamp>"
+    },
+    {
+      "seq": 4,
+      "session_id": "demo-07-gate-fail",
+      "workflow_id": "demo-07-gate-fail",
+      "task_id": "failing-verify",
+      "turn_id": null,
+      "actor_id": "SYSTEM",
+      "actor_type": "SYSTEM",
+      "phase": "SIGN",
+      "verdict": "FAIL",
+      "detail": {
+        "signed": true,
+        "verified": true,
+        "sig_len": 64
+      },
+      "event_id": "<uuid>",
+      "ts": "<timestamp>"
+    },
+    {
+      "seq": 5,
+      "session_id": "demo-07-gate-fail",
+      "workflow_id": "demo-07-gate-fail",
+      "task_id": null,
+      "turn_id": null,
+      "actor_id": "SYSTEM",
+      "actor_type": "SYSTEM",
+      "phase": "CLOSE",
+      "verdict": null,
+      "detail": {
+        "task_count": 1,
+        "pass": 0,
+        "fail": 1,
+        "skipped": 0,
+        "tokens": 0,
+        "cost_usd": 0
+      },
+      "event_id": "<uuid>",
+      "ts": "<timestamp>"
+    }
+  ],
+  "signatures": [
+    {
+      "seq": 3,
+      "task_id": "failing-verify",
+      "signatureFormat": "<hmac-sha256-hex-64>",
+      "verified": true
+    }
+  ],
+  "validationWarnings": ["PQ_01_SINGLE_TASK"]
+}

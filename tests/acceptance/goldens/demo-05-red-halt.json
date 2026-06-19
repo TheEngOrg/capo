@@ -1,0 +1,196 @@
+{
+  "scenarioId": "demo-05-red-halt",
+  "planId": "demo-05-red-halt",
+  "overallStatus": "FAILED",
+  "events": [
+    {
+      "seq": 1,
+      "session_id": "demo-05-red-halt",
+      "workflow_id": "demo-05-red-halt",
+      "task_id": null,
+      "turn_id": null,
+      "actor_id": "SYSTEM",
+      "actor_type": "SYSTEM",
+      "phase": "PLAN",
+      "verdict": null,
+      "detail": {
+        "plan_id": "demo-05-red-halt",
+        "project_id": "golden-harness",
+        "task_count": 4
+      },
+      "event_id": "<uuid>",
+      "ts": "<timestamp>"
+    },
+    {
+      "seq": 2,
+      "session_id": "demo-05-red-halt",
+      "workflow_id": "demo-05-red-halt",
+      "task_id": "setup",
+      "turn_id": null,
+      "actor_id": "run-setup",
+      "actor_type": "SCRIPT",
+      "phase": "EXECUTE",
+      "verdict": "PASS",
+      "detail": {
+        "task_type": "SCRIPT",
+        "gate_verdict": "PASS"
+      },
+      "event_id": "<uuid>",
+      "ts": "<timestamp>"
+    },
+    {
+      "seq": 3,
+      "session_id": "demo-05-red-halt",
+      "workflow_id": "demo-05-red-halt",
+      "task_id": "setup",
+      "turn_id": null,
+      "actor_id": "SYSTEM",
+      "actor_type": "SYSTEM",
+      "phase": "GATE",
+      "verdict": "PASS",
+      "detail": {
+        "gate_verdict": "PASS"
+      },
+      "event_id": "<uuid>",
+      "ts": "<timestamp>"
+    },
+    {
+      "seq": 4,
+      "session_id": "demo-05-red-halt",
+      "workflow_id": "demo-05-red-halt",
+      "task_id": "build",
+      "turn_id": null,
+      "actor_id": "run-build",
+      "actor_type": "SCRIPT",
+      "phase": "EXECUTE",
+      "verdict": "FAIL",
+      "detail": {
+        "task_type": "SCRIPT",
+        "gate_verdict": "FAIL",
+        "evidence": "exit code 1: task build failed"
+      },
+      "event_id": "<uuid>",
+      "ts": "<timestamp>"
+    },
+    {
+      "seq": 5,
+      "session_id": "demo-05-red-halt",
+      "workflow_id": "demo-05-red-halt",
+      "task_id": "build",
+      "turn_id": null,
+      "actor_id": "SYSTEM",
+      "actor_type": "SYSTEM",
+      "phase": "GATE",
+      "verdict": "FAIL",
+      "detail": {
+        "gate_verdict": "FAIL"
+      },
+      "event_id": "<uuid>",
+      "ts": "<timestamp>"
+    },
+    {
+      "seq": 6,
+      "session_id": "demo-05-red-halt",
+      "workflow_id": "demo-05-red-halt",
+      "task_id": "test",
+      "turn_id": null,
+      "actor_id": "run-test",
+      "actor_type": "SCRIPT",
+      "phase": "EXECUTE",
+      "verdict": "SKIPPED",
+      "detail": {
+        "reason": "Skipped due to upstream failure"
+      },
+      "event_id": "<uuid>",
+      "ts": "<timestamp>"
+    },
+    {
+      "seq": 7,
+      "session_id": "demo-05-red-halt",
+      "workflow_id": "demo-05-red-halt",
+      "task_id": "deploy",
+      "turn_id": null,
+      "actor_id": "run-deploy",
+      "actor_type": "SCRIPT",
+      "phase": "EXECUTE",
+      "verdict": "SKIPPED",
+      "detail": {
+        "reason": "Skipped due to upstream failure"
+      },
+      "event_id": "<uuid>",
+      "ts": "<timestamp>"
+    },
+    {
+      "seq": 8,
+      "session_id": "demo-05-red-halt",
+      "workflow_id": "demo-05-red-halt",
+      "task_id": "setup",
+      "turn_id": null,
+      "actor_id": "SYSTEM",
+      "actor_type": "SYSTEM",
+      "phase": "SIGN",
+      "verdict": "PASS",
+      "detail": {
+        "signed": true,
+        "verified": true,
+        "sig_len": 64
+      },
+      "event_id": "<uuid>",
+      "ts": "<timestamp>"
+    },
+    {
+      "seq": 9,
+      "session_id": "demo-05-red-halt",
+      "workflow_id": "demo-05-red-halt",
+      "task_id": "build",
+      "turn_id": null,
+      "actor_id": "SYSTEM",
+      "actor_type": "SYSTEM",
+      "phase": "SIGN",
+      "verdict": "FAIL",
+      "detail": {
+        "signed": true,
+        "verified": true,
+        "sig_len": 64
+      },
+      "event_id": "<uuid>",
+      "ts": "<timestamp>"
+    },
+    {
+      "seq": 10,
+      "session_id": "demo-05-red-halt",
+      "workflow_id": "demo-05-red-halt",
+      "task_id": null,
+      "turn_id": null,
+      "actor_id": "SYSTEM",
+      "actor_type": "SYSTEM",
+      "phase": "CLOSE",
+      "verdict": null,
+      "detail": {
+        "task_count": 4,
+        "pass": 1,
+        "fail": 1,
+        "skipped": 2,
+        "tokens": 0,
+        "cost_usd": 0
+      },
+      "event_id": "<uuid>",
+      "ts": "<timestamp>"
+    }
+  ],
+  "signatures": [
+    {
+      "seq": 3,
+      "task_id": "setup",
+      "signatureFormat": "<hmac-sha256-hex-64>",
+      "verified": true
+    },
+    {
+      "seq": 5,
+      "task_id": "build",
+      "signatureFormat": "<hmac-sha256-hex-64>",
+      "verified": true
+    }
+  ],
+  "validationWarnings": []
+}

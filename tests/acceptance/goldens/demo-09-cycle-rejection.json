@@ -1,0 +1,9 @@
+{
+  "scenarioId": "demo-09-cycle-rejection",
+  "planId": "demo-09-cycle-rejection",
+  "overallStatus": "VALIDATION_REJECTED",
+  "validationErrors": ["DEPENDENCY_CYCLE"],
+  "validationWarnings": [],
+  "events": [],
+  "signatures": []
+}

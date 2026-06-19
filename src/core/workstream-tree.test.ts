@@ -347,6 +347,24 @@ describe("WorkstreamTree — boundary: list()", () => {
     expect(records).toEqual([]);
   });
 
+  it("list() returns an empty array when registry file exists but is empty", async () => {
+    // WS-CORE-08 gap: covers the `if (!content) return []` branch in readRegistry.
+    // Create a registry file that exists but has zero content.
+    const registryPath = path.join(
+      tmpHome,
+      ".teo",
+      "worktrees",
+      "proj-empty-registry",
+      "registry.jsonl"
+    );
+    fs.mkdirSync(path.dirname(registryPath), { recursive: true });
+    fs.writeFileSync(registryPath, "", "utf8"); // empty file
+
+    const tree = makeTree("proj-empty-registry");
+    const records = await tree.list("proj-empty-registry");
+    expect(records).toEqual([]);
+  });
+
   it("list() returns all events for a project (created + closed)", async () => {
     const tree = makeTree("proj-list");
     await tree.allocate("ws-list1", "none");
@@ -480,6 +498,29 @@ describe.skipIf(!hasGit())("WorkstreamTree — git backend (integration)", () =>
     expect(fs.existsSync(worktreePath)).toBe(false);
   });
 
+  it("git backend: close() is a no-op when the worktree directory has already been removed", async () => {
+    // WS-CORE-08 gap: covers the `if (!fs.existsSync(worktreePath)) return;` branch in closeGit.
+    // Simulate a workstream that was allocated but the dir was deleted externally.
+    const handle = await gitTree.allocate("ws-git-dir-gone", "git");
+    const worktreePath = handle.cwd;
+    expect(fs.existsSync(worktreePath)).toBe(true);
+
+    // Remove the worktree directory directly, simulating an external deletion
+    fs.rmSync(worktreePath, { recursive: true, force: true });
+
+    // Also remove the git worktree reference so the subsequent close doesn't fail via git
+    // (git worktree remove would fail on a missing directory)
+    const { execSync } = await_require_execSync();
+    try {
+      execSync(`git worktree prune`, { cwd: gitProjectDir, stdio: "ignore" });
+    } catch {
+      // best-effort prune
+    }
+
+    // close() should not throw even though the directory is gone
+    await expect(gitTree.close("ws-git-dir-gone")).resolves.toBeUndefined();
+  });
+
   it("git backend: allocate() throws GIT_ERROR when git worktree add fails (branch already exists)", async () => {
     const { execSync } = await_require_execSync();
     // Pre-create the branch so git worktree add -b fails on branch already exists
@@ -539,6 +580,40 @@ describe("WorkstreamTree — git backend on non-git directory", () => {
     );
 
     fs.rmSync(nonGitDir, { recursive: true, force: true });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// MISUSE — list() rejects when registry contains corrupted JSON
+// WS-CORE-08: gap fill — covers the catch(reject) branch in list()
+// ---------------------------------------------------------------------------
+
+describe("WorkstreamTree — misuse: list() with corrupted registry", () => {
+  it("list() rejects when a registry line is not valid JSON", async () => {
+    const tree = makeTree("proj-corrupted-registry");
+
+    // Allocate so the registry file is created, then corrupt it
+    await tree.allocate("ws-corrupt-test", "none");
+    await tree.close("ws-corrupt-test");
+
+    const registryPath = path.join(
+      tmpHome,
+      ".teo",
+      "worktrees",
+      "proj-corrupted-registry",
+      "registry.jsonl"
+    );
+
+    // Append a corrupt (non-JSON) line to the registry
+    fs.appendFileSync(registryPath, "this is not valid json\n", "utf8");
+
+    // list() should reject because readRegistry throws on JSON.parse failure
+    const tree2 = new WorkstreamTree({
+      projectId: "proj-corrupted-registry",
+      projectDir: tmpProjectDir,
+      baseDir: tmpHome,
+    });
+    await expect(tree2.list("proj-corrupted-registry")).rejects.toThrow();
   });
 });
 

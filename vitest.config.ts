@@ -7,6 +7,10 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   test: {
+    // WS-CORE-09: Block all outbound network calls globally.
+    // The no-network setup file monkey-patches http/https/fetch so any live-model
+    // call throws immediately. Zero outbound HTTP across the full harness run.
+    setupFiles: ["./tests/acceptance/support/no-network.ts"],
     coverage: {
       provider: "v8",
       include: ["src/**/*.ts"],
@@ -16,6 +20,22 @@ export default defineConfig({
       // not drag down or be forced to 100%.
       thresholds: {
         "src/core/plan.ts": {
+          lines: 100,
+          functions: 100,
+          branches: 100,
+          statements: 100,
+        },
+        // WS-CORE-02: validate.ts is critical-path — all cross-task checks.
+        // Gap found during WS-CORE-09 integration: threshold was missing despite
+        // full coverage existing. Added per WS-CORE-08 fold-in mandate.
+        "src/core/validate.ts": {
+          lines: 100,
+          functions: 100,
+          branches: 100,
+          statements: 100,
+        },
+        // WS-CORE-07: workstream-tree.ts is critical-path — isolation backend.
+        "src/core/workstream-tree.ts": {
           lines: 100,
           functions: 100,
           branches: 100,

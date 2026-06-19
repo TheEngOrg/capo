@@ -1,0 +1,169 @@
+{
+  "scenarioId": "demo-12-worktree-none",
+  "planId": "demo-12-worktree-none",
+  "overallStatus": "PASS",
+  "noneBackendIsolation": {
+    "lockfileInTempDir": true,
+    "lockfileInRealTeo": false,
+    "lockfileInProjectDir": false,
+    "registryInTempDir": true
+  },
+  "events": [
+    {
+      "seq": 1,
+      "session_id": "demo-12-worktree-none",
+      "workflow_id": "demo-12-worktree-none",
+      "task_id": null,
+      "turn_id": null,
+      "actor_id": "SYSTEM",
+      "actor_type": "SYSTEM",
+      "phase": "PLAN",
+      "verdict": null,
+      "detail": {
+        "plan_id": "demo-12-worktree-none",
+        "project_id": "golden-harness",
+        "task_count": 2
+      },
+      "event_id": "<uuid>",
+      "ts": "<timestamp>"
+    },
+    {
+      "seq": 2,
+      "session_id": "demo-12-worktree-none",
+      "workflow_id": "demo-12-worktree-none",
+      "task_id": "ws-task-a",
+      "turn_id": null,
+      "actor_id": "run-ws-task-a",
+      "actor_type": "SCRIPT",
+      "phase": "EXECUTE",
+      "verdict": "PASS",
+      "detail": {
+        "task_type": "SCRIPT",
+        "gate_verdict": "PASS"
+      },
+      "event_id": "<uuid>",
+      "ts": "<timestamp>"
+    },
+    {
+      "seq": 3,
+      "session_id": "demo-12-worktree-none",
+      "workflow_id": "demo-12-worktree-none",
+      "task_id": "ws-task-a",
+      "turn_id": null,
+      "actor_id": "SYSTEM",
+      "actor_type": "SYSTEM",
+      "phase": "GATE",
+      "verdict": "PASS",
+      "detail": {
+        "gate_verdict": "PASS"
+      },
+      "event_id": "<uuid>",
+      "ts": "<timestamp>"
+    },
+    {
+      "seq": 4,
+      "session_id": "demo-12-worktree-none",
+      "workflow_id": "demo-12-worktree-none",
+      "task_id": "ws-task-b",
+      "turn_id": null,
+      "actor_id": "run-ws-task-b",
+      "actor_type": "SCRIPT",
+      "phase": "EXECUTE",
+      "verdict": "PASS",
+      "detail": {
+        "task_type": "SCRIPT",
+        "gate_verdict": "PASS"
+      },
+      "event_id": "<uuid>",
+      "ts": "<timestamp>"
+    },
+    {
+      "seq": 5,
+      "session_id": "demo-12-worktree-none",
+      "workflow_id": "demo-12-worktree-none",
+      "task_id": "ws-task-b",
+      "turn_id": null,
+      "actor_id": "SYSTEM",
+      "actor_type": "SYSTEM",
+      "phase": "GATE",
+      "verdict": "PASS",
+      "detail": {
+        "gate_verdict": "PASS"
+      },
+      "event_id": "<uuid>",
+      "ts": "<timestamp>"
+    },
+    {
+      "seq": 6,
+      "session_id": "demo-12-worktree-none",
+      "workflow_id": "demo-12-worktree-none",
+      "task_id": "ws-task-a",
+      "turn_id": null,
+      "actor_id": "SYSTEM",
+      "actor_type": "SYSTEM",
+      "phase": "SIGN",
+      "verdict": "PASS",
+      "detail": {
+        "signed": true,
+        "verified": true,
+        "sig_len": 64
+      },
+      "event_id": "<uuid>",
+      "ts": "<timestamp>"
+    },
+    {
+      "seq": 7,
+      "session_id": "demo-12-worktree-none",
+      "workflow_id": "demo-12-worktree-none",
+      "task_id": "ws-task-b",
+      "turn_id": null,
+      "actor_id": "SYSTEM",
+      "actor_type": "SYSTEM",
+      "phase": "SIGN",
+      "verdict": "PASS",
+      "detail": {
+        "signed": true,
+        "verified": true,
+        "sig_len": 64
+      },
+      "event_id": "<uuid>",
+      "ts": "<timestamp>"
+    },
+    {
+      "seq": 8,
+      "session_id": "demo-12-worktree-none",
+      "workflow_id": "demo-12-worktree-none",
+      "task_id": null,
+      "turn_id": null,
+      "actor_id": "SYSTEM",
+      "actor_type": "SYSTEM",
+      "phase": "CLOSE",
+      "verdict": null,
+      "detail": {
+        "task_count": 2,
+        "pass": 2,
+        "fail": 0,
+        "skipped": 0,
+        "tokens": 0,
+        "cost_usd": 0
+      },
+      "event_id": "<uuid>",
+      "ts": "<timestamp>"
+    }
+  ],
+  "signatures": [
+    {
+      "seq": 3,
+      "task_id": "ws-task-a",
+      "signatureFormat": "<hmac-sha256-hex-64>",
+      "verified": true
+    },
+    {
+      "seq": 5,
+      "task_id": "ws-task-b",
+      "signatureFormat": "<hmac-sha256-hex-64>",
+      "verified": true
+    }
+  ],
+  "validationWarnings": []
+}

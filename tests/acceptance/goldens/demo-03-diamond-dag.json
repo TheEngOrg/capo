@@ -1,0 +1,277 @@
+{
+  "scenarioId": "demo-03-diamond-dag",
+  "planId": "demo-03-diamond-dag",
+  "overallStatus": "PASS",
+  "events": [
+    {
+      "seq": 1,
+      "session_id": "demo-03-diamond-dag",
+      "workflow_id": "demo-03-diamond-dag",
+      "task_id": null,
+      "turn_id": null,
+      "actor_id": "SYSTEM",
+      "actor_type": "SYSTEM",
+      "phase": "PLAN",
+      "verdict": null,
+      "detail": {
+        "plan_id": "demo-03-diamond-dag",
+        "project_id": "golden-harness",
+        "task_count": 4
+      },
+      "event_id": "<uuid>",
+      "ts": "<timestamp>"
+    },
+    {
+      "seq": 2,
+      "session_id": "demo-03-diamond-dag",
+      "workflow_id": "demo-03-diamond-dag",
+      "task_id": "a",
+      "turn_id": null,
+      "actor_id": "run-a",
+      "actor_type": "SCRIPT",
+      "phase": "EXECUTE",
+      "verdict": "PASS",
+      "detail": {
+        "task_type": "SCRIPT",
+        "gate_verdict": "PASS"
+      },
+      "event_id": "<uuid>",
+      "ts": "<timestamp>"
+    },
+    {
+      "seq": 3,
+      "session_id": "demo-03-diamond-dag",
+      "workflow_id": "demo-03-diamond-dag",
+      "task_id": "a",
+      "turn_id": null,
+      "actor_id": "SYSTEM",
+      "actor_type": "SYSTEM",
+      "phase": "GATE",
+      "verdict": "PASS",
+      "detail": {
+        "gate_verdict": "PASS"
+      },
+      "event_id": "<uuid>",
+      "ts": "<timestamp>"
+    },
+    {
+      "seq": 4,
+      "session_id": "demo-03-diamond-dag",
+      "workflow_id": "demo-03-diamond-dag",
+      "task_id": "b",
+      "turn_id": null,
+      "actor_id": "run-b",
+      "actor_type": "SCRIPT",
+      "phase": "EXECUTE",
+      "verdict": "PASS",
+      "detail": {
+        "task_type": "SCRIPT",
+        "gate_verdict": "PASS"
+      },
+      "event_id": "<uuid>",
+      "ts": "<timestamp>"
+    },
+    {
+      "seq": 5,
+      "session_id": "demo-03-diamond-dag",
+      "workflow_id": "demo-03-diamond-dag",
+      "task_id": "b",
+      "turn_id": null,
+      "actor_id": "SYSTEM",
+      "actor_type": "SYSTEM",
+      "phase": "GATE",
+      "verdict": "PASS",
+      "detail": {
+        "gate_verdict": "PASS"
+      },
+      "event_id": "<uuid>",
+      "ts": "<timestamp>"
+    },
+    {
+      "seq": 6,
+      "session_id": "demo-03-diamond-dag",
+      "workflow_id": "demo-03-diamond-dag",
+      "task_id": "c",
+      "turn_id": null,
+      "actor_id": "run-c",
+      "actor_type": "SCRIPT",
+      "phase": "EXECUTE",
+      "verdict": "PASS",
+      "detail": {
+        "task_type": "SCRIPT",
+        "gate_verdict": "PASS"
+      },
+      "event_id": "<uuid>",
+      "ts": "<timestamp>"
+    },
+    {
+      "seq": 7,
+      "session_id": "demo-03-diamond-dag",
+      "workflow_id": "demo-03-diamond-dag",
+      "task_id": "c",
+      "turn_id": null,
+      "actor_id": "SYSTEM",
+      "actor_type": "SYSTEM",
+      "phase": "GATE",
+      "verdict": "PASS",
+      "detail": {
+        "gate_verdict": "PASS"
+      },
+      "event_id": "<uuid>",
+      "ts": "<timestamp>"
+    },
+    {
+      "seq": 8,
+      "session_id": "demo-03-diamond-dag",
+      "workflow_id": "demo-03-diamond-dag",
+      "task_id": "d",
+      "turn_id": null,
+      "actor_id": "run-d",
+      "actor_type": "SCRIPT",
+      "phase": "EXECUTE",
+      "verdict": "PASS",
+      "detail": {
+        "task_type": "SCRIPT",
+        "gate_verdict": "PASS"
+      },
+      "event_id": "<uuid>",
+      "ts": "<timestamp>"
+    },
+    {
+      "seq": 9,
+      "session_id": "demo-03-diamond-dag",
+      "workflow_id": "demo-03-diamond-dag",
+      "task_id": "d",
+      "turn_id": null,
+      "actor_id": "SYSTEM",
+      "actor_type": "SYSTEM",
+      "phase": "GATE",
+      "verdict": "PASS",
+      "detail": {
+        "gate_verdict": "PASS"
+      },
+      "event_id": "<uuid>",
+      "ts": "<timestamp>"
+    },
+    {
+      "seq": 10,
+      "session_id": "demo-03-diamond-dag",
+      "workflow_id": "demo-03-diamond-dag",
+      "task_id": "a",
+      "turn_id": null,
+      "actor_id": "SYSTEM",
+      "actor_type": "SYSTEM",
+      "phase": "SIGN",
+      "verdict": "PASS",
+      "detail": {
+        "signed": true,
+        "verified": true,
+        "sig_len": 64
+      },
+      "event_id": "<uuid>",
+      "ts": "<timestamp>"
+    },
+    {
+      "seq": 11,
+      "session_id": "demo-03-diamond-dag",
+      "workflow_id": "demo-03-diamond-dag",
+      "task_id": "b",
+      "turn_id": null,
+      "actor_id": "SYSTEM",
+      "actor_type": "SYSTEM",
+      "phase": "SIGN",
+      "verdict": "PASS",
+      "detail": {
+        "signed": true,
+        "verified": true,
+        "sig_len": 64
+      },
+      "event_id": "<uuid>",
+      "ts": "<timestamp>"
+    },
+    {
+      "seq": 12,
+      "session_id": "demo-03-diamond-dag",
+      "workflow_id": "demo-03-diamond-dag",
+      "task_id": "c",
+      "turn_id": null,
+      "actor_id": "SYSTEM",
+      "actor_type": "SYSTEM",
+      "phase": "SIGN",
+      "verdict": "PASS",
+      "detail": {
+        "signed": true,
+        "verified": true,
+        "sig_len": 64
+      },
+      "event_id": "<uuid>",
+      "ts": "<timestamp>"
+    },
+    {
+      "seq": 13,
+      "session_id": "demo-03-diamond-dag",
+      "workflow_id": "demo-03-diamond-dag",
+      "task_id": "d",
+      "turn_id": null,
+      "actor_id": "SYSTEM",
+      "actor_type": "SYSTEM",
+      "phase": "SIGN",
+      "verdict": "PASS",
+      "detail": {
+        "signed": true,
+        "verified": true,
+        "sig_len": 64
+      },
+      "event_id": "<uuid>",
+      "ts": "<timestamp>"
+    },
+    {
+      "seq": 14,
+      "session_id": "demo-03-diamond-dag",
+      "workflow_id": "demo-03-diamond-dag",
+      "task_id": null,
+      "turn_id": null,
+      "actor_id": "SYSTEM",
+      "actor_type": "SYSTEM",
+      "phase": "CLOSE",
+      "verdict": null,
+      "detail": {
+        "task_count": 4,
+        "pass": 4,
+        "fail": 0,
+        "skipped": 0,
+        "tokens": 0,
+        "cost_usd": 0
+      },
+      "event_id": "<uuid>",
+      "ts": "<timestamp>"
+    }
+  ],
+  "signatures": [
+    {
+      "seq": 3,
+      "task_id": "a",
+      "signatureFormat": "<hmac-sha256-hex-64>",
+      "verified": true
+    },
+    {
+      "seq": 5,
+      "task_id": "b",
+      "signatureFormat": "<hmac-sha256-hex-64>",
+      "verified": true
+    },
+    {
+      "seq": 7,
+      "task_id": "c",
+      "signatureFormat": "<hmac-sha256-hex-64>",
+      "verified": true
+    },
+    {
+      "seq": 9,
+      "task_id": "d",
+      "signatureFormat": "<hmac-sha256-hex-64>",
+      "verified": true
+    }
+  ],
+  "validationWarnings": []
+}

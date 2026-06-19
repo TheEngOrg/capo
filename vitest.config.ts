@@ -50,6 +50,15 @@ export default defineConfig({
           branches: 100,
           statements: 100,
         },
+        // WS-CORE-06: sign.ts is critical-path — HMAC-SHA-256 signing + keyring.
+        // sign.ts IS the tamper-evidence layer — 100% branch coverage is mandatory.
+        // Production-only branch (homedir fallback) is guarded with /* c8 ignore next */.
+        "src/core/sign.ts": {
+          lines: 100,
+          functions: 100,
+          branches: 100,
+          statements: 100,
+        },
       },
     },
   },

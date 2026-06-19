@@ -188,9 +188,10 @@ export class PlanBuilder {
     // Defensive fallback — taskCandidate is built from validated, typed fields above,
     // so safeParse cannot fail in practice. Guards against future refactoring regressions.
     const parsed = TEOTaskSchema.safeParse(taskCandidate);
-    /* c8 ignore next */
-    if (!parsed.success)
+    /* c8 ignore next 3 */
+    if (!parsed.success) {
       return { accepted: false, reason: `Task shape invalid: ${parsed.error.message}` };
+    }
 
     // Accept
     this.acceptedTasks.push(parsed.data);

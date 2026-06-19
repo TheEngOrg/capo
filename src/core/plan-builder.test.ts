@@ -6,14 +6,15 @@ import { PlanSchema } from "./plan.js";
 import { validatePlan } from "./validate.js";
 
 // =============================================================================
-// plan-builder.test.ts — FAILING specs for src/core/plan-builder.ts (WS-P1-03a)
+// plan-builder.test.ts — acceptance spec for src/core/plan-builder.ts (WS-P1-03a)
 //
-// These tests are RED by design. software-engineer implements plan-builder.ts to
-// make them green. DO NOT add implementation here.
+// Covers the implemented PlanBuilder: incremental plan construction with
+// immediate per-task rejection (Sage self-corrects mid-build) and full-plan
+// validation at finalize.
 //
 // Ordering: misuse → boundary → golden path (ADR-064 critical-path policy)
 //
-// --- PLAN BUILDER API CONTRACT (what dev must export from plan-builder.ts) ----
+// --- PLAN BUILDER API CONTRACT (exported by plan-builder.ts) ------------------
 //
 //   class PlanBuilder {
 //     constructor(opts?: { agentsDir?: string })
@@ -81,13 +82,8 @@ import { validatePlan } from "./validate.js";
 //
 // =============================================================================
 
-// These imports WILL FAIL until software-engineer creates src/core/plan-builder.ts.
-// That is the intended failing state for this gate.
-//
 // AddTaskInput is used as an explicit cast in tests (e.g. `} as AddTaskInput`)
 // to express intentionally-invalid inputs to the contract.
-// The runtime import of PlanBuilder causes vitest to fail at module load time
-// when plan-builder.ts doesn't exist — the correct "red" state.
 import type { AddTaskInput } from "./plan-builder.js";
 import { PlanBuilder } from "./plan-builder.js";
 

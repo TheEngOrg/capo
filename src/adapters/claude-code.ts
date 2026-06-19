@@ -29,6 +29,7 @@ import type { StepResult } from "../core/runner.js";
 import type { TEOAdapter, PlanningContext, AgentContext } from "./types.js";
 import { loadAgentDefinition } from "../agents/load.js";
 import type { AgentDefinition } from "../agents/load.js";
+import { parseVerdict } from "./parse-verdict.js";
 
 // ---------------------------------------------------------------------------
 // Public interface types — exported so callers and tests can import them
@@ -430,24 +431,35 @@ export class ClaudeCodeAdapter implements TEOAdapter {
       };
     }
 
-    // 5. Parse verdict from output using case-sensitive, line-anchored regex
-    //    Collect ALL matches — conflict detection requires counting both PASS and FAIL.
+    // 5. Parse verdict — use parseVerdict utility (extracted from inline regex, WS-P1-05 refactor)
+    const verdict = parseVerdict(raw.output);
+
+    if (raw.errored === true && verdict === null) {
+      return {
+        taskId: task.id,
+        status: "FAILED",
+        detail: "BLOCKED: spawner errored and no verdict",
+      };
+    }
+
+    if (verdict === "PASS") {
+      return { taskId: task.id, status: "PASS" };
+    }
+    if (verdict === "FAIL") {
+      return { taskId: task.id, status: "FAILED" };
+    }
+
+    // verdict === null here: either no verdict or conflict.
+    // Distinguish with a second pass for the BLOCKED detail message.
     const verdictRe = /^VERDICT:\s+(PASS|FAIL)\s*$/gm;
     const matches: string[] = [];
     let m: RegExpExecArray | null;
     while ((m = verdictRe.exec(raw.output)) !== null) {
       matches.push(m[1] as string);
     }
-
     const passCount = matches.filter((v) => v === "PASS").length;
     const failCount = matches.filter((v) => v === "FAIL").length;
 
-    if (passCount > 0 && failCount === 0) {
-      return { taskId: task.id, status: "PASS" };
-    }
-    if (failCount > 0 && passCount === 0) {
-      return { taskId: task.id, status: "FAILED" };
-    }
     if (passCount > 0 && failCount > 0) {
       return {
         taskId: task.id,
@@ -455,7 +467,6 @@ export class ClaudeCodeAdapter implements TEOAdapter {
         detail: "BLOCKED: conflicting verdicts in output",
       };
     }
-    // Neither PASS nor FAIL found
     return {
       taskId: task.id,
       status: "FAILED",

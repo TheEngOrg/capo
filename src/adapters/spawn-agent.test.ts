@@ -2,7 +2,7 @@
 // spawn-agent.test.ts — Passing specs for spawnAgent (WS-P1-05, LLM call site #2)
 //
 // This file is the authoritative specification for the AgentSpawner seam and
-// ClaudeCodeAdapter.spawnAgent(). All 31 tests PASS at gate-2 (implementation complete).
+// ClaudeCodeAdapter.spawnAgent(). All 35 tests PASS at gate-2 (implementation complete).
 // Implementation lives in src/adapters/claude-code.ts.
 //
 // ============================================================================
@@ -1136,6 +1136,145 @@ describe("ClaudeCodeAdapter.spawnAgent — golden: model-free", () => {
 
       // If fetch() were called, the no-network guard in vitest.config.ts would throw.
       await expect(adapter.spawnAgent(task, VALID_AGENT_CONTEXT)).resolves.toBeDefined();
+    } finally {
+      cleanupTempRoster(rosterDir);
+    }
+  });
+});
+
+// =============================================================================
+// BOUNDARY TESTS — errored: true flag behavior (gate-1, pre-implementation)
+//
+// AgentSpawnRaw.errored is an optional flag the spawner sets on soft errors
+// (subprocess exited non-zero but still produced output).
+//
+// Rules:
+//   1. errored: true + no parseable verdict  → BLOCKED (infrastructure error)
+//      detail must start with "BLOCKED:" AND mention "spawner errored" or "errored"
+//   2. errored: true + VERDICT: PASS output  → status "PASS" (verdict wins)
+//   3. errored: true + VERDICT: FAIL output  → status "FAILED", detail does NOT
+//      start with "BLOCKED:" (clean agent failure, not infrastructure error)
+//   4. errored: false + no verdict           → status "FAILED", detail matches
+//      "BLOCKED: no verdict in output" (confirms the two paths are distinguishable)
+// =============================================================================
+
+describe("ClaudeCodeAdapter.spawnAgent — boundary: errored flag", () => {
+  // -------------------------------------------------------------------------
+  // errored: true, no parseable verdict → BLOCKED (infrastructure error path).
+  // The detail must signal "spawner errored", distinguishable from a plain
+  // "no verdict" that occurs without errored.
+  // -------------------------------------------------------------------------
+  it("returns BLOCKED with errored detail when errored: true and output has no parseable verdict", async () => {
+    const rosterDir = makeTempRoster([{ id: "test-agent" }]);
+    try {
+      const { spawner } = makeMockSpawner({
+        output: "Subprocess exited with code 1. No verdict produced.",
+        errored: true,
+      });
+      const adapter = new ClaudeCodeAdapter({
+        runner: NO_OP_RUNNER,
+        spawner,
+        agentsDir: rosterDir,
+      });
+
+      const task = makeAgentTask({ id: "errored-no-verdict-task" });
+      const result = await adapter.spawnAgent(task, VALID_AGENT_CONTEXT);
+
+      expect(result.taskId).toBe("errored-no-verdict-task");
+      expect(result.status).toBe("FAILED");
+      expect(result.detail).toMatch(/^BLOCKED:/);
+      // Must distinguish this as the "spawner errored" path, not a plain no-verdict
+      expect(result.detail).toMatch(/spawner errored|errored/i);
+    } finally {
+      cleanupTempRoster(rosterDir);
+    }
+  });
+
+  // -------------------------------------------------------------------------
+  // errored: true, VERDICT: PASS in output → verdict wins.
+  // Even if the spawner set errored, a parseable PASS verdict is authoritative.
+  // -------------------------------------------------------------------------
+  it("returns PASS when errored: true but output contains VERDICT: PASS (verdict wins)", async () => {
+    const rosterDir = makeTempRoster([{ id: "test-agent" }]);
+    try {
+      const { spawner } = makeMockSpawner({
+        output: "Some stderr noise\nVERDICT: PASS\n",
+        errored: true,
+      });
+      const adapter = new ClaudeCodeAdapter({
+        runner: NO_OP_RUNNER,
+        spawner,
+        agentsDir: rosterDir,
+      });
+
+      const task = makeAgentTask({ id: "errored-with-pass-task" });
+      const result = await adapter.spawnAgent(task, VALID_AGENT_CONTEXT);
+
+      expect(result.taskId).toBe("errored-with-pass-task");
+      expect(result.status).toBe("PASS");
+    } finally {
+      cleanupTempRoster(rosterDir);
+    }
+  });
+
+  // -------------------------------------------------------------------------
+  // errored: true, VERDICT: FAIL in output → clean FAILED (not BLOCKED).
+  // The agent reported failure via verdict; this is a clean failure signal,
+  // not an infrastructure error. detail must NOT start with "BLOCKED:".
+  // -------------------------------------------------------------------------
+  it("returns FAILED without BLOCKED: prefix when errored: true and output has VERDICT: FAIL", async () => {
+    const rosterDir = makeTempRoster([{ id: "test-agent" }]);
+    try {
+      const { spawner } = makeMockSpawner({
+        output: "Tests failed.\nVERDICT: FAIL\n",
+        errored: true,
+      });
+      const adapter = new ClaudeCodeAdapter({
+        runner: NO_OP_RUNNER,
+        spawner,
+        agentsDir: rosterDir,
+      });
+
+      const task = makeAgentTask({ id: "errored-with-fail-task" });
+      const result = await adapter.spawnAgent(task, VALID_AGENT_CONTEXT);
+
+      expect(result.taskId).toBe("errored-with-fail-task");
+      expect(result.status).toBe("FAILED");
+      // Clean agent failure — must NOT be presented as an infrastructure BLOCKED error
+      if (result.detail !== undefined) {
+        expect(result.detail).not.toMatch(/^BLOCKED:/);
+      }
+    } finally {
+      cleanupTempRoster(rosterDir);
+    }
+  });
+
+  // -------------------------------------------------------------------------
+  // errored: false (explicit), no verdict → BLOCKED: no verdict in output.
+  // This is the non-errored no-verdict path. The detail must match the plain
+  // "no verdict" message, NOT the "spawner errored" message.
+  // This confirms the two paths (errored vs not-errored) produce distinguishable output.
+  // -------------------------------------------------------------------------
+  it("returns BLOCKED with no-verdict detail (not errored path) when errored: false and no verdict", async () => {
+    const rosterDir = makeTempRoster([{ id: "test-agent" }]);
+    try {
+      const { spawner } = makeMockSpawner({
+        output: "I ran the tests and everything looks good.",
+        errored: false,
+      });
+      const adapter = new ClaudeCodeAdapter({
+        runner: NO_OP_RUNNER,
+        spawner,
+        agentsDir: rosterDir,
+      });
+
+      const task = makeAgentTask({ id: "not-errored-no-verdict-task" });
+      const result = await adapter.spawnAgent(task, VALID_AGENT_CONTEXT);
+
+      expect(result.taskId).toBe("not-errored-no-verdict-task");
+      expect(result.status).toBe("FAILED");
+      // Must be the plain no-verdict BLOCKED path, not the errored path
+      expect(result.detail).toMatch(/BLOCKED: no verdict in output/);
     } finally {
       cleanupTempRoster(rosterDir);
     }

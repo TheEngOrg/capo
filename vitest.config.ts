@@ -88,6 +88,15 @@ export default defineConfig({
           branches: 100,
           statements: 100,
         },
+        // WS-P1-06: load.ts is critical-path — agent roster loader with path-traversal
+        // guard, frontmatter parser, Zod validation, and agent_id mismatch detection.
+        // 100% branch coverage is mandatory.
+        "src/agents/load.ts": {
+          lines: 100,
+          functions: 100,
+          branches: 100,
+          statements: 100,
+        },
       },
     },
   },

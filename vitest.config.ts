@@ -79,6 +79,15 @@ export default defineConfig({
           branches: 100,
           statements: 100,
         },
+        // WS-P1-02: revocation.ts is critical-path — ed25519 bootstrap revocation check.
+        // All fail-safe branches (missing sig, wrong length, fetch failure, malformed list,
+        // revoked key, bad sig) must be covered. 100% branch coverage is mandatory.
+        "src/bootstrap/revocation.ts": {
+          lines: 100,
+          functions: 100,
+          branches: 100,
+          statements: 100,
+        },
       },
     },
   },

@@ -1,20 +1,23 @@
 // =============================================================================
-// claude-code.test.ts — Contract spec for ClaudeCodeAdapter (WS-P1-03c)
+// claude-code.test.ts — Contract spec for ClaudeCodeAdapter sagePlan (WS-P1-03c)
 //
-// This file is the authoritative specification for ClaudeCodeAdapter — the
-// LLM-backed implementation of TEOAdapter that exposes PlanBuilder operations
-// as tools to a Sage agent, collects the resulting tool calls, and resolves
-// with a validated Plan. All 19 tests pass at gate-2 (implementation complete).
+// This file covers ClaudeCodeAdapter.sagePlan() — the LLM-backed plan generation
+// path that exposes PlanBuilder operations as tools to a Sage agent and resolves
+// with a validated Plan. 18 of 19 tests pass; 1 stale deferral test (see below)
+// needs staff-engineer update to reflect WS-P1-05 spawnAgent implementation.
+//
+// For spawnAgent() contract, see spawn-agent.test.ts (WS-P1-05).
 //
 // ============================================================================
 // CONTRACT: ClaudeCodeAdapter
 // ============================================================================
 //
-// CONSTRUCTION
+// CONSTRUCTION (updated WS-P1-05: spawner is now REQUIRED)
 //   new ClaudeCodeAdapter(opts: ClaudeCodeAdapterOptions)
 //
 //   interface ClaudeCodeAdapterOptions {
 //     runner: AgentRunner;          // REQUIRED — the injectable LLM-spawn shim
+//     spawner: AgentSpawner;        // REQUIRED (WS-P1-05) — injectable agent spawner
 //     agentsDir?: string;           // optional — forwarded to PlanBuilder (for test isolation)
 //     maxRounds?: number;           // optional — cap on tool-call rounds; default 20
 //   }
@@ -91,10 +94,11 @@
 //   the adapter THROWS with a message containing "maxRounds" or "round" and
 //   the last error/reason state.
 //
-// DEFERRED METHOD
-//   spawnAgent() THROWS: Error("spawnAgent: deferred to WS-P1-05")
-//   This is a VISIBLE deferral, not a silent stub. The exact string
-//   "deferred to WS-P1-05" must appear in the thrown error message.
+// SUPERSEDED (WS-P1-05): spawnAgent() is now fully implemented.
+//   The "deferred to WS-P1-05" deferral test below documents OLD behavior
+//   (WS-P1-03c gate). Staff-engineer must update that test: add a spawner
+//   to the constructor and change the assertion to match new behavior.
+//   See spawn-agent.test.ts for the authoritative spawnAgent contract.
 //
 // SECURITY PROPERTY (prompt injection)
 //   Only the builder-validated tool calls can mutate the plan.

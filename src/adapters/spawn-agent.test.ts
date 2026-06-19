@@ -1,9 +1,9 @@
 // =============================================================================
-// spawn-agent.test.ts — Failing specs for spawnAgent (WS-P1-05, LLM call site #2)
+// spawn-agent.test.ts — Passing specs for spawnAgent (WS-P1-05, LLM call site #2)
 //
 // This file is the authoritative specification for the AgentSpawner seam and
-// ClaudeCodeAdapter.spawnAgent(). All tests FAIL at gate-1 (implementation absent).
-// software-engineer implements to make them green; comments updated post-impl.
+// ClaudeCodeAdapter.spawnAgent(). All 31 tests PASS at gate-2 (implementation complete).
+// Implementation lives in src/adapters/claude-code.ts.
 //
 // ============================================================================
 // CONTRACT: AgentSpawner + ClaudeCodeAdapter.spawnAgent()
@@ -117,17 +117,16 @@ import type { TEOTask } from "../core/plan.js";
 import type { AgentContext } from "./types.js";
 
 // ---------------------------------------------------------------------------
-// Module under test — implemented at gate-2.
+// Module under test — implementation complete (gate-2 done).
 //
-// The implementer adds to src/adapters/claude-code.ts (or a co-located module):
+// src/adapters/claude-code.ts exports:
 //   - AgentSpawnRequest interface
 //   - AgentSpawnRaw interface
 //   - AgentSpawner interface
 //   - spawner field on ClaudeCodeAdapterOptions (required)
-//   - spawnAgent() method on ClaudeCodeAdapter (replaces the deferral stub)
+//   - spawnAgent() method on ClaudeCodeAdapter (real implementation, WS-P1-05)
 //
 // These imports are the CONTRACT. If the shape changes, tests fail fast.
-// TypeScript compilation errors here = gate-1 red for correct reasons.
 // ---------------------------------------------------------------------------
 import {
   ClaudeCodeAdapter,

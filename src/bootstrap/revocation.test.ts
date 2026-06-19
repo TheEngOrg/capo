@@ -1,19 +1,12 @@
 // =============================================================================
-// revocation.test.ts — failing specs for WS-P1-02: ed25519 bootstrap revocation
+// revocation.test.ts — acceptance spec for WS-P1-02: ed25519 bootstrap revocation
 //
-// STATUS: INTENTIONALLY FAILING — implementation does not exist yet.
-//
-// These tests define the checkRevocation() contract that dev must implement in
-// src/bootstrap/revocation.ts using @noble/ed25519 (not yet installed).
-//
-// WHY TESTS FAIL NOW:
-//   1. src/bootstrap/revocation.ts does not exist → import fails at runtime.
-//   2. @noble/ed25519 is not in node_modules → keygen calls fail.
-//   3. TypeScript typecheck will flag the missing module until dev creates it.
+// STATUS: PASSING — implementation lives in src/bootstrap/revocation.ts,
+// @noble/ed25519 is installed, all 41 tests green.
 //
 // ORDERING: misuse → boundary → golden path (adversarial-first policy).
 //
-// CONTRACT (enforced by these tests — dev implements to this shape):
+// CONTRACT (enforced by these tests):
 //
 //   checkRevocation(opts: CheckRevocationOptions): Promise<RevocationResult>
 //
@@ -94,13 +87,12 @@ export interface CheckRevocationOptions {
 
 // ---------------------------------------------------------------------------
 // Import the module under test.
-// This import WILL fail until dev creates src/bootstrap/revocation.ts.
-// TypeScript typecheck will flag the missing module — that is expected and
-// documented. Once dev creates the file exporting checkRevocation with the
-// above types, this import resolves and the tests will exercise the real impl.
+// The .catch() fallback sets checkRevocation to undefined if the module fails
+// to load; requireImpl() guards every test and surfaces a clear error in that
+// case. Under normal (post-implementation) conditions the import succeeds and
+// moduleLoaded is true for all 41 tests.
 // ---------------------------------------------------------------------------
 
-// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
 const { checkRevocation } = await import("./revocation.js").catch(() => ({
   checkRevocation: undefined,
 }));
@@ -170,8 +162,9 @@ function malformedFetcher(
 }
 
 // ---------------------------------------------------------------------------
-// Guard: abort the entire suite gracefully if the module is not yet created.
-// The tests "fail" with a clear message instead of crashing with import errors.
+// Guard: abort tests gracefully if the module ever fails to load (e.g. during
+// future refactors that temporarily break the export). Surfaces a clear error
+// message rather than a confusing TypeError on the cast below.
 // ---------------------------------------------------------------------------
 
 const moduleLoaded = typeof checkRevocation === "function";

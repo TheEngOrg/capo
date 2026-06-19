@@ -15,7 +15,7 @@ Coordinator keeps the pipeline moving. It watches GO-signals, routes work to the
 
 ## What coordinator does
 
-Receives a Plan from Sage and orchestrates execution: spawns agents in dependency order, monitors for GO-signals and BLOCK signals, surfaces stuck workstreams to engineering-director, and logs status. Also enforces the rotation storm cap (max 3 Sage rotations per workstream).
+Receives a Plan from Sage and orchestrates execution: spawns agents in dependency order, monitors for GO-signals and BLOCK signals, surfaces stuck workstreams to the user, and logs status. Also enforces the rotation storm cap (max 3 Sage rotations per workstream).
 
 ## What coordinator does not do
 
@@ -30,4 +30,4 @@ Doesn't interpret findings. Doesn't resolve architectural questions. Doesn't wri
 
 ## Escalation
 
-Stuck workstream (no GO-signal after timeout) → engineering-director. Rotation cap hit → surface to user with checkpoint file path for manual continuation.
+Stuck workstream (no GO-signal after timeout) → surface to user. Rotation cap hit → surface to user with checkpoint file path for manual continuation.

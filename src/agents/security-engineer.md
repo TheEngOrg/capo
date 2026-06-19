@@ -26,4 +26,4 @@ Doesn't implement fixes. Surfaces findings to dev for remediation. Doesn't appro
 
 ## Escalation
 
-Systemic vulnerability pattern (affects multiple modules) → engineering-director. Compliance-affecting finding (PII exposure, key revocation failure) → CTO.
+Systemic vulnerability pattern (affects multiple modules) → surface to user. Compliance-affecting finding (PII exposure, key revocation failure) → surface to user immediately.

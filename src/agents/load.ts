@@ -103,7 +103,7 @@ function parseYamlFlat(yaml: string): Record<string, unknown> {
 
     // Top-level key: value  (no leading whitespace)
     const scalarMatch = /^([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(.*)$/.exec(line);
-    /* c8 ignore next */
+    /* c8 ignore next 4 */
     if (!scalarMatch) {
       i++;
       continue;

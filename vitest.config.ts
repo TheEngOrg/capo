@@ -105,6 +105,16 @@ export default defineConfig({
           branches: 100,
           statements: 100,
         },
+        // WS-P1-03b: stub.ts is the model-free CI adapter — drives PlanBuilder and
+        // returns stub PASS results. The finalizePlan() failure branch is guarded with
+        // /* c8 ignore next */ (defensive path; the builder only fails if given invalid
+        // input that the stub never produces). 100% coverage on all instrumented lines.
+        "src/adapters/stub.ts": {
+          lines: 100,
+          functions: 100,
+          branches: 100,
+          statements: 100,
+        },
       },
     },
   },

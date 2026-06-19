@@ -293,44 +293,131 @@ describe("validatePlan — golden path", () => {
 });
 
 // ---------------------------------------------------------------------------
-// PQ-04 — ARCHITECTURAL plan type (TODO: pending Plan schema field)
+// WS-P1-01: PQ-04 — ARCHITECTURAL plan detection (INTENTIONALLY FAILING until
+// dev implements:
+//   1. directive: z.enum([...]).optional() on PlanSchema in plan.ts
+//   2. Real PQ-04 check in validate.ts that keys off plan.directive === "ARCHITECTURAL"
+//      AND checks that at least one task has agent_id "qa" or "staff-engineer"
 // ---------------------------------------------------------------------------
 
-describe("validatePlan — PQ-04: ARCHITECTURAL plan detection", () => {
-  // TODO: PQ-04 cannot be fully implemented yet.
-  //
-  // The Plan schema (plan.ts, WS-CORE-01) does not include a `directive` or
-  // `scope` field that would identify a plan as ARCHITECTURAL. Until the schema
-  // is extended, we cannot reliably detect ARCHITECTURAL plans without
-  // inventing a field that does not exist.
-  //
-  // Gap flagged for staff-engineer ratification:
-  //   - What field distinguishes ARCHITECTURAL plans from BUILD/FIX/etc.?
-  //   - Proposed: add `directive: z.enum(["ARCHITECTURAL","BUILD","FIX","REVIEW","PLAN"])` to PlanSchema.
-  //   - Conceptual taskless rule would live at: ~/.teo/taskless/rules/pq-04-architectural-scope.yaml
-  //
-  // The PQ-04 check in validate.ts is gated behind a defensive runtime check
-  // so it never false-positives on current plans. The defensive path IS
-  // reachable at runtime if extra fields are present — exercise it here.
-
-  it.todo(
-    "PQ-04: emits a warning when plan.directive === 'ARCHITECTURAL' (schema field not yet present)"
-  );
-
-  it("PQ-04 defensive path: emits PQ_04_ARCHITECTURAL_SCOPE warning when plan has extra `directive` field at runtime", () => {
-    // This exercises the defensive runtime guard in validate.ts that fires when
-    // the schema is extended and the `directive` field appears on the plan object.
-    // We use a type cast to pass the field without TypeScript errors — this
-    // mirrors real-world forward-compat scenarios.
-    const basePlan = minimalValidPlan([makeScriptTask("task-A"), makeScriptTask("task-B")]);
-    const planWithDirective = {
-      ...basePlan,
+describe("validatePlan — PQ-04: ARCHITECTURAL directive misuse (WS-P1-01)", () => {
+  it("PQ-04 misuse: directive:'ARCHITECTURAL' + sage task → BOTH PQ_03_SAGE_AS_EXECUTOR error AND PQ_04_ARCHITECTURAL_SCOPE warning", () => {
+    // Sage-as-executor is always an ERROR (PQ-03). When the plan is also
+    // ARCHITECTURAL, PQ-04 must fire as a WARNING on top of that — the
+    // two rules are independent and must both accumulate.
+    //
+    // FAILS NOW because:
+    //   - plan.directive is not a recognised schema field — validate.ts cannot
+    //     read it as a typed property, so PQ-04 never fires via the schema path.
+    //   - The existing defensive runtime guard DOES fire (it checks "directive" in plan),
+    //     but it does NOT check for the qa/staff-engineer gate condition, so the
+    //     new implementation must change the guard's semantics. See validate.ts TODO.
+    const plan = {
+      ...minimalValidPlan([makeAgentTask("sage-task", "sage")]),
       directive: "ARCHITECTURAL",
     } as unknown as Plan;
 
-    const result = validatePlan(planWithDirective);
-    expect(result.valid).toBe(true); // PQ-04 is a warning, not an error
+    const result = validatePlan(plan);
+
+    // PQ-03 must be an ERROR (plan is invalid)
+    expect(result.valid).toBe(false);
+    const pq03 = result.errors.find((e) => e.code === "PQ_03_SAGE_AS_EXECUTOR");
+    expect(pq03).toBeDefined();
+    expect(pq03?.message).toContain("sage");
+
+    // PQ-04 must ALSO be present as a WARNING (no qa/staff-engineer task)
     const pq04 = result.warnings.find((w) => w.code === "PQ_04_ARCHITECTURAL_SCOPE");
     expect(pq04).toBeDefined();
+  });
+});
+
+describe("validatePlan — PQ-04: ARCHITECTURAL directive boundary (WS-P1-01)", () => {
+  it("PQ-04 boundary: no directive field → PQ-04 warning must NOT fire", () => {
+    // A plain plan with no directive must never emit PQ_04_ARCHITECTURAL_SCOPE.
+    // This guards against regressions where the check fires unconditionally.
+    // PASSES NOW (existing defensive check requires "directive" in plan), but
+    // we assert it explicitly so dev cannot accidentally break this invariant.
+    const plan = minimalValidPlan([makeScriptTask("task-A"), makeScriptTask("task-B")]);
+    const result = validatePlan(plan);
+    expect(result.valid).toBe(true);
+    const pq04 = result.warnings.find((w) => w.code === "PQ_04_ARCHITECTURAL_SCOPE");
+    expect(pq04).toBeUndefined();
+  });
+
+  it("PQ-04 boundary: directive:'ARCHITECTURAL' WITH a qa task → NO PQ-04 warning", () => {
+    // The qa agent satisfies the review requirement — PQ-04 must not fire.
+    // FAILS NOW: the current defensive runtime guard fires unconditionally when
+    // directive === "ARCHITECTURAL", regardless of task composition.
+    const plan = {
+      ...minimalValidPlan([makeScriptTask("task-A"), makeAgentTask("qa-task", "qa", ["task-A"])]),
+      directive: "ARCHITECTURAL",
+    } as unknown as Plan;
+
+    const result = validatePlan(plan);
+    expect(result.valid).toBe(true);
+    const pq04 = result.warnings.find((w) => w.code === "PQ_04_ARCHITECTURAL_SCOPE");
+    expect(pq04).toBeUndefined();
+  });
+
+  it("PQ-04 boundary: directive:'ARCHITECTURAL' WITH a staff-engineer task → NO PQ-04 warning", () => {
+    // The staff-engineer agent satisfies the review requirement — PQ-04 must not fire.
+    // FAILS NOW: same reason as the qa-task boundary above.
+    const plan = {
+      ...minimalValidPlan([
+        makeScriptTask("task-A"),
+        makeAgentTask("review-task", "staff-engineer", ["task-A"]),
+      ]),
+      directive: "ARCHITECTURAL",
+    } as unknown as Plan;
+
+    const result = validatePlan(plan);
+    expect(result.valid).toBe(true);
+    const pq04 = result.warnings.find((w) => w.code === "PQ_04_ARCHITECTURAL_SCOPE");
+    expect(pq04).toBeUndefined();
+  });
+});
+
+describe("validatePlan — PQ-04: ARCHITECTURAL directive golden path (WS-P1-01)", () => {
+  it("PQ-04 golden: directive:'ARCHITECTURAL' with no qa/staff-engineer task → exactly one PQ_04_ARCHITECTURAL_SCOPE warning, valid:true", () => {
+    // This is the core PQ-04 contract:
+    //   - ARCHITECTURAL plan + no qa or staff-engineer executor = WARNING
+    //   - Warning is non-blocking — valid:true
+    //   - Exactly ONE warning with the exact code "PQ_04_ARCHITECTURAL_SCOPE"
+    //
+    // FAILS NOW: the current defensive runtime guard in validate.ts fires here
+    // (correct code, correct valid:true), BUT it does not enforce the
+    // qa/staff-engineer condition — so the boundary tests above also incorrectly
+    // pass through. Dev must rewrite the guard to check task composition.
+    const plan = {
+      ...minimalValidPlan([makeScriptTask("task-A"), makeAgentTask("eng-task", "eng", ["task-A"])]),
+      directive: "ARCHITECTURAL",
+    } as unknown as Plan;
+
+    const result = validatePlan(plan);
+
+    // Must be valid — PQ-04 is a warning, not an error
+    expect(result.valid).toBe(true);
+    expect(result.errors).toHaveLength(0);
+
+    // Exactly the right warning code — dev must use this exact string
+    const pq04Warnings = result.warnings.filter((w) => w.code === "PQ_04_ARCHITECTURAL_SCOPE");
+    expect(pq04Warnings).toHaveLength(1);
+    expect(pq04Warnings[0]?.code).toBe("PQ_04_ARCHITECTURAL_SCOPE");
+  });
+
+  it("PQ-04 golden: directive:'BUILD' → PQ-04 does NOT fire regardless of task composition", () => {
+    // PQ-04 is exclusive to ARCHITECTURAL — no other directive value triggers it.
+    // FAILS NOW for the same reason the directive round-trip tests fail:
+    // the field isn't typed on Plan, but the runtime guard only checks === "ARCHITECTURAL",
+    // so this case happens to pass currently. We assert it explicitly to lock the contract.
+    const plan = {
+      ...minimalValidPlan([makeScriptTask("task-A"), makeAgentTask("eng-task", "eng")]),
+      directive: "BUILD",
+    } as unknown as Plan;
+
+    const result = validatePlan(plan);
+    expect(result.valid).toBe(true);
+    const pq04 = result.warnings.find((w) => w.code === "PQ_04_ARCHITECTURAL_SCOPE");
+    expect(pq04).toBeUndefined();
   });
 });

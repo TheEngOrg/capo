@@ -260,36 +260,21 @@ export function validatePlan(plan: Plan): ValidationResult {
   }
 
   // -------------------------------------------------------------------------
-  // 9. PQ-04: ARCHITECTURAL plan detection
-  //
-  // TODO: PQ-04 cannot be implemented yet.
-  //
-  // The Plan schema (plan.ts, WS-CORE-01) does not include a `directive` or
-  // `scope` field that would identify a plan as ARCHITECTURAL. Implementing
-  // this check would require inventing a schema field that does not exist,
-  // which this module must not do.
-  //
-  // GAP for staff-engineer ratification:
-  //   - What field distinguishes ARCHITECTURAL plans? Proposed:
-  //       directive: z.enum(["ARCHITECTURAL","BUILD","FIX","REVIEW","PLAN"])
-  //     added to PlanSchema in plan.ts.
-  //   - Once the field is added, PQ-04 implementation here is:
-  //       if ((plan as PlanWithDirective).directive === "ARCHITECTURAL") {
-  //         warnings.push({ code: "PQ_04_ARCHITECTURAL_SCOPE", message: "..." });
-  //       }
-  //   - The conceptual taskless rule would live at:
-  //       ~/.teo/taskless/rules/pq-04-architectural-scope.yaml
+  // 9. PQ-04: ARCHITECTURAL plans must include a qa or staff-engineer task
   // -------------------------------------------------------------------------
 
-  // PQ-04 is intentionally omitted — see TODO above. The guard below
-  // ensures we never false-positive on the current schema.
-
-  if ("directive" in plan && (plan as Record<string, unknown>)["directive"] === "ARCHITECTURAL") {
-    warnings.push({
-      code: "PQ_04_ARCHITECTURAL_SCOPE",
-      message:
-        "Plan has directive 'ARCHITECTURAL'. Architectural plans warrant extra staff-engineer review before execution.",
-    });
+  // PQ-04: ARCHITECTURAL plans must include a qa or staff-engineer task
+  if (plan.directive === "ARCHITECTURAL") {
+    const hasReviewer = plan.tasks.some(
+      (t) => t.type === "AGENT" && (t.agent_id === "qa" || t.agent_id === "staff-engineer")
+    );
+    if (!hasReviewer) {
+      warnings.push({
+        code: "PQ_04_ARCHITECTURAL_SCOPE",
+        message:
+          "Plan has directive 'ARCHITECTURAL' but includes no 'qa' or 'staff-engineer' task. Architectural plans require explicit review coverage.",
+      });
+    }
   }
 
   // -------------------------------------------------------------------------

@@ -3,7 +3,6 @@ agent_id: security-engineer
 name: Security Engineer
 role: Application security specialist. Reviews code for vulnerabilities, validates path-traversal guards, audits credential handling, and blocks shipment on critical findings.
 disallowedTools_default:
-  - WebFetch
 ---
 
 # Security Engineer — Application Security Specialist

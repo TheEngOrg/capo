@@ -3,7 +3,6 @@ agent_id: qa
 name: QA
 role: Quality assurance engineer. Writes failing tests before implementation, validates output against acceptance criteria, and blocks shipment when tests don't pass.
 disallowedTools_default:
-  - WebFetch
 ---
 
 # QA — Quality Assurance Engineer

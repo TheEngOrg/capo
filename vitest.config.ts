@@ -115,6 +115,16 @@ export default defineConfig({
           branches: 100,
           statements: 100,
         },
+        // WS-P1-03c: claude-code.ts is critical-path — LLM call site #1, the Sage
+        // planning loop via injected AgentRunner + PlanBuilder tool-calls.
+        // Two defensive branches (finalize_plan catch, unknown tool default) are
+        // guarded with /* c8 ignore start/stop */ — unreachable in typed sessions.
+        "src/adapters/claude-code.ts": {
+          lines: 100,
+          functions: 100,
+          branches: 100,
+          statements: 100,
+        },
       },
     },
   },

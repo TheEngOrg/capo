@@ -4,8 +4,7 @@
 // This file is the authoritative specification for ClaudeCodeAdapter — the
 // LLM-backed implementation of TEOAdapter that exposes PlanBuilder operations
 // as tools to a Sage agent, collects the resulting tool calls, and resolves
-// with a validated Plan. Tests are FAILING on purpose at gate-1 because
-// src/adapters/claude-code.ts does not yet exist; they go green at gate-2.
+// with a validated Plan. All 19 tests pass at gate-2 (implementation complete).
 //
 // ============================================================================
 // CONTRACT: ClaudeCodeAdapter
@@ -117,10 +116,8 @@ import type { TEOTask } from "../core/plan.js";
 import type { TEOAdapter, PlanningContext, AgentContext } from "./types.js";
 
 // ---------------------------------------------------------------------------
-// Module under test (does not exist yet at gate-1 — import is intentionally
-// red until software-engineer implements it).
-//
-// The implementer MUST export from claude-code.ts:
+// Module under test — implemented at gate-2. src/adapters/claude-code.ts
+// exports:
 //   - ClaudeCodeAdapter (class, implements TEOAdapter)
 //   - ClaudeCodeAdapterOptions (interface or type alias)
 //   - AgentRunner (interface)

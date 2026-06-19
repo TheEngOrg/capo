@@ -70,13 +70,14 @@ export class StubAdapter implements TEOAdapter {
     });
 
     const result = builder.finalizePlan();
-    /* c8 ignore next 4 */
+    /* c8 ignore start */
     if (!result.ok) {
       const messages = result.errors.map((e) => e.message).join("; ");
       return Promise.reject(
         new Error(`StubAdapter.sagePlan: plan validation failed — ${messages}`)
       );
     }
+    /* c8 ignore stop */
 
     return Promise.resolve(result.plan);
   }

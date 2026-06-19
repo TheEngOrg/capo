@@ -1,20 +1,23 @@
 // =============================================================================
-// claude-code.test.ts — Contract spec for ClaudeCodeAdapter (WS-P1-03c)
+// claude-code.test.ts — Contract spec for ClaudeCodeAdapter sagePlan (WS-P1-03c)
 //
-// This file is the authoritative specification for ClaudeCodeAdapter — the
-// LLM-backed implementation of TEOAdapter that exposes PlanBuilder operations
-// as tools to a Sage agent, collects the resulting tool calls, and resolves
-// with a validated Plan. All 19 tests pass at gate-2 (implementation complete).
+// This file covers ClaudeCodeAdapter.sagePlan() — the LLM-backed plan generation
+// path that exposes PlanBuilder operations as tools to a Sage agent and resolves
+// with a validated Plan. 18 of 19 tests pass; 1 stale deferral test (see below)
+// needs staff-engineer update to reflect WS-P1-05 spawnAgent implementation.
+//
+// For spawnAgent() contract, see spawn-agent.test.ts (WS-P1-05).
 //
 // ============================================================================
 // CONTRACT: ClaudeCodeAdapter
 // ============================================================================
 //
-// CONSTRUCTION
+// CONSTRUCTION (updated WS-P1-05: spawner is now REQUIRED)
 //   new ClaudeCodeAdapter(opts: ClaudeCodeAdapterOptions)
 //
 //   interface ClaudeCodeAdapterOptions {
 //     runner: AgentRunner;          // REQUIRED — the injectable LLM-spawn shim
+//     spawner: AgentSpawner;        // REQUIRED (WS-P1-05) — injectable agent spawner
 //     agentsDir?: string;           // optional — forwarded to PlanBuilder (for test isolation)
 //     maxRounds?: number;           // optional — cap on tool-call rounds; default 20
 //   }
@@ -91,10 +94,11 @@
 //   the adapter THROWS with a message containing "maxRounds" or "round" and
 //   the last error/reason state.
 //
-// DEFERRED METHOD
-//   spawnAgent() THROWS: Error("spawnAgent: deferred to WS-P1-05")
-//   This is a VISIBLE deferral, not a silent stub. The exact string
-//   "deferred to WS-P1-05" must appear in the thrown error message.
+// SUPERSEDED (WS-P1-05): spawnAgent() is now fully implemented.
+//   The "deferred to WS-P1-05" deferral test below documents OLD behavior
+//   (WS-P1-03c gate). Staff-engineer must update that test: add a spawner
+//   to the constructor and change the assertion to match new behavior.
+//   See spawn-agent.test.ts for the authoritative spawnAgent contract.
 //
 // SECURITY PROPERTY (prompt injection)
 //   Only the builder-validated tool calls can mutate the plan.
@@ -130,10 +134,28 @@ import {
   ClaudeCodeAdapter,
   type AgentRunner,
   type AgentRunnerOpts,
+  type AgentSpawnRequest,
+  type AgentSpawnRaw,
+  type AgentSpawner,
   type ToolCall,
   type ToolResult,
   type ToolDefinition,
 } from "./claude-code.js";
+
+// ---------------------------------------------------------------------------
+// No-op AgentSpawner — satisfies the REQUIRED spawner constructor field for
+// sagePlan-only tests that never invoke spawnAgent. This was added in
+// WS-P1-05 staff-engineer reconciliation: spawner is now a required field on
+// ClaudeCodeAdapterOptions but sagePlan tests construct without one because
+// TypeScript excludes test files from its build check (tsconfig exclude:
+// "**/*.test.ts"). At runtime these tests never call spawnAgent(), so the
+// no-op spawner is never invoked and all sagePlan assertions remain intact.
+// ---------------------------------------------------------------------------
+const NO_OP_SPAWNER: AgentSpawner = {
+  async spawn(_req: AgentSpawnRequest): Promise<AgentSpawnRaw> {
+    throw new Error("NO_OP_SPAWNER: should not be called in sagePlan tests");
+  },
+};
 
 // ---------------------------------------------------------------------------
 // Temp-roster helpers (mirrors stub.test.ts pattern)
@@ -232,18 +254,30 @@ const VALID_AGENT_CONTEXT: AgentContext = {
 
 describe("ClaudeCodeAdapter — misuse", () => {
   // -------------------------------------------------------------------------
-  // spawnAgent() is NOT implemented — must throw a VISIBLE deferral error.
-  // This is intentional: spawnAgent belongs to WS-P1-05, not WS-P1-03c.
-  // A silent stub (returning PASS without throwing) is WRONG — it would hide
-  // the missing implementation and let callers believe it works.
+  // WS-P1-05 reconciliation (staff-engineer gate-3):
+  //
+  // This test originally asserted that spawnAgent() threw "deferred to WS-P1-05"
+  // (the WS-P1-03c deferral stub). WS-P1-05 supersedes that: spawnAgent() is
+  // now fully implemented and resolves with a StepResult on every code path.
+  //
+  // The authoritative spawnAgent() contract lives in spawn-agent.test.ts.
+  // This replacement test verifies the one misuse case that directly intersects
+  // with the sagePlan test context: calling spawnAgent() with a SCRIPT task
+  // (wrong type) must return a BLOCKED StepResult — never throw. The spawner
+  // field is now required on ClaudeCodeAdapterOptions, so we inject NO_OP_SPAWNER
+  // (which should never be reached because the type guard fires first).
   // -------------------------------------------------------------------------
-  it("spawnAgent() throws with 'deferred to WS-P1-05' in the error message", async () => {
+  it("spawnAgent() returns BLOCKED (not a throw) when called with a SCRIPT task type", async () => {
     const rosterDir = makeTempRoster(["software-engineer"]);
     try {
       const { runner } = makeMockRunner([]);
-      const adapter = new ClaudeCodeAdapter({ runner, agentsDir: rosterDir });
+      const adapter = new ClaudeCodeAdapter({
+        runner,
+        spawner: NO_OP_SPAWNER,
+        agentsDir: rosterDir,
+      });
 
-      const dummyTask: TEOTask = {
+      const scriptTask: TEOTask = {
         id: "task-1",
         type: "SCRIPT",
         command: "true",
@@ -251,9 +285,11 @@ describe("ClaudeCodeAdapter — misuse", () => {
         gates: [],
       };
 
-      await expect(adapter.spawnAgent(dummyTask, VALID_AGENT_CONTEXT)).rejects.toThrow(
-        "deferred to WS-P1-05"
-      );
+      const result = await adapter.spawnAgent(scriptTask, VALID_AGENT_CONTEXT);
+      expect(result.taskId).toBe("task-1");
+      expect(result.status).toBe("FAILED");
+      expect(result.detail).toMatch(/^BLOCKED:/);
+      expect(result.detail).toMatch(/SCRIPT|non-AGENT|task type/i);
     } finally {
       cleanupTempRoster(rosterDir);
     }

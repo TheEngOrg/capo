@@ -1,5 +1,5 @@
 // =============================================================================
-// claude-code.ts — ClaudeCodeAdapter: LLM-backed TEOAdapter (WS-P1-03c)
+// claude-code.ts — ClaudeCodeAdapter: LLM-backed TEOAdapter (WS-P1-03c + WS-P1-05)
 //
 // ClaudeCodeAdapter is the primary LLM call site for Sage planning. It exposes
 // PlanBuilder operations as three tools (start_plan, add_task, finalize_plan)
@@ -12,12 +12,14 @@
 //   write path to the plan. Builder validation is the security boundary.
 //
 // CONSTRUCTION:
-//   new ClaudeCodeAdapter({ runner, agentsDir?, maxRounds? })
+//   new ClaudeCodeAdapter({ runner, spawner, agentsDir?, maxRounds? })
 //   runner    — REQUIRED: injectable AgentRunner (CI uses a mock; prod wires real spawn)
+//   spawner   — REQUIRED: injectable AgentSpawner (CI uses a mock; prod wires real Claude Code)
 //   agentsDir — optional: forwarded to PlanBuilder for test roster isolation
 //   maxRounds — optional: round cap (default 20); throws when exceeded
 //
-// See claude-code.test.ts for the full contract spec and AsyncGenerator protocol.
+// See claude-code.test.ts for the sagePlan contract spec and AsyncGenerator protocol.
+// See spawn-agent.test.ts for the spawnAgent contract spec and AgentSpawner seam.
 // =============================================================================
 
 import { PlanBuilder } from "../core/plan-builder.js";
@@ -25,10 +27,32 @@ import type { AddTaskInput } from "../core/plan-builder.js";
 import type { Plan, TEOTask } from "../core/plan.js";
 import type { StepResult } from "../core/runner.js";
 import type { TEOAdapter, PlanningContext, AgentContext } from "./types.js";
+import { loadAgentDefinition } from "../agents/load.js";
+import type { AgentDefinition } from "../agents/load.js";
+import { parseVerdict } from "./parse-verdict.js";
 
 // ---------------------------------------------------------------------------
 // Public interface types — exported so callers and tests can import them
 // ---------------------------------------------------------------------------
+
+// AgentSpawner seam (WS-P1-05) — injectable boundary for spawnAgent().
+// CI injects a mock; prod wires a real Claude Code subprocess spawner.
+
+export interface AgentSpawnRequest {
+  agentDefinition: AgentDefinition;
+  prompt: string;
+  disallowedTools: string[];
+  timeoutMs: number;
+}
+
+export interface AgentSpawnRaw {
+  output: string;
+  errored?: boolean;
+}
+
+export interface AgentSpawner {
+  spawn(req: AgentSpawnRequest): Promise<AgentSpawnRaw>;
+}
 
 export interface ToolCall {
   name: "start_plan" | "add_task" | "finalize_plan";
@@ -71,6 +95,8 @@ export interface AgentRunner {
 export interface ClaudeCodeAdapterOptions {
   /** REQUIRED — injectable LLM-spawn shim. CI uses a mock; prod wires real Claude Code. */
   runner: AgentRunner;
+  /** REQUIRED — injectable agent spawner. CI uses a mock; prod wires real Claude Code spawn. */
+  spawner: AgentSpawner;
   /** Optional — forwarded to PlanBuilder for test roster isolation. */
   agentsDir?: string;
   /** Optional — cap on tool-call rounds before adapter throws. Default: 20. */
@@ -171,11 +197,13 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
 
 export class ClaudeCodeAdapter implements TEOAdapter {
   private readonly runner: AgentRunner;
+  private readonly spawner: AgentSpawner;
   private readonly agentsDir: string | undefined;
   private readonly maxRounds: number;
 
   constructor(opts: ClaudeCodeAdapterOptions) {
     this.runner = opts.runner;
+    this.spawner = opts.spawner;
     this.agentsDir = opts.agentsDir;
     this.maxRounds = opts.maxRounds ?? 20;
   }
@@ -343,10 +371,95 @@ export class ClaudeCodeAdapter implements TEOAdapter {
   }
 
   /**
-   * Visible deferral — spawnAgent belongs to WS-P1-05, not WS-P1-03c.
-   * Throws rather than returning silently so callers are not misled.
+   * Execute an AGENT task by loading the agent definition, building a spawn
+   * request (with disallowedTools union), calling the injected AgentSpawner,
+   * and parsing the structured VERDICT block from the spawner's output.
+   *
+   * Fail-safe: never throws — all error paths return FAILED with a detail
+   * string starting "BLOCKED:" so callers can distinguish infrastructure
+   * errors from agent-reported failures.
+   *
+   * VERDICT parsing rules (case-sensitive, line-anchored):
+   *   /^VERDICT:\s*(PASS|FAIL)\s*$/m
+   *   - Only PASS → status "PASS"
+   *   - Only FAIL → status "FAILED"
+   *   - Both present → BLOCKED ("conflicting verdicts")
+   *   - Neither present → BLOCKED ("no verdict in output")
    */
-  spawnAgent(_task: TEOTask, _context: AgentContext): Promise<StepResult> {
-    return Promise.reject(new Error("spawnAgent: deferred to WS-P1-05"));
+  async spawnAgent(task: TEOTask, context: AgentContext): Promise<StepResult> {
+    // 1. Type guard: only AGENT tasks are valid
+    if (task.type !== "AGENT") {
+      return {
+        taskId: task.id,
+        status: "FAILED",
+        detail: `BLOCKED: spawnAgent called with non-AGENT task type: ${task.type}`,
+      };
+    }
+
+    // 2. Load agent definition — catches path-traversal and unknown agent errors
+    let def: AgentDefinition;
+    try {
+      def = loadAgentDefinition(task.agent_id, this.agentsDir);
+    } catch {
+      return {
+        taskId: task.id,
+        status: "FAILED",
+        detail: `BLOCKED: unknown agent id: ${task.agent_id}`,
+      };
+    }
+
+    // 3. Build spawn request — disallowedTools is union of agent defaults + task overrides
+    const req: AgentSpawnRequest = {
+      agentDefinition: def,
+      prompt: task.prompt,
+      disallowedTools: [...def.disallowedTools_default, ...(task.disallowedTools ?? [])],
+      timeoutMs: context.stepTimeoutMs,
+    };
+
+    // 4. Call spawner — catch any rejections (never propagate)
+    let raw: AgentSpawnRaw;
+    try {
+      raw = await this.spawner.spawn(req);
+    } catch (err) {
+      // err is always an Error in tests; String(err) is defensive against non-Error throws.
+      /* c8 ignore next */
+      const msg = err instanceof Error ? err.message : String(err);
+      return {
+        taskId: task.id,
+        status: "FAILED",
+        detail: `BLOCKED: spawner error: ${msg}`,
+      };
+    }
+
+    // 5. Parse verdict — parseVerdict returns passCount/failCount so we never re-parse.
+    const { verdict, passCount, failCount } = parseVerdict(raw.output);
+
+    if (raw.errored === true && verdict === null && passCount === 0 && failCount === 0) {
+      return {
+        taskId: task.id,
+        status: "FAILED",
+        detail: "BLOCKED: spawner errored and no verdict",
+      };
+    }
+
+    if (verdict === "PASS") {
+      return { taskId: task.id, status: "PASS" };
+    }
+    if (verdict === "FAIL") {
+      return { taskId: task.id, status: "FAILED" };
+    }
+
+    if (passCount > 0 && failCount > 0) {
+      return {
+        taskId: task.id,
+        status: "FAILED",
+        detail: "BLOCKED: conflicting verdicts in output",
+      };
+    }
+    return {
+      taskId: task.id,
+      status: "FAILED",
+      detail: "BLOCKED: no verdict in output",
+    };
   }
 }

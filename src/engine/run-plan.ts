@@ -60,9 +60,11 @@ export async function runPlan(
   if (opts?.sessionId !== undefined) {
     ledger = new AppendOnlyLedger({
       session_id: opts.sessionId,
+      // c8 ignore next — production-only path: omitting baseDir resolves to os.homedir()/.teo/
       ...(opts.ledgerBaseDir !== undefined ? { baseDir: opts.ledgerBaseDir } : {}),
     });
     signer = new HmacSigner(
+      // c8 ignore next — production-only path: omitting baseDir resolves to os.homedir()/.teo/
       opts.ledgerBaseDir !== undefined ? { baseDir: opts.ledgerBaseDir } : {}
     );
   }

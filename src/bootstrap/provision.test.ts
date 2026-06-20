@@ -1,7 +1,7 @@
 // =============================================================================
-// provision.test.ts — specs for src/bootstrap/provision.ts (WS-P1-04)
+// provision.test.ts — specs for src/bootstrap/provision.ts (WS-P1-04 + WS-P1-04a)
 //
-// STATUS: PASSING — implementation in src/bootstrap/provision.ts, all 29 tests green. SEC-01..05 remediated.
+// STATUS: PASSING — implementation in src/bootstrap/provision.ts, all 54 tests green. WS-P1-04a: manifest write, verify-after-write, 2-stat hot path, repair redefined. Tests 42-50: repair path error branches (covers all c8 ignore blocks). Tests 48-50 (r2): repair EXDEV success, repair SHA-256 mismatch, repair bare-string throw — removes final 3 c8 ignore annotations. DEFECT noted in test 45: repair path renameSync EACCES maps to permission_denied (mirrors fresh-provision path, test 28).
 //
 // Ordering: misuse → boundary → golden path (ADR-064 adversarial-first policy)
 //
@@ -17,8 +17,23 @@
 //   type ProvisionResult =
 //     | { status: 'ok' }
 //     | { status: 'already_provisioned' }
-//     | { status: 'repaired'; repairedFiles: string[] }
+//     | { status: 'repaired' }                         // WS-P1-04a: repairedFiles[] REMOVED
 //     | { status: 'error'; kind: ProvisionErrorKind; reason: string };
+//
+//   interface ManifestFile {
+//     schema_version: "1";
+//     teo_version: string;
+//     provisioned_at: string;
+//     agents_dir: string;
+//     files: {
+//       [agentId: string]: {
+//         path: string;
+//         sha256: string;
+//         size_bytes: number;
+//       };
+//     };
+//     bundle_signature_key_id: string;
+//   }
 //
 //   interface ProvisionOptions {
 //     bundleDir: string;
@@ -28,7 +43,7 @@
 //
 //   function provision(opts: ProvisionOptions): Promise<ProvisionResult>
 //
-// KEY BEHAVIOURS UNDER TEST:
+// KEY BEHAVIOURS UNDER TEST (WS-P1-04 originals):
 //   - checkRevocation() called ONCE before any write, NEVER on already_provisioned
 //   - opts.data = Buffer.concat(listAgentIds(bundleDir).sort().map(readFile))
 //   - Atomic staging: write to os.tmpdir(), then rename to homeDir+'/agents/'
@@ -38,12 +53,27 @@
 //   - homeDir resolution: opts.homeDir > process.env.TEO_HOME > os.homedir()+'/.teo'
 //   - No import-time side effects
 //
+// KEY BEHAVIOURS UNDER TEST (WS-P1-04a additions):
+//   - 2-stat hot path: manifest.json AND agentsDir both present → already_provisioned, no revocation
+//   - Repair trigger: manifest ABSENT + agentsDir PRESENT → full fresh provision + return repaired
+//   - manifest absent + agentsDir absent → fresh provision → return ok
+//   - manifest.json written atomically (tmp → rename) after all writes + verification succeed
+//   - manifest.json permissions: 0o644
+//   - manifest schema: schema_version="1", teo_version, provisioned_at, agents_dir, files{}, bundle_signature_key_id
+//   - SHA-256 in manifest computed from in-memory chunks[] (bundleDir), NOT re-reading agentsDir
+//   - Verify-after-write: re-read agentsDir, compute SHA-256, compare vs in-memory chunks
+//   - SHA-256 mismatch → verification_failed, no manifest.json written
+//   - manifest write failure → io_error with reason starting "Manifest write failed:"
+//   - No stale manifest.json.tmp on manifest write failure
+//   - repairedFiles[] REMOVED from all return shapes
+//
 // COVERAGE NOTE FOR DEV:
-//   provision.ts must be added to vitest.config.ts perFile thresholds at 100%
+//   provision.ts must be in vitest.config.ts perFile thresholds at 100%
 //   lines/branches/functions/statements.
 // =============================================================================
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
@@ -400,7 +430,9 @@ describe("provision() — misuse: security and conflict guards", () => {
 
 describe("provision() — boundary: idempotency, repair, error mapping", () => {
   it("07. already provisioned: checkRevocation NOT called, returns already_provisioned, mtimes unchanged (AC-03)", async () => {
-    // Arrange: fully provisioned homeDir — all ids present, all non-zero
+    // Arrange: fully provisioned homeDir — agentsDir present AND manifest.json present.
+    // WS-P1-04a: the 2-stat hot path requires BOTH manifest.json AND agentsDir to be
+    // present. Without manifest.json this would trigger the REPAIR path, not already_provisioned.
     const bundleDir = makeFixtureBundle(["alpha", "beta", "gamma"]);
     const homeDir = makeTempHome();
 
@@ -409,6 +441,12 @@ describe("provision() — boundary: idempotency, repair, error mapping", () => {
     for (const stem of ["alpha", "beta", "gamma"]) {
       fs.writeFileSync(path.join(agentsDir, `${stem}.md`), `content-${stem}`);
     }
+
+    // WS-P1-04a: also write manifest.json — required for the 2-stat hot path to fire.
+    fs.writeFileSync(
+      path.join(homeDir, "manifest.json"),
+      JSON.stringify({ schema_version: "1", teo_version: "0.1.0" })
+    );
 
     // Snapshot mtimes before the call
     const mtimesBefore: Record<string, number> = {};
@@ -431,8 +469,12 @@ describe("provision() — boundary: idempotency, repair, error mapping", () => {
     }
   });
 
-  it("08. repair: one missing file → returns repaired with that id, valid files untouched (AC-04)", async () => {
-    // Arrange: alpha and gamma present, beta missing
+  it("08. repair: agentsDir present, manifest absent → returns repaired, no repairedFiles property, manifest written (AC-04)", async () => {
+    // Arrange: agentsDir present (alpha + gamma), NO manifest.json.
+    // WS-P1-04a: repair is now triggered by manifest ABSENT + agentsDir PRESENT,
+    // regardless of file count or content. The repair path runs a full fresh provision
+    // (checkRevocation + atomic staging over existing agentsDir + SHA-256 verify + manifest write).
+    // repairedFiles[] is REMOVED from the return type.
     const bundleDir = makeFixtureBundle(["alpha", "beta", "gamma"]);
     const homeDir = makeTempHome();
 
@@ -440,26 +482,32 @@ describe("provision() — boundary: idempotency, repair, error mapping", () => {
     fs.mkdirSync(agentsDir, { recursive: true });
     fs.writeFileSync(path.join(agentsDir, "alpha.md"), "content-alpha");
     fs.writeFileSync(path.join(agentsDir, "gamma.md"), "content-gamma");
+    // beta.md intentionally absent — but repair trigger is manifest absent, not missing files
 
-    const alphaMtimeBefore = fs.statSync(path.join(agentsDir, "alpha.md")).mtimeMs;
-    const gammaMtimeBefore = fs.statSync(path.join(agentsDir, "gamma.md")).mtimeMs;
-
-    // Act
+    // Act: NO manifest.json → repair path fires
     const result = await provision(makeOpts(bundleDir, homeDir));
 
-    // Assert
+    // Assert: returns repaired (new trigger), NOT already_provisioned
     expect(result.status).toBe("repaired");
-    if (result.status !== "repaired") throw new Error("narrowing guard");
-    expect(result.repairedFiles).toEqual(["beta"]);
-    expect(fs.existsSync(path.join(agentsDir, "beta.md"))).toBe(true);
 
-    // Valid files must remain untouched
-    expect(fs.statSync(path.join(agentsDir, "alpha.md")).mtimeMs).toBe(alphaMtimeBefore);
-    expect(fs.statSync(path.join(agentsDir, "gamma.md")).mtimeMs).toBe(gammaMtimeBefore);
+    // WS-P1-04a: repairedFiles[] is REMOVED — result must NOT have this property
+    expect(result).not.toHaveProperty("repairedFiles");
+
+    // manifest.json must be written on the repair path
+    expect(fs.existsSync(path.join(homeDir, "manifest.json"))).toBe(true);
+    const manifest = JSON.parse(
+      fs.readFileSync(path.join(homeDir, "manifest.json"), "utf8")
+    ) as Record<string, unknown>;
+    expect(manifest["schema_version"]).toBe("1");
   });
 
-  it("09. repair: zero-byte file is repaired and appears in repairedFiles (AC-04/OQ-02)", async () => {
-    // Arrange: beta is 0 bytes — triggers zero-byte detection repair path
+  it("09. repair: agentsDir present with zero-byte file, manifest absent → repaired, no repairedFiles, manifest written (AC-04/OQ-02)", async () => {
+    // Arrange: beta is 0 bytes; NO manifest.json.
+    // WS-P1-04a: zero-byte detection is no longer the repair trigger. The new trigger
+    // is manifest ABSENT + agentsDir PRESENT. A full fresh provision runs regardless
+    // of whether individual files are zero-byte, partial, or complete. After re-provisioning,
+    // all files will be correctly populated from bundleDir.
+    // repairedFiles[] is REMOVED — result must NOT carry this field.
     const bundleDir = makeFixtureBundle(["alpha", "beta", "gamma"]);
     const homeDir = makeTempHome();
 
@@ -469,14 +517,20 @@ describe("provision() — boundary: idempotency, repair, error mapping", () => {
     fs.writeFileSync(path.join(agentsDir, "beta.md"), ""); // 0 bytes
     fs.writeFileSync(path.join(agentsDir, "gamma.md"), "content-gamma");
 
-    // Act
+    // Act: NO manifest.json → repair path fires
     const result = await provision(makeOpts(bundleDir, homeDir));
 
-    // Assert
+    // Assert: repair path triggered (not already_provisioned — no manifest.json present)
     expect(result.status).toBe("repaired");
-    if (result.status !== "repaired") throw new Error("narrowing guard");
-    expect(result.repairedFiles).toContain("beta");
+
+    // WS-P1-04a: repairedFiles[] removed
+    expect(result).not.toHaveProperty("repairedFiles");
+
+    // After repair: beta.md must be re-written from bundleDir (non-zero)
     expect(fs.statSync(path.join(agentsDir, "beta.md")).size).toBeGreaterThan(0);
+
+    // manifest.json written on success
+    expect(fs.existsSync(path.join(homeDir, "manifest.json"))).toBe(true);
   });
 
   it("10. permission_denied on homeDir creation → returns permission_denied with path in reason (AC-07)", async () => {
@@ -617,8 +671,10 @@ describe("provision() — boundary: idempotency, repair, error mapping", () => {
   });
 
   it("19. SEC-03: repair-path revocation BLOCKED → revocation_blocked, missing file NOT written (SEC-03)", async () => {
-    // Arrange: alpha and gamma present (non-zero), beta missing → repair path triggered.
-    // Override checkRevocation to BLOCKED so the repair-path guard at ~line 149 fires.
+    // Arrange: agentsDir present (alpha + gamma), beta missing, NO manifest.json.
+    // WS-P1-04a: repair path is now triggered by manifest ABSENT + agentsDir PRESENT.
+    // Do NOT create manifest.json — that is the new repair trigger.
+    // Override checkRevocation to BLOCKED so the repair-path revocation gate fires.
     const bundleDir = makeFixtureBundle(["alpha", "beta", "gamma"]);
     const homeDir = makeTempHome();
 
@@ -626,7 +682,8 @@ describe("provision() — boundary: idempotency, repair, error mapping", () => {
     fs.mkdirSync(agentsDir, { recursive: true });
     fs.writeFileSync(path.join(agentsDir, "alpha.md"), "content-alpha");
     fs.writeFileSync(path.join(agentsDir, "gamma.md"), "content-gamma");
-    // beta.md intentionally absent — triggers repair path
+    // beta.md intentionally absent — but repair triggers on manifest-absent, not missing files
+    // manifest.json intentionally NOT created — that is the new repair trigger
 
     vi.mocked(checkRevocation).mockResolvedValue({
       verdict: "BLOCKED",
@@ -654,11 +711,12 @@ describe("provision() — boundary: idempotency, repair, error mapping", () => {
   });
 
   it("20. SEC-04: repair-path verification_failed → verification_failed naming the repaired id (SEC-04)", async () => {
-    // Arrange: alpha and gamma present (non-zero), beta missing → repair path triggered.
+    // Arrange: agentsDir present, NO manifest.json → repair path triggered (WS-P1-04a trigger).
     // checkRevocation returns PASS (default from beforeEach).
-    // Override loadAgentDefinition to throw when called for 'beta' in agentsDir
-    // (the post-repair verification call at ~line 170), delegating all other calls
-    // to the real file-based implementation.
+    // WS-P1-04a: repair path runs a full fresh provision (staging + SHA-256 verify + loadAgentDefinition).
+    // Override loadAgentDefinition to throw for 'beta' (the post-write verification step).
+    // The repair path runs loadAgentDefinition for ALL ids (full provision), so we must allow
+    // alpha and gamma through and only fail beta.
     const bundleDir = makeFixtureBundle(["alpha", "beta", "gamma"]);
     const homeDir = makeTempHome();
 
@@ -666,12 +724,11 @@ describe("provision() — boundary: idempotency, repair, error mapping", () => {
     fs.mkdirSync(agentsDir, { recursive: true });
     fs.writeFileSync(path.join(agentsDir, "alpha.md"), "content-alpha");
     fs.writeFileSync(path.join(agentsDir, "gamma.md"), "content-gamma");
-    // beta.md intentionally absent — triggers repair path
+    // beta.md absent — but repair trigger is manifest absent, not missing files
+    // manifest.json intentionally NOT created — that is the WS-P1-04a repair trigger
 
     vi.mocked(loadAgentDefinition).mockImplementation((id: string, dir?: string) => {
-      // Throw only for the post-repair verification call: id === "beta" AND
-      // dir is the agentsDir (contains "agents"). The repair path only verifies
-      // idsToRepair (["beta"]), so alpha and gamma are never called here.
+      // Throw for beta in the post-repair verification step (called with agentsDir).
       if (id === "beta" && typeof dir === "string" && dir.includes("agents")) {
         throw new Error("Corrupt frontmatter in repair");
       }
@@ -728,8 +785,8 @@ describe("provision() — golden path: fresh provision end-to-end", () => {
     // Shape
     expect(result).toEqual({ status: "ok" });
 
-    // Exactly two path segments under homeDir: just agents/ (AC-01/OQ-01)
-    expect(fs.readdirSync(homeDir)).toEqual(["agents"]);
+    // Two entries under homeDir: agents/ + manifest.json (AC-01/OQ-01, WS-P1-04a)
+    expect(fs.readdirSync(homeDir).sort()).toEqual(["agents", "manifest.json"]);
 
     // Permissions (AC-02)
     expect(fs.statSync(homeDir).mode & 0o777).toBe(0o700);
@@ -1072,5 +1129,789 @@ describe("provision() — security remediation: SEC-05 + spyable error branches"
     if (result.status !== "error") throw new Error("narrowing guard");
     expect(result.kind).toBe("verification_failed");
     expect(result.reason).toContain("bare string verification error");
+  });
+});
+
+// =============================================================================
+// WS-P1-04a: MANIFEST WRITE, 2-STAT HOT PATH, SHA-256 VERIFY-AFTER-WRITE
+// These tests FAIL until dev implements the new behaviour in provision.ts.
+// =============================================================================
+
+describe("provision() — WS-P1-04a: 2-stat hot path idempotency", () => {
+  it("30. 2-stat hot path: both manifest.json AND agentsDir present → already_provisioned, no revocation call", async () => {
+    // Arrange: both manifest.json AND agentsDir exist.
+    // This is the only state that should produce already_provisioned under WS-P1-04a.
+    // checkRevocation must NOT be called — this is the fast-path, no writes.
+    const bundleDir = makeFixtureBundle(["alpha", "beta"]);
+    const homeDir = makeTempHome();
+
+    const agentsDir = path.join(homeDir, "agents");
+    fs.mkdirSync(agentsDir, { recursive: true });
+    fs.writeFileSync(path.join(agentsDir, "alpha.md"), "content-alpha");
+    fs.writeFileSync(path.join(agentsDir, "beta.md"), "content-beta");
+
+    // manifest.json must also be present for the 2-stat hot path to fire
+    fs.writeFileSync(
+      path.join(homeDir, "manifest.json"),
+      JSON.stringify({ schema_version: "1", teo_version: "0.1.0" })
+    );
+
+    // Act
+    const result = await provision(makeOpts(bundleDir, homeDir));
+
+    // Assert: fast path → no writes, no revocation
+    expect(result).toEqual({ status: "already_provisioned" });
+    expect(vi.mocked(checkRevocation)).not.toHaveBeenCalled();
+  });
+
+  it("31. 2-stat hot path: manifest.json absent, agentsDir present → repair path (not already_provisioned)", async () => {
+    // Arrange: agentsDir with files, but NO manifest.json.
+    // Under WS-P1-04a, this is the repair trigger. checkRevocation must be called once.
+    const bundleDir = makeFixtureBundle(["alpha", "beta"]);
+    const homeDir = makeTempHome();
+
+    const agentsDir = path.join(homeDir, "agents");
+    fs.mkdirSync(agentsDir, { recursive: true });
+    fs.writeFileSync(path.join(agentsDir, "alpha.md"), "content-alpha");
+    fs.writeFileSync(path.join(agentsDir, "beta.md"), "content-beta");
+    // NO manifest.json — this must NOT produce already_provisioned
+
+    // Act
+    const result = await provision(makeOpts(bundleDir, homeDir));
+
+    // Assert: repair path, not already_provisioned
+    expect(result.status).toBe("repaired");
+    expect(result.status).not.toBe("already_provisioned");
+
+    // checkRevocation called exactly once (repair path gate)
+    expect(vi.mocked(checkRevocation)).toHaveBeenCalledTimes(1);
+  });
+
+  it("32. 2-stat hot path: manifest.json present, agentsDir absent → fresh provision (not already_provisioned)", async () => {
+    // Arrange: manifest.json exists but agentsDir does not.
+    // Stale manifest (e.g. agentsDir was deleted) → fresh provision, not idempotent skip.
+    // checkRevocation must be called once.
+    const bundleDir = makeFixtureBundle(["alpha", "beta"]);
+    const homeDir = makeTempHome();
+
+    // Write manifest.json but do NOT create agentsDir
+    fs.writeFileSync(
+      path.join(homeDir, "manifest.json"),
+      JSON.stringify({ schema_version: "1", teo_version: "0.1.0" })
+    );
+    // agentsDir intentionally absent
+
+    // Act
+    const result = await provision(makeOpts(bundleDir, homeDir));
+
+    // Assert: fresh provision (ok), not already_provisioned
+    expect(result.status).toBe("ok");
+    expect(vi.mocked(checkRevocation)).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("provision() — WS-P1-04a: manifest.json schema and content (fresh provision)", () => {
+  it("33. fresh provision: manifest.json written after provision with correct schema", async () => {
+    // Arrange: fresh homeDir, fixture bundle with 3 agents
+    const bundleDir = makeFixtureBundle(["alpha", "beta", "gamma"]);
+    const homeDir = makeTempHome();
+
+    // Act
+    const result = await provision(makeOpts(bundleDir, homeDir));
+
+    // Assert: result ok
+    expect(result.status).toBe("ok");
+
+    // manifest.json must exist at homeDir/manifest.json
+    const manifestPath = path.join(homeDir, "manifest.json");
+    expect(fs.existsSync(manifestPath)).toBe(true);
+
+    // Parse and check all required fields
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8")) as Record<string, unknown>;
+
+    expect(manifest["schema_version"]).toBe("1");
+    expect(typeof manifest["teo_version"]).toBe("string");
+    expect((manifest["teo_version"] as string).length).toBeGreaterThan(0);
+
+    // provisioned_at must be a valid ISO-8601 string
+    expect(typeof manifest["provisioned_at"]).toBe("string");
+    const provisioned = new Date(manifest["provisioned_at"] as string);
+    expect(isNaN(provisioned.getTime())).toBe(false);
+
+    // agents_dir must be the absolute path to agentsDir
+    expect(manifest["agents_dir"]).toBe(path.join(homeDir, "agents"));
+
+    // bundle_signature_key_id must match revocationOpts.keyId
+    expect(manifest["bundle_signature_key_id"]).toBe("test-key-id");
+
+    // files must contain all 3 agent ids
+    expect(typeof manifest["files"]).toBe("object");
+    const files = manifest["files"] as Record<string, unknown>;
+    expect(Object.keys(files).sort()).toEqual(["alpha", "beta", "gamma"]);
+
+    // Each file entry must have path, sha256, size_bytes
+    for (const agentId of ["alpha", "beta", "gamma"]) {
+      const entry = files[agentId] as Record<string, unknown>;
+      expect(typeof entry["path"]).toBe("string");
+      expect(typeof entry["sha256"]).toBe("string");
+      expect((entry["sha256"] as string).length).toBe(64); // hex SHA-256 = 64 chars
+      expect(typeof entry["size_bytes"]).toBe("number");
+      expect(entry["size_bytes"] as number).toBeGreaterThan(0);
+    }
+  });
+
+  it("34. fresh provision: manifest.json permissions are 0o644", async () => {
+    // The manifest is a human-readable file (owners + group read); group/other write blocked.
+    const bundleDir = makeFixtureBundle(["alpha", "beta"]);
+    const homeDir = makeTempHome();
+
+    await provision(makeOpts(bundleDir, homeDir));
+
+    const manifestPath = path.join(homeDir, "manifest.json");
+    expect(fs.existsSync(manifestPath)).toBe(true);
+    const mode = fs.statSync(manifestPath).mode & 0o777;
+    expect(mode).toBe(0o644);
+  });
+
+  it("35. fresh provision: manifest SHA-256 values match in-memory bundle chunks", async () => {
+    // The manifest's sha256 must be derived from the in-memory chunks (bundleDir content),
+    // NOT from re-reading the installed agentsDir files. This test validates correctness
+    // by computing the expected hash from bundleDir and comparing to the manifest.
+    const bundleDir = makeFixtureBundle(["alpha", "beta", "gamma"]);
+    const homeDir = makeTempHome();
+
+    await provision(makeOpts(bundleDir, homeDir));
+
+    const manifestPath = path.join(homeDir, "manifest.json");
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8")) as Record<string, unknown>;
+    const files = manifest["files"] as Record<string, Record<string, unknown>>;
+
+    for (const agentId of ["alpha", "beta", "gamma"]) {
+      // Compute expected SHA-256 from bundleDir (the in-memory source)
+      const bundleContent = fs.readFileSync(path.join(bundleDir, `${agentId}.md`));
+      const expectedSha256 = crypto.createHash("sha256").update(bundleContent).digest("hex");
+      const expectedSizeBytes = bundleContent.byteLength;
+
+      const entry = files[agentId];
+      expect(entry).toBeDefined();
+      expect(entry!["sha256"]).toBe(expectedSha256);
+      expect(entry!["size_bytes"]).toBe(expectedSizeBytes);
+
+      // path must be the absolute path to the installed file in agentsDir
+      expect(entry!["path"]).toBe(path.join(homeDir, "agents", `${agentId}.md`));
+    }
+  });
+
+  it("41. teo_version in manifest matches package.json version", async () => {
+    // teo_version is read from package.json at runtime. For this project it is "0.1.0".
+    // If package.json changes, this test must be updated accordingly.
+    const bundleDir = makeFixtureBundle(["alpha"]);
+    const homeDir = makeTempHome();
+
+    await provision(makeOpts(bundleDir, homeDir));
+
+    const manifest = JSON.parse(
+      fs.readFileSync(path.join(homeDir, "manifest.json"), "utf8")
+    ) as Record<string, unknown>;
+
+    expect(manifest["teo_version"]).toBe("0.1.0");
+  });
+});
+
+describe("provision() — WS-P1-04a: SHA-256 verify-after-write (byte integrity)", () => {
+  it("36. verify-after-write: SHA-256 mismatch after install → verification_failed, no manifest.json written", async () => {
+    // Arrange: provision() writes to agentsDir, then re-reads to verify SHA-256.
+    // We spy on fs.readFileSync: pass through calls to bundleDir (staging reads),
+    // but return tampered bytes for reads from agentsDir (the verify-after-write step).
+    // This simulates silent disk corruption between write and verify.
+    const bundleDir = makeFixtureBundle(["alpha", "beta"]);
+    const homeDir = makeTempHome();
+
+    const agentsDir = path.join(homeDir, "agents");
+
+    // Spy strategy: tamper with readFileSync calls that read from agentsDir.
+    // provision.ts reads from bundleDir first (chunks[] computation), then from
+    // agentsDir during verify-after-write. We distinguish by path prefix.
+    const realReadFileSync = fs.readFileSync.bind(fs);
+    vi.spyOn(fs, "readFileSync").mockImplementation(
+      (p: Parameters<typeof fs.readFileSync>[0], ...rest: unknown[]) => {
+        const pStr = typeof p === "string" ? p : String(p);
+        // Tamper with reads from the installed agentsDir
+        if (pStr.startsWith(agentsDir) && pStr.endsWith(".md")) {
+          // Return tampered bytes — SHA-256 will not match the in-memory chunks
+          return Buffer.from("TAMPERED CONTENT — SHA-256 will not match");
+        }
+        // All other reads (bundleDir, etc.) pass through to the real implementation
+        return (realReadFileSync as (...args: unknown[]) => unknown)(p, ...rest) as ReturnType<
+          typeof fs.readFileSync
+        >;
+      }
+    );
+
+    // Act
+    const result = await provision(makeOpts(bundleDir, homeDir));
+
+    // Assert: SHA-256 mismatch → verification_failed
+    expect(result.status).toBe("error");
+    if (result.status !== "error") throw new Error("narrowing guard");
+    expect(result.kind).toBe("verification_failed");
+    expect(result.reason).toMatch(/SHA-256 mismatch/i);
+    // The reason must name the agent id that failed
+    expect(result.reason).toMatch(/alpha|beta/);
+
+    // manifest.json must NOT be written when verification fails
+    expect(fs.existsSync(path.join(homeDir, "manifest.json"))).toBe(false);
+  });
+});
+
+describe("provision() — WS-P1-04a: manifest write failure and error path isolation", () => {
+  it("37. manifest write failure (writeFileSync throws on tmp) → io_error 'Manifest write failed:', no manifest on disk", async () => {
+    // Arrange: happy-path provision but writeFileSync throws when writing manifest.json.tmp.
+    // We use a spy that passes through all other writeFileSync calls and only throws
+    // when the path ends with "manifest.json.tmp".
+    const bundleDir = makeFixtureBundle(["alpha", "beta"]);
+    const homeDir = makeTempHome();
+
+    const manifestTmpPath = path.join(homeDir, "manifest.json.tmp");
+    const realWriteFileSync = fs.writeFileSync.bind(fs);
+
+    vi.spyOn(fs, "writeFileSync").mockImplementation(
+      (p: Parameters<typeof fs.writeFileSync>[0], ...rest: unknown[]) => {
+        const pStr = typeof p === "string" ? p : String(p);
+        if (pStr === manifestTmpPath) {
+          throw Object.assign(new Error("ENOSPC: no space left on device"), { code: "ENOSPC" });
+        }
+        return (realWriteFileSync as (...args: unknown[]) => unknown)(p, ...rest) as ReturnType<
+          typeof fs.writeFileSync
+        >;
+      }
+    );
+
+    // Act
+    const result = await provision(makeOpts(bundleDir, homeDir));
+
+    // Assert: io_error with "Manifest write failed:" prefix
+    expect(result.status).toBe("error");
+    if (result.status !== "error") throw new Error("narrowing guard");
+    expect(result.kind).toBe("io_error");
+    expect(result.reason).toMatch(/^Manifest write failed:/);
+
+    // manifest.json must NOT exist on disk
+    expect(fs.existsSync(path.join(homeDir, "manifest.json"))).toBe(false);
+
+    // manifest.json.tmp must be cleaned up (best-effort delete on failure)
+    expect(fs.existsSync(manifestTmpPath)).toBe(false);
+  });
+
+  it("37b. manifest write failure (renameSync throws on manifest rename) → io_error 'Manifest write failed:', no manifest on disk", async () => {
+    // Arrange: writeFileSync succeeds for manifest.json.tmp but renameSync throws
+    // when renaming .tmp → manifest.json. We let the first renameSync (agentsDir staging)
+    // pass through, then throw on the second (manifest rename).
+    const bundleDir = makeFixtureBundle(["alpha", "beta"]);
+    const homeDir = makeTempHome();
+
+    const manifestTmpPath = path.join(homeDir, "manifest.json.tmp");
+    const manifestPath = path.join(homeDir, "manifest.json");
+    const realRenameSync = fs.renameSync.bind(fs);
+
+    vi.spyOn(fs, "renameSync").mockImplementation((...args: Parameters<typeof fs.renameSync>) => {
+      const [src, dest] = args;
+      // Throw specifically when renaming manifest.json.tmp → manifest.json
+      if (String(src) === manifestTmpPath && String(dest) === manifestPath) {
+        throw Object.assign(new Error("EACCES: permission denied"), { code: "EACCES" });
+      }
+      return realRenameSync(...args);
+    });
+
+    // Act
+    const result = await provision(makeOpts(bundleDir, homeDir));
+
+    // Assert: io_error with "Manifest write failed:" prefix
+    expect(result.status).toBe("error");
+    if (result.status !== "error") throw new Error("narrowing guard");
+    expect(result.kind).toBe("io_error");
+    expect(result.reason).toMatch(/^Manifest write failed:/);
+
+    // manifest.json must NOT exist on disk
+    expect(fs.existsSync(manifestPath)).toBe(false);
+
+    // manifest.json.tmp best-effort cleanup — may or may not exist depending on impl order
+    // (both states are acceptable; we only require manifest.json is absent)
+  });
+
+  it("38a. manifest not written when revocation blocked (fresh provision)", async () => {
+    // Any error before manifest write must NOT produce manifest.json on disk.
+    const bundleDir = makeFixtureBundle(["alpha", "beta"]);
+    const homeDir = makeTempHome();
+
+    vi.mocked(checkRevocation).mockResolvedValue({
+      verdict: "BLOCKED",
+      reason: "Key revoked",
+    });
+
+    await provision(makeOpts(bundleDir, homeDir));
+
+    expect(fs.existsSync(path.join(homeDir, "manifest.json"))).toBe(false);
+  });
+
+  it("38b. manifest not written when staging rename fails (io_error)", async () => {
+    const bundleDir = makeFixtureBundle(["alpha", "beta"]);
+    const homeDir = makeTempHome();
+
+    vi.spyOn(fs, "renameSync").mockImplementationOnce(() => {
+      throw Object.assign(new Error("I/O error"), { code: "EIO" });
+    });
+
+    await provision(makeOpts(bundleDir, homeDir));
+
+    expect(fs.existsSync(path.join(homeDir, "manifest.json"))).toBe(false);
+  });
+
+  it("38c. manifest not written when SHA-256 verify-after-write fails", async () => {
+    // SHA-256 mismatch during verify-after-write must prevent manifest write.
+    const bundleDir = makeFixtureBundle(["alpha", "beta"]);
+    const homeDir = makeTempHome();
+    const agentsDir = path.join(homeDir, "agents");
+
+    const realReadFileSync = fs.readFileSync.bind(fs);
+    vi.spyOn(fs, "readFileSync").mockImplementation(
+      (p: Parameters<typeof fs.readFileSync>[0], ...rest: unknown[]) => {
+        const pStr = typeof p === "string" ? p : String(p);
+        if (pStr.startsWith(agentsDir) && pStr.endsWith(".md")) {
+          return Buffer.from("TAMPERED");
+        }
+        return (realReadFileSync as (...args: unknown[]) => unknown)(p, ...rest) as ReturnType<
+          typeof fs.readFileSync
+        >;
+      }
+    );
+
+    await provision(makeOpts(bundleDir, homeDir));
+
+    expect(fs.existsSync(path.join(homeDir, "manifest.json"))).toBe(false);
+  });
+
+  it("38d. manifest not written when loadAgentDefinition throws (verification_failed)", async () => {
+    const bundleDir = makeFixtureBundle(["alpha", "beta"]);
+    const homeDir = makeTempHome();
+
+    vi.mocked(loadAgentDefinition).mockImplementation(() => {
+      throw new Error("Corrupt frontmatter");
+    });
+
+    await provision(makeOpts(bundleDir, homeDir));
+
+    expect(fs.existsSync(path.join(homeDir, "manifest.json"))).toBe(false);
+  });
+});
+
+describe("provision() — WS-P1-04a: repair path manifest and type shape", () => {
+  it("39. repair path: manifest absent + agentsDir present → 'repaired', manifest written, no repairedFiles field", async () => {
+    // Arrange: agentsDir with valid fixture content (from bundleDir), NO manifest.json.
+    // This is the canonical repair scenario under WS-P1-04a: manifest absent triggers repair.
+    const bundleDir = makeFixtureBundle(["alpha", "beta", "gamma"]);
+    const homeDir = makeTempHome();
+
+    const agentsDir = path.join(homeDir, "agents");
+    fs.mkdirSync(agentsDir, { recursive: true });
+
+    // Pre-populate agentsDir with real fixture content (valid agent files)
+    for (const stem of ["alpha", "beta", "gamma"]) {
+      fs.copyFileSync(path.join(bundleDir, `${stem}.md`), path.join(agentsDir, `${stem}.md`));
+    }
+    // NO manifest.json — this is the repair trigger
+
+    // Act
+    const result = await provision(makeOpts(bundleDir, homeDir));
+
+    // Assert: repaired (not already_provisioned, not ok)
+    expect(result.status).toBe("repaired");
+
+    // WS-P1-04a: repairedFiles[] removed — result must NOT have this property
+    expect(result).not.toHaveProperty("repairedFiles");
+
+    // manifest.json must be written as part of the repair path
+    const manifestPath = path.join(homeDir, "manifest.json");
+    expect(fs.existsSync(manifestPath)).toBe(true);
+
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8")) as Record<string, unknown>;
+    expect(manifest["schema_version"]).toBe("1");
+    expect(manifest["agents_dir"]).toBe(agentsDir);
+    expect(manifest["bundle_signature_key_id"]).toBe("test-key-id");
+
+    const files = manifest["files"] as Record<string, unknown>;
+    expect(Object.keys(files).sort()).toEqual(["alpha", "beta", "gamma"]);
+  });
+
+  it("40. repair path: manifest absent + agentsDir present → checkRevocation called exactly once", async () => {
+    // The repair path must gate on revocation exactly once (same as fresh provision).
+    const bundleDir = makeFixtureBundle(["alpha", "beta"]);
+    const homeDir = makeTempHome();
+
+    const agentsDir = path.join(homeDir, "agents");
+    fs.mkdirSync(agentsDir, { recursive: true });
+    fs.copyFileSync(path.join(bundleDir, "alpha.md"), path.join(agentsDir, "alpha.md"));
+    fs.copyFileSync(path.join(bundleDir, "beta.md"), path.join(agentsDir, "beta.md"));
+    // NO manifest.json
+
+    await provision(makeOpts(bundleDir, homeDir));
+
+    expect(vi.mocked(checkRevocation)).toHaveBeenCalledTimes(1);
+  });
+});
+
+// =============================================================================
+// WS-P1-04a: REPAIR PATH ERROR BRANCHES (parallel to fresh-provision tests 11,
+// 22, 25, 26, 28, 37 — covers the 6 /* c8 ignore */ blocks in the repair path)
+// =============================================================================
+
+describe("provision() — repair path error branches (covers c8 ignore blocks)", () => {
+  it("42. repair path: mkdtempSync failure → io_error (parallel to test 25)", async () => {
+    // Arrange: agentsDir present (no manifest) to trigger repair path.
+    // checkRevocation is called before mkdtempSync in the repair path; it must
+    // fire once (PASS) before the mkdtempSync spy throws.
+    const bundleDir = makeFixtureBundle(["alpha", "beta"]);
+    const homeDir = makeTempHome();
+
+    const agentsDir = path.join(homeDir, "agents");
+    fs.mkdirSync(agentsDir, { recursive: true });
+    fs.copyFileSync(path.join(bundleDir, "alpha.md"), path.join(agentsDir, "alpha.md"));
+    fs.copyFileSync(path.join(bundleDir, "beta.md"), path.join(agentsDir, "beta.md"));
+    // NO manifest.json — triggers repair path
+
+    // checkRevocation defaults to PASS from beforeEach — no override needed.
+    // mockImplementationOnce so only the FIRST mkdtempSync call (staging dir creation)
+    // throws; any prior real calls (from makeFixtureBundle / makeTempHome setup) already
+    // completed before this spy is installed.
+    vi.spyOn(fs, "mkdtempSync").mockImplementationOnce(() => {
+      throw Object.assign(new Error("No space left on device"), { code: "ENOSPC" });
+    });
+
+    // Act
+    const result = await provision(makeOpts(bundleDir, homeDir));
+
+    // Assert: io_error with ENOSPC message
+    expect(result.status).toBe("error");
+    if (result.status !== "error") throw new Error("narrowing guard");
+    expect(result.kind).toBe("io_error");
+    expect(result.reason).toContain("No space left on device");
+
+    // checkRevocation was called once (before mkdtempSync, in the repair path revocation gate)
+    expect(vi.mocked(checkRevocation)).toHaveBeenCalledTimes(1);
+
+    // agentsDir still exists — mkdtempSync failed before rmSync(agentsDir) was reached
+    expect(fs.existsSync(agentsDir)).toBe(true);
+  });
+
+  it("43. repair path: staging writeFileSync failure → io_error, staging cleaned up, agentsDir intact (parallel to test 26)", async () => {
+    // Arrange: agentsDir present (no manifest) to trigger repair path.
+    // The staging write loop fires BEFORE rmSync(agentsDir), so when the write
+    // loop fails, agentsDir is still present.
+    // The staging dir created by mkdtempSync must be cleaned up on error.
+    const bundleDir = makeFixtureBundle(["alpha", "beta"]);
+    const homeDir = makeTempHome();
+
+    const agentsDir = path.join(homeDir, "agents");
+    fs.mkdirSync(agentsDir, { recursive: true });
+    fs.copyFileSync(path.join(bundleDir, "alpha.md"), path.join(agentsDir, "alpha.md"));
+    fs.copyFileSync(path.join(bundleDir, "beta.md"), path.join(agentsDir, "beta.md"));
+    // NO manifest.json — triggers repair path
+
+    // Count teo-provision-* staging dirs before provision() to verify cleanup.
+    const tmpDir = os.tmpdir();
+    const provisionDirsBefore = fs
+      .readdirSync(tmpDir)
+      .filter((f) => f.startsWith("teo-provision-")).length;
+
+    // The repair path's writeFileSync loop writes into the staging dir.
+    // mockImplementationOnce fires on the first writeFileSync call inside provision()
+    // (the first agent file into staging).
+    const realWriteFileSync = fs.writeFileSync.bind(fs);
+    vi.spyOn(fs, "writeFileSync").mockImplementationOnce(() => {
+      throw Object.assign(new Error("I/O error during staging"), { code: "EIO" });
+    });
+
+    // Act
+    const result = await provision(makeOpts(bundleDir, homeDir));
+
+    // Assert: io_error with EIO message
+    expect(result.status).toBe("error");
+    if (result.status !== "error") throw new Error("narrowing guard");
+    expect(result.kind).toBe("io_error");
+    expect(result.reason).toContain("I/O error during staging");
+
+    // Staging dir must have been cleaned up (best-effort rmSync in the catch block)
+    const provisionDirsAfter = fs
+      .readdirSync(tmpDir)
+      .filter((f) => f.startsWith("teo-provision-")).length;
+    expect(provisionDirsAfter).toBe(provisionDirsBefore);
+
+    // agentsDir still exists — rmSync(agentsDir) fires AFTER staging writes,
+    // so a write failure leaves agentsDir untouched.
+    expect(fs.existsSync(agentsDir)).toBe(true);
+
+    // Restore the spy so the afterEach cleanup (rmSync on tempDirs) works correctly.
+    vi.restoreAllMocks();
+    void realWriteFileSync; // prevent unused-variable lint warning
+  });
+
+  it("44. repair path: renameSync EIO → io_error (parallel to test 11)", async () => {
+    // Arrange: agentsDir present (no manifest) to trigger repair path.
+    // renameSync throws EIO (generic I/O, not EXDEV and not EACCES) — exercises
+    // the fallthrough else-branch in the repair path rename error handler.
+    const bundleDir = makeFixtureBundle(["alpha", "beta"]);
+    const homeDir = makeTempHome();
+
+    const agentsDir = path.join(homeDir, "agents");
+    fs.mkdirSync(agentsDir, { recursive: true });
+    fs.copyFileSync(path.join(bundleDir, "alpha.md"), path.join(agentsDir, "alpha.md"));
+    fs.copyFileSync(path.join(bundleDir, "beta.md"), path.join(agentsDir, "beta.md"));
+    // NO manifest.json — triggers repair path
+
+    // Throw EIO on the first renameSync call (staging → agentsDir).
+    vi.spyOn(fs, "renameSync").mockImplementationOnce(() => {
+      throw Object.assign(new Error("I/O error"), { code: "EIO" });
+    });
+
+    // Act
+    const result = await provision(makeOpts(bundleDir, homeDir));
+
+    // Assert
+    expect(result.status).toBe("error");
+    if (result.status !== "error") throw new Error("narrowing guard");
+    expect(result.kind).toBe("io_error");
+    expect(result.reason).toContain("I/O error");
+  });
+
+  it("45. repair path: renameSync EACCES → permission_denied (mirrors fresh-provision path, test 28)", async () => {
+    // Arrange: agentsDir present (no manifest) to trigger repair path.
+    // renameSync throws EACCES. The repair path rename error handler now has an EACCES
+    // branch that mirrors the fresh-provision path (test 28 → permission_denied).
+    const bundleDir = makeFixtureBundle(["alpha", "beta"]);
+    const homeDir = makeTempHome();
+
+    const agentsDir = path.join(homeDir, "agents");
+    fs.mkdirSync(agentsDir, { recursive: true });
+    fs.copyFileSync(path.join(bundleDir, "alpha.md"), path.join(agentsDir, "alpha.md"));
+    fs.copyFileSync(path.join(bundleDir, "beta.md"), path.join(agentsDir, "beta.md"));
+    // NO manifest.json — triggers repair path
+
+    // Throw EACCES on the first renameSync call (staging → agentsDir).
+    vi.spyOn(fs, "renameSync").mockImplementationOnce(() => {
+      throw Object.assign(new Error("Permission denied"), { code: "EACCES" });
+    });
+
+    // Act
+    const result = await provision(makeOpts(bundleDir, homeDir));
+
+    // Assert: permission_denied (mirrors fresh-provision path behavior)
+    expect(result.status).toBe("error");
+    if (result.status !== "error") throw new Error("narrowing guard");
+    expect(result.kind).toBe("permission_denied");
+    expect(result.reason).toContain("Permission denied");
+  });
+
+  it("46. repair path: EXDEV copy failure leaves no partial agentsDir (parallel to test 22)", async () => {
+    // Arrange: agentsDir present (no manifest) to trigger repair path.
+    // Chain two spies: renameSync EXDEV on the first call (staging → agentsDir),
+    // then copyFileSync throws ENOSPC to fail the EXDEV fallback copy.
+    // After the error, agentsDir must NOT exist:
+    //   - rmSync(agentsDir) fires BEFORE the rename attempt (removes it)
+    //   - EXDEV fallback calls mkdirSync(agentsDir) then copyFileSync fails
+    //   - cleanup in copyErr catch calls rmSync(agentsDir, { recursive: true, force: true })
+    const bundleDir = makeFixtureBundle(["alpha", "beta", "gamma"]);
+    const homeDir = makeTempHome();
+
+    const agentsDir = path.join(homeDir, "agents");
+    fs.mkdirSync(agentsDir, { recursive: true });
+    for (const stem of ["alpha", "beta", "gamma"]) {
+      fs.copyFileSync(path.join(bundleDir, `${stem}.md`), path.join(agentsDir, `${stem}.md`));
+    }
+    // NO manifest.json — triggers repair path
+
+    // First renameSync throws EXDEV; subsequent renames (manifest .tmp → .json) pass through.
+    vi.spyOn(fs, "renameSync").mockImplementationOnce(() => {
+      throw Object.assign(new Error("Invalid cross-device link"), { code: "EXDEV" });
+    });
+    // copyFileSync always throws ENOSPC — makes the EXDEV fallback copy fail immediately.
+    vi.spyOn(fs, "copyFileSync").mockImplementation(() => {
+      throw Object.assign(new Error("No space left on device"), { code: "ENOSPC" });
+    });
+
+    // Act
+    const result = await provision(makeOpts(bundleDir, homeDir));
+
+    // Assert: io_error from copyErr path
+    expect(result.status).toBe("error");
+    if (result.status !== "error") throw new Error("narrowing guard");
+    expect(result.kind).toBe("io_error");
+
+    // agentsDir must NOT exist: rmSync(agentsDir) ran before the rename attempt,
+    // and the copyErr catch cleanup also calls rmSync(agentsDir).
+    expect(fs.existsSync(agentsDir)).toBe(false);
+  });
+
+  it("47. repair path: manifest write failure → io_error 'Manifest write failed:' (parallel to test 37)", async () => {
+    // Arrange: agentsDir present (no manifest) to trigger repair path.
+    // All staging + SHA-256 verify + loadAgentDefinition steps succeed.
+    // The spy intercepts writeFileSync ONLY when the target path is the manifest .tmp file,
+    // letting all staging writes (into repairStagingDir) pass through normally.
+    const bundleDir = makeFixtureBundle(["alpha", "beta"]);
+    const homeDir = makeTempHome();
+
+    const agentsDir = path.join(homeDir, "agents");
+    fs.mkdirSync(agentsDir, { recursive: true });
+    fs.copyFileSync(path.join(bundleDir, "alpha.md"), path.join(agentsDir, "alpha.md"));
+    fs.copyFileSync(path.join(bundleDir, "beta.md"), path.join(agentsDir, "beta.md"));
+    // NO manifest.json — triggers repair path
+
+    const manifestTmpPath = path.join(homeDir, "manifest.json.tmp");
+    const realWriteFileSync = fs.writeFileSync.bind(fs);
+
+    vi.spyOn(fs, "writeFileSync").mockImplementation(
+      (p: Parameters<typeof fs.writeFileSync>[0], ...rest: unknown[]) => {
+        const pStr = typeof p === "string" ? p : String(p);
+        if (pStr === manifestTmpPath) {
+          throw Object.assign(new Error("ENOSPC: no space left on device"), { code: "ENOSPC" });
+        }
+        return (realWriteFileSync as (...args: unknown[]) => unknown)(p, ...rest) as ReturnType<
+          typeof fs.writeFileSync
+        >;
+      }
+    );
+
+    // Act
+    const result = await provision(makeOpts(bundleDir, homeDir));
+
+    // Assert: io_error with "Manifest write failed:" prefix
+    expect(result.status).toBe("error");
+    if (result.status !== "error") throw new Error("narrowing guard");
+    expect(result.kind).toBe("io_error");
+    expect(result.reason).toMatch(/^Manifest write failed:/);
+
+    // manifest.json must NOT be written
+    expect(fs.existsSync(path.join(homeDir, "manifest.json"))).toBe(false);
+
+    // manifest.json.tmp must be cleaned up (best-effort delete in writeManifest catch)
+    expect(fs.existsSync(manifestTmpPath)).toBe(false);
+  });
+
+  it("48. repair path: EXDEV success → per-file copy succeeds, returns repaired, manifest written (parallel to test 12)", async () => {
+    // Arrange: agentsDir present (no manifest) to trigger repair path.
+    // renameSync throws EXDEV on the first call (staging → agentsDir), triggering
+    // the EXDEV fallback copy path inside the repair branch. The copy succeeds
+    // (subsequent renames and real fs calls pass through).
+    // This test covers the /* c8 ignore start/stop */ block in provision.ts
+    // at the EXDEV-success staging cleanup + chmod lines in the repair path.
+    const bundleDir = makeFixtureBundle(["alpha", "beta"]);
+    const homeDir = makeTempHome();
+
+    const agentsDir = path.join(homeDir, "agents");
+    fs.mkdirSync(agentsDir, { recursive: true });
+    fs.copyFileSync(path.join(bundleDir, "alpha.md"), path.join(agentsDir, "alpha.md"));
+    fs.copyFileSync(path.join(bundleDir, "beta.md"), path.join(agentsDir, "beta.md"));
+    // NO manifest.json — triggers repair path
+
+    const realRenameSync = fs.renameSync.bind(fs);
+    let callCount = 0;
+    vi.spyOn(fs, "renameSync").mockImplementation((...args) => {
+      callCount++;
+      if (callCount === 1) {
+        // First call is the staging dir → agentsDir rename; throw EXDEV
+        throw Object.assign(new Error("Invalid cross-device link"), { code: "EXDEV" });
+      }
+      // Subsequent renames (e.g. manifest .tmp → .json) pass through
+      return realRenameSync(...(args as Parameters<typeof fs.renameSync>));
+    });
+
+    // Act
+    const result = await provision(makeOpts(bundleDir, homeDir));
+
+    // Assert: EXDEV fallback recovered fully — repair path returns repaired
+    expect(result.status).toBe("repaired");
+
+    // Agent files must be present in agentsDir after the per-file copy
+    expect(fs.existsSync(path.join(agentsDir, "alpha.md"))).toBe(true);
+    expect(fs.existsSync(path.join(agentsDir, "beta.md"))).toBe(true);
+
+    // manifest.json must be written after successful repair + verify
+    expect(fs.existsSync(path.join(homeDir, "manifest.json"))).toBe(true);
+    const manifest = JSON.parse(
+      fs.readFileSync(path.join(homeDir, "manifest.json"), "utf8")
+    ) as Record<string, unknown>;
+    expect(manifest["schema_version"]).toBe("1");
+  });
+
+  it("49. repair path: SHA-256 mismatch → verification_failed, no manifest.json written (parallel to test 36)", async () => {
+    // Arrange: agentsDir present (no manifest) to trigger repair path.
+    // Spy on fs.readFileSync to return tampered bytes when reading from agentsDir
+    // paths during the verify-after-write step, simulating silent disk corruption.
+    // Reads from bundleDir and other paths pass through to the real implementation.
+    // This test covers the /* c8 ignore next 6 */ block at the SHA-256 mismatch
+    // return in the repair path (provision.ts lines 395-402).
+    const bundleDir = makeFixtureBundle(["alpha", "beta"]);
+    const homeDir = makeTempHome();
+
+    const agentsDir = path.join(homeDir, "agents");
+    fs.mkdirSync(agentsDir, { recursive: true });
+    fs.copyFileSync(path.join(bundleDir, "alpha.md"), path.join(agentsDir, "alpha.md"));
+    fs.copyFileSync(path.join(bundleDir, "beta.md"), path.join(agentsDir, "beta.md"));
+    // NO manifest.json — triggers repair path
+
+    const realReadFileSync = fs.readFileSync.bind(fs);
+    vi.spyOn(fs, "readFileSync").mockImplementation(
+      (p: Parameters<typeof fs.readFileSync>[0], ...rest: unknown[]) => {
+        const pStr = typeof p === "string" ? p : String(p);
+        // Tamper with reads from the installed agentsDir (verify-after-write step)
+        if (pStr.startsWith(agentsDir) && pStr.endsWith(".md")) {
+          return Buffer.from("TAMPERED CONTENT");
+        }
+        // All other reads (bundleDir, staging, package.json, etc.) pass through
+        return (realReadFileSync as (...args: unknown[]) => unknown)(p, ...rest) as ReturnType<
+          typeof fs.readFileSync
+        >;
+      }
+    );
+
+    // Act
+    const result = await provision(makeOpts(bundleDir, homeDir));
+
+    // Assert: SHA-256 mismatch → verification_failed
+    expect(result.status).toBe("error");
+    if (result.status !== "error") throw new Error("narrowing guard");
+    expect(result.kind).toBe("verification_failed");
+    expect(result.reason).toMatch(/SHA-256 mismatch/i);
+
+    // manifest.json must NOT be written when repair-path verification fails
+    expect(fs.existsSync(path.join(homeDir, "manifest.json"))).toBe(false);
+  });
+
+  it("50. repair path: loadAgentDefinition throws bare string → verification_failed (parallel to test 29)", async () => {
+    // Arrange: agentsDir present (no manifest) to trigger repair path.
+    // loadAgentDefinition throws a bare string (not an Error instance) — exercises
+    // the String(err) branch of the ternary in the repair path at provision.ts L411.
+    // Test 20 covers the Error throw branch; this covers the else branch (bare string).
+    // This test covers the /* c8 ignore next */ annotation at L411 in the repair path.
+    const bundleDir = makeFixtureBundle(["alpha", "beta"]);
+    const homeDir = makeTempHome();
+
+    const agentsDir = path.join(homeDir, "agents");
+    fs.mkdirSync(agentsDir, { recursive: true });
+    fs.copyFileSync(path.join(bundleDir, "alpha.md"), path.join(agentsDir, "alpha.md"));
+    fs.copyFileSync(path.join(bundleDir, "beta.md"), path.join(agentsDir, "beta.md"));
+    // NO manifest.json — triggers repair path
+
+    vi.mocked(loadAgentDefinition).mockImplementation(() => {
+      throw "bare string error in repair";
+    });
+
+    // Act
+    const result = await provision(makeOpts(bundleDir, homeDir));
+
+    // Assert: verification_failed with bare string message in reason
+    expect(result.status).toBe("error");
+    if (result.status !== "error") throw new Error("narrowing guard");
+    expect(result.kind).toBe("verification_failed");
+    expect(result.reason).toContain("bare string error in repair");
   });
 });

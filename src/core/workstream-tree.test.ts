@@ -584,6 +584,62 @@ describe("WorkstreamTree — git backend on non-git directory", () => {
 });
 
 // ---------------------------------------------------------------------------
+// BOUNDARY — closeNone: lock file already gone (vitest-4 coverage: line 207 false)
+// When close() is called for a `none`-backend workstream whose lock file has
+// been externally deleted, closeNone() must be a no-op — no throw, no error.
+// This exercises the FALSE branch of `if (fs.existsSync(lockPath))` in closeNone().
+// ---------------------------------------------------------------------------
+
+describe("WorkstreamTree — boundary: closeNone with missing lock file", () => {
+  it("close() succeeds silently when the none-backend lock file has been externally removed", async () => {
+    // Allocate a none-backend workstream so a registry 'created' entry exists.
+    const tree = makeTree("proj-close-none-missing");
+    await tree.allocate("ws-lock-missing", "none");
+
+    // Simulate external deletion of the lock file before close() is called.
+    const lockPath = path.join(
+      tmpHome,
+      ".teo",
+      "locks",
+      "proj-close-none-missing",
+      "ws-lock-missing.lock"
+    );
+    expect(fs.existsSync(lockPath)).toBe(true); // sanity: lock was created
+    fs.unlinkSync(lockPath); // external removal
+    expect(fs.existsSync(lockPath)).toBe(false); // sanity: now gone
+
+    // close() must not throw even though the lock file is absent.
+    // This exercises the FALSE branch of `if (fs.existsSync(lockPath))` in closeNone().
+    await expect(tree.close("ws-lock-missing")).resolves.toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// BOUNDARY — closeSandbox: sandbox dir already gone (vitest-4 coverage: line 262 false)
+// When close() is called for a `sandbox`-backend workstream whose sandbox
+// directory has been externally removed, closeSandbox() must be a no-op.
+// This exercises the FALSE branch of `if (fs.existsSync(sandboxDir))` in closeSandbox().
+// ---------------------------------------------------------------------------
+
+describe("WorkstreamTree — boundary: closeSandbox with missing sandbox dir", () => {
+  it("close() succeeds silently when the sandbox directory has been externally removed", async () => {
+    const tree = makeTree("proj-close-sandbox-missing");
+    const handle = await tree.allocate("ws-sandbox-missing", "sandbox");
+
+    // Verify sandbox was created
+    expect(fs.existsSync(handle.cwd)).toBe(true);
+
+    // Simulate external deletion of the sandbox directory before close() is called.
+    fs.rmSync(handle.cwd, { recursive: true, force: true });
+    expect(fs.existsSync(handle.cwd)).toBe(false); // sanity: now gone
+
+    // close() must not throw — closeSandbox's existsSync check returns false, no-op.
+    // This exercises the FALSE branch of `if (fs.existsSync(sandboxDir))` in closeSandbox().
+    await expect(tree.close("ws-sandbox-missing")).resolves.toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // MISUSE — list() rejects when registry contains corrupted JSON
 // WS-CORE-08: gap fill — covers the catch(reject) branch in list()
 // ---------------------------------------------------------------------------

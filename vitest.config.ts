@@ -125,6 +125,17 @@ export default defineConfig({
           branches: 100,
           statements: 100,
         },
+        // WS-P1-07: run-plan.ts is critical-path — the runPlan() engine entrypoint
+        // that wires validate → TopologicalRunner → adapter.spawnAgent. WS-P1-09
+        // (Phase 1 CI gate) calls it directly. SCRIPT-task execution is deferred
+        // (returns FAILED) pending a separate security-reviewed workstream.
+        // 100% branch coverage is mandatory.
+        "src/engine/run-plan.ts": {
+          lines: 100,
+          functions: 100,
+          branches: 100,
+          statements: 100,
+        },
       },
     },
   },

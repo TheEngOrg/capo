@@ -154,6 +154,15 @@ export default defineConfig({
           branches: 100,
           statements: 100,
         },
+        // WS-P1-08: skill.ts is critical-path — the invokeSkill() entrypoint wires
+        // provision → sagePlan → runPlan. 3 linear steps + 2 error branches.
+        // Genuine 100% coverage — no ignore-to-green.
+        "src/skill/skill.ts": {
+          lines: 100,
+          functions: 100,
+          branches: 100,
+          statements: 100,
+        },
       },
     },
   },

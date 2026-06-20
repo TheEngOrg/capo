@@ -11,6 +11,15 @@ export default defineConfig({
     // The no-network setup file monkey-patches http/https/fetch so any live-model
     // call throws immediately. Zero outbound HTTP across the full harness run.
     setupFiles: ["./tests/acceptance/support/no-network.ts"],
+    // WS-P1-04: forks pool is required for vi.spyOn on node built-in modules
+    // (node:fs mkdirSync, renameSync, writeFileSync). vmForks/vmThreads produce
+    // non-configurable ESM namespace objects where vi.spyOn cannot redefine properties.
+    pool: "forks",
+    // WS-P1-04: mockReset resets mock call counts AND implementations before each test.
+    // Required for provision tests: clearMocks alone doesn't reset mockImplementation,
+    // which causes test-05's loadAgentDefinition override to leak into tests 08/09.
+    // vi.fn(original) mocks reset to their original implementations (not undefined).
+    mockReset: true,
     coverage: {
       provider: "v8",
       include: ["src/**/*.ts"],
@@ -131,6 +140,15 @@ export default defineConfig({
         // (returns FAILED) pending a separate security-reviewed workstream.
         // 100% branch coverage is mandatory.
         "src/engine/run-plan.ts": {
+          lines: 100,
+          functions: 100,
+          branches: 100,
+          statements: 100,
+        },
+        // WS-P1-04: provision.ts is critical-path — the sole sanctioned writer to ~/.teo/.
+        // Atomic staging, EXDEV fallback, revocation integration, and repair paths must all
+        // be covered. 100% branch coverage is mandatory.
+        "src/bootstrap/provision.ts": {
           lines: 100,
           functions: 100,
           branches: 100,

@@ -172,8 +172,8 @@ export async function checkRevocation(opts: CheckRevocationOptions): Promise<Rev
 
   // -------------------------------------------------------------------------
   // Step 4 — Verify the ed25519 signature cryptographically.
-  // @noble/ed25519 verifyAsync returns false for invalid sigs,
-  // throws on malformed input (wrong key length, etc.).
+  // @noble/ed25519 verifyAsync returns false for invalid sigs and absorbs
+  // malformed input internally. It only throws when crypto.subtle is absent.
   // -------------------------------------------------------------------------
 
   const dataBytes = Buffer.from(data);
@@ -182,13 +182,14 @@ export async function checkRevocation(opts: CheckRevocationOptions): Promise<Rev
   let valid: boolean;
   try {
     valid = await ed.verifyAsync(sigBytes, dataBytes, pubKeyBytes);
-    /* c8 ignore next 6 */
-  } catch (err) {
-    // @noble/ed25519 throws on malformed input (e.g., invalid key length).
-    // Tests use a well-formed 32-byte key, so this path is production-only.
+  } catch (err) /* c8 ignore start */ {
+    // @noble/ed25519 throws when the WebCrypto API (crypto.subtle) is absent —
+    // not on malformed input (wrong key length etc. returns false, not a throw).
+    // Tests run under Node with crypto.subtle available, so this path is
+    // production-only (e.g., restricted runtime without WebCrypto support).
     const message = err instanceof Error ? err.message : String(err);
     return blocked(`Signature verification error: ${message}`);
-  }
+  } /* c8 ignore stop */
 
   if (!valid) {
     return blocked(

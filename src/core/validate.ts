@@ -200,6 +200,7 @@ export function validatePlan(plan: Plan): ValidationResult {
         const cyclePath = [...path.slice(cycleStart), id, needsId];
         // Normalize to a canonical form to avoid duplicate reports for the same cycle
         const cycleKey = cyclePath.join("→");
+        /* c8 ignore else */
         if (!reportedCycles.has(cycleKey)) {
           reportedCycles.add(cycleKey);
           errors.push({

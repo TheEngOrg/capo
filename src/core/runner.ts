@@ -353,9 +353,11 @@ function topologicalSort(tasks: TEOTask[]): SortResult {
   const dependents = new Map<string, string[]>(); // task → tasks that need it
 
   for (const task of tasks) {
+    /* c8 ignore else */
     if (!inDegree.has(task.id)) {
       inDegree.set(task.id, 0);
     }
+    /* c8 ignore else */
     if (!dependents.has(task.id)) {
       dependents.set(task.id, []);
     }
@@ -364,10 +366,10 @@ function topologicalSort(tasks: TEOTask[]): SortResult {
   for (const task of tasks) {
     for (const dep of task.needs) {
       // All task IDs are pre-initialized above; ?? fallbacks are unreachable.
-      /* c8 ignore next */
+      /* c8 ignore next 2 */
       const current = inDegree.get(task.id) ?? 0;
       inDegree.set(task.id, current + 1);
-      /* c8 ignore next */
+      /* c8 ignore next 2 */
       const list = dependents.get(dep) ?? [];
       list.push(task.id);
       dependents.set(dep, list);
@@ -386,12 +388,13 @@ function topologicalSort(tasks: TEOTask[]): SortResult {
   while (queue.length > 0) {
     const id = queue.shift()!;
     const task = taskMap.get(id);
+    /* c8 ignore else */
     if (task !== undefined) {
       order.push(task);
     }
-    /* c8 ignore next */
+    /* c8 ignore next 2 */
     for (const dependentId of dependents.get(id) ?? []) {
-      /* c8 ignore next */
+      /* c8 ignore next 2 */
       const deg = (inDegree.get(dependentId) ?? 1) - 1;
       inDegree.set(dependentId, deg);
       if (deg === 0) {

@@ -7,6 +7,9 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   test: {
+    // Exclude live integration tests — they run via vitest.config.live.ts only.
+    // Live tests require INTEGRATION_TESTS=1 and a real ANTHROPIC_API_KEY.
+    exclude: ["tests/live/**", "node_modules/**"],
     // WS-CORE-09: Block all outbound network calls globally.
     // The no-network setup file monkey-patches http/https/fetch so any live-model
     // call throws immediately. Zero outbound HTTP across the full harness run.

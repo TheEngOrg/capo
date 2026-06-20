@@ -1,0 +1,29 @@
+name: Live Integration Tests
+
+# Manual-trigger only — no push, no pull_request, no schedule.
+# Run from GitHub Actions UI or via `gh workflow run live-test.yml`.
+on:
+  workflow_dispatch:
+
+jobs:
+  live-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ">=22"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run live tests
+        run: npm run test:live
+        env:
+          # SECURITY: ANTHROPIC_API_KEY is passed via GitHub secret — never hardcoded.
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          INTEGRATION_TESTS: "1"

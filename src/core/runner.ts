@@ -67,6 +67,12 @@ export interface StepResult {
   status: "PASS" | "FAILED" | "SKIPPED";
   /** Human-readable detail, e.g. error message or skip reason. */
   detail?: string;
+  /**
+   * HMAC-SHA-256 hex signature over the canonical verdict payload.
+   * Present only when runPlan is called with a sessionId (signed run path).
+   * Absent on unsigned (zero-footprint CI) runs.
+   */
+  signature?: string;
 }
 
 /**

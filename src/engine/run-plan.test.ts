@@ -8,11 +8,17 @@
 // Implementation complete. All specs pass against src/engine/run-plan.ts.
 // =============================================================================
 
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import * as os from "node:os";
 import type { Plan, TEOTask } from "../core/plan.js";
 import type { RunResult } from "../core/runner.js";
 import type { TEOAdapter, AgentContext } from "../adapters/types.js";
 import { runPlan, type RunPlanOptions } from "../engine/run-plan.js";
+import { AppendOnlyLedger } from "../core/ledger.js";
+import type { LedgerEvent } from "../core/ledger.js";
+import { HmacSigner } from "../core/sign.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -295,16 +301,12 @@ describe("runPlan() — golden path: multi-task plans and overallStatus rollup",
     const plan = makePlan([taskA, taskB]);
     const adapter = makeMockAdapter();
     // Make task A fail
-    adapter.spawnAgent.mockImplementation((task: TEOTask, _ctx: AgentContext) => {
-      if (task.id === "rollup-fail-a") {
-        return Promise.resolve({
-          taskId: task.id,
-          status: "FAILED" as const,
-          detail: "forced failure",
-        });
-      }
-      return Promise.resolve({ taskId: task.id, status: "PASS" as const });
-    });
+    // eslint-disable-next-line @typescript-eslint/no-misused-promises
+    adapter.spawnAgent.mockImplementation((task: TEOTask, _ctx: AgentContext) =>
+      task.id === "rollup-fail-a"
+        ? Promise.resolve({ taskId: task.id, status: "FAILED" as const, detail: "forced failure" })
+        : Promise.resolve({ taskId: task.id, status: "PASS" as const })
+    );
 
     const result: RunResult = await runPlan(plan, adapter);
 
@@ -314,5 +316,340 @@ describe("runPlan() — golden path: multi-task plans and overallStatus rollup",
     // task B depends on A which failed — it should be SKIPPED by the runner
     const stepB = result.steps.find((s) => s.taskId === "rollup-fail-b");
     expect(stepB?.status).toBe("SKIPPED");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// WS-GO-01 — Group 1: unsigned path (no sessionId)
+// ---------------------------------------------------------------------------
+
+describe("runPlan() — unsigned path (no sessionId)", () => {
+  it("no sessionId → StepResult.signature is undefined, no ledger created", async () => {
+    const taskA = makeAgentTask("unsigned-a");
+    const plan = makePlan([taskA]);
+    const adapter = makeMockAdapter();
+
+    // Spy on AppendOnlyLedger constructor — confirm it is never called
+    const constructorSpy = vi.spyOn(AppendOnlyLedger.prototype, "append");
+
+    const result: RunResult = await runPlan(plan, adapter);
+
+    expect(result.steps[0]?.signature).toBeUndefined();
+    expect(constructorSpy).not.toHaveBeenCalled();
+
+    constructorSpy.mockRestore();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// WS-GO-01 — Group 2: signed path (with sessionId)
+// ---------------------------------------------------------------------------
+
+/** Read all lines from a JSONL file, parse each as JSON. */
+function readLedgerLines(filePath: string): LedgerEvent[] {
+  const raw = fs.readFileSync(filePath, "utf8");
+  return raw
+    .split("\n")
+    .filter((l) => l.trim().length > 0)
+    .map((l) => JSON.parse(l) as LedgerEvent);
+}
+
+describe("runPlan() — signed path (sessionId provided)", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "teo-go01-"));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  const makeSignedOpts = (sessionId: string): RunPlanOptions => ({
+    sessionId,
+    ledgerBaseDir: tmpDir,
+  });
+
+  it("S1. JSONL file created at ledgerBaseDir/ledger/<sessionId>.jsonl", async () => {
+    const sessionId = "session-go01-s1";
+    const taskA = makeAgentTask("s1-task-a");
+    const taskB = makeAgentTask("s1-task-b", ["s1-task-a"]);
+    const plan = makePlan([taskA, taskB]);
+    const adapter = makeMockAdapter();
+
+    await runPlan(plan, adapter, makeSignedOpts(sessionId));
+
+    const filePath = path.join(tmpDir, "ledger", `${sessionId}.jsonl`);
+    expect(fs.existsSync(filePath)).toBe(true);
+
+    // 2 AGENT tasks + 1 CLOSE event = 3 lines
+    const lines = readLedgerLines(filePath);
+    expect(lines).toHaveLength(3);
+  });
+
+  it("S2. each StepResult has a valid HMAC signature (64 hex chars, verify() returns true)", async () => {
+    const sessionId = "session-go01-s2";
+    const taskA = makeAgentTask("s2-task-a");
+    const taskB = makeAgentTask("s2-task-b", ["s2-task-a"]);
+    const plan = makePlan([taskA, taskB], { plan_id: "plan-s2", project_id: "proj-test" });
+    const adapter = makeMockAdapter();
+
+    const result = await runPlan(plan, adapter, makeSignedOpts(sessionId));
+
+    const verifier = new HmacSigner({ baseDir: tmpDir });
+
+    for (const step of result.steps) {
+      // Signature must be a 64-char hex string
+      expect(step.signature).toMatch(/^[0-9a-f]{64}$/);
+
+      // Reconstruct payload from ledger event and verify
+      const filePath = path.join(tmpDir, "ledger", `${sessionId}.jsonl`);
+      const lines = readLedgerLines(filePath).filter(
+        (l) => l.task_id === step.taskId && l.phase === "EXECUTE"
+      );
+      expect(lines).toHaveLength(1);
+      const evt = lines[0]!;
+
+      const valid = verifier.verify(
+        {
+          plan_id: plan.plan_id,
+          task_id: evt.task_id,
+          actor_id: evt.actor_id,
+          verdict: evt.verdict,
+          ts: evt.ts,
+          seq: evt.seq,
+        },
+        step.signature!
+      );
+      expect(valid).toBe(true);
+    }
+  });
+
+  it("S3. ledger events match StepResult data (task_id, verdict, actor_id, phase, CLOSE event)", async () => {
+    const sessionId = "session-go01-s3";
+    const taskA = makeAgentTask("s3-task-a");
+    const taskB = makeAgentTask("s3-task-b", ["s3-task-a"]);
+    const plan = makePlan([taskA, taskB], { plan_id: "plan-s3", project_id: "proj-test" });
+    const adapter = makeMockAdapter();
+
+    await runPlan(plan, adapter, makeSignedOpts(sessionId));
+
+    const filePath = path.join(tmpDir, "ledger", `${sessionId}.jsonl`);
+    const lines = readLedgerLines(filePath);
+
+    // Two EXECUTE events + one CLOSE
+    const executeEvents = lines.filter((l) => l.phase === "EXECUTE");
+    const closeEvent = lines.find((l) => l.phase === "CLOSE");
+
+    expect(executeEvents).toHaveLength(2);
+    expect(closeEvent).toBeDefined();
+
+    const evtA = executeEvents.find((l) => l.task_id === "s3-task-a");
+    const evtB = executeEvents.find((l) => l.task_id === "s3-task-b");
+
+    expect(evtA?.verdict).toBe("PASS");
+    expect(evtA?.actor_id).toBe("eng"); // agent_id from makeAgentTask
+    expect(evtA?.actor_type).toBe("AGENT");
+    expect(evtB?.verdict).toBe("PASS");
+    expect(closeEvent?.verdict).toBeNull();
+  });
+
+  it("S4. CLOSE event summary is correct (4-task plan with failure cascade)", async () => {
+    const sessionId = "session-go01-s4";
+    // A passes, B depends on A (passes), C depends on A (fails), D depends on C (skipped)
+    const taskA = makeAgentTask("s4-a");
+    const taskB = makeAgentTask("s4-b", ["s4-a"]);
+    const taskC = makeAgentTask("s4-c", ["s4-a"]);
+    const taskD = makeAgentTask("s4-d", ["s4-c"]); // depends on C which will fail → SKIPPED
+
+    const plan = makePlan([taskA, taskB, taskC, taskD]);
+    const adapter = makeMockAdapter();
+
+    // Make C fail
+    // eslint-disable-next-line @typescript-eslint/no-misused-promises
+    adapter.spawnAgent.mockImplementation((task: TEOTask, _ctx: AgentContext) =>
+      task.id === "s4-c"
+        ? Promise.resolve({ taskId: task.id, status: "FAILED" as const, detail: "c fails" })
+        : Promise.resolve({ taskId: task.id, status: "PASS" as const })
+    );
+
+    await runPlan(plan, adapter, makeSignedOpts(sessionId));
+
+    const filePath = path.join(tmpDir, "ledger", `${sessionId}.jsonl`);
+    const lines = readLedgerLines(filePath);
+    const closeEvent = lines.find((l) => l.phase === "CLOSE");
+
+    expect(closeEvent?.detail).toMatchObject({
+      task_count: 4,
+      pass: 2, // A and B pass
+      fail: 1, // C fails
+      skipped: 1, // D is skipped
+    });
+  });
+
+  it("S5. FAILED status maps to LedgerVerdict FAIL (not FAILED)", async () => {
+    const sessionId = "session-go01-s5";
+    const taskA = makeAgentTask("s5-task-a");
+    const plan = makePlan([taskA]);
+    const adapter = makeMockAdapter();
+
+    adapter.spawnAgent.mockResolvedValueOnce({
+      taskId: "s5-task-a",
+      status: "FAILED" as const,
+      detail: "forced fail",
+    });
+
+    await runPlan(plan, adapter, makeSignedOpts(sessionId));
+
+    const filePath = path.join(tmpDir, "ledger", `${sessionId}.jsonl`);
+    const lines = readLedgerLines(filePath);
+    const executeEvent = lines.find((l) => l.phase === "EXECUTE");
+
+    expect(executeEvent?.verdict).toBe("FAIL");
+    expect(executeEvent?.verdict).not.toBe("FAILED");
+  });
+
+  it("S6. SKIPPED status maps to LedgerVerdict SKIPPED (A fails → B skipped)", async () => {
+    const sessionId = "session-go01-s6";
+    const taskA = makeAgentTask("s6-a");
+    const taskB = makeAgentTask("s6-b", ["s6-a"]);
+    const plan = makePlan([taskA, taskB]);
+    const adapter = makeMockAdapter();
+
+    // Make A fail
+    // eslint-disable-next-line @typescript-eslint/no-misused-promises
+    adapter.spawnAgent.mockImplementation((task: TEOTask, _ctx: AgentContext) =>
+      task.id === "s6-a"
+        ? Promise.resolve({ taskId: task.id, status: "FAILED" as const })
+        : Promise.resolve({ taskId: task.id, status: "PASS" as const })
+    );
+
+    const result = await runPlan(plan, adapter, makeSignedOpts(sessionId));
+
+    const filePath = path.join(tmpDir, "ledger", `${sessionId}.jsonl`);
+    const lines = readLedgerLines(filePath);
+
+    // B should be SKIPPED in the result
+    const stepB = result.steps.find((s) => s.taskId === "s6-b");
+    expect(stepB?.status).toBe("SKIPPED");
+
+    // The ledger event for B (if written by the executor) has verdict SKIPPED
+    const evtB = lines.find((l) => l.task_id === "s6-b" && l.phase === "EXECUTE");
+    if (evtB !== undefined) {
+      expect(evtB.verdict).toBe("SKIPPED");
+    }
+  });
+
+  it("S7. SCRIPT task gets ledger entry with verdict FAIL", async () => {
+    const sessionId = "session-go01-s7";
+    const taskA = makeScriptTask("s7-script");
+    const plan = makePlan([taskA]);
+    const adapter = makeMockAdapter();
+
+    await runPlan(plan, adapter, makeSignedOpts(sessionId));
+
+    const filePath = path.join(tmpDir, "ledger", `${sessionId}.jsonl`);
+    const lines = readLedgerLines(filePath);
+    const executeEvent = lines.find((l) => l.phase === "EXECUTE" && l.task_id === "s7-script");
+
+    expect(executeEvent).toBeDefined();
+    expect(executeEvent?.verdict).toBe("FAIL");
+    expect(executeEvent?.actor_type).toBe("SCRIPT");
+    expect(executeEvent?.actor_id).toBe("SYSTEM");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// WS-GO-01 — Group 3: misuse cases
+// ---------------------------------------------------------------------------
+
+describe("runPlan() — signed path misuse cases", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "teo-go01-misuse-"));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("M1. empty sessionId → rejects with LedgerPathError (path error)", async () => {
+    const taskA = makeAgentTask("m1-task");
+    const plan = makePlan([taskA]);
+    const adapter = makeMockAdapter();
+
+    await expect(runPlan(plan, adapter, { sessionId: "", ledgerBaseDir: tmpDir })).rejects.toThrow(
+      /session_id|path|invalid/i
+    );
+  });
+
+  it("M2. sessionId with '/' → rejects with LedgerPathError", async () => {
+    const taskA = makeAgentTask("m2-task");
+    const plan = makePlan([taskA]);
+    const adapter = makeMockAdapter();
+
+    await expect(
+      runPlan(plan, adapter, { sessionId: "foo/bar", ledgerBaseDir: tmpDir })
+    ).rejects.toThrow(/session_id|path|separator/i);
+  });
+
+  it("M3. ledgerBaseDir provided but no sessionId → unsigned behavior (no file, no signature)", async () => {
+    const taskA = makeAgentTask("m3-task");
+    const plan = makePlan([taskA]);
+    const adapter = makeMockAdapter();
+
+    const result = await runPlan(plan, adapter, { ledgerBaseDir: tmpDir });
+
+    // No signature
+    expect(result.steps[0]?.signature).toBeUndefined();
+
+    // No ledger file written
+    const ledgerDir = path.join(tmpDir, "ledger");
+    if (fs.existsSync(ledgerDir)) {
+      const files = fs.readdirSync(ledgerDir);
+      expect(files).toHaveLength(0);
+    } else {
+      expect(fs.existsSync(ledgerDir)).toBe(false);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// WS-GO-01 — Group 4: error isolation
+// ---------------------------------------------------------------------------
+
+describe("runPlan() — ledger error isolation", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "teo-go01-iso-"));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("E1. ledger.append() throwing → runPlan resolves, result.steps[0].status preserved", async () => {
+    const sessionId = "session-go01-iso";
+    const taskA = makeAgentTask("iso-task");
+    const plan = makePlan([taskA]);
+    const adapter = makeMockAdapter();
+
+    // Spy on AppendOnlyLedger.prototype.append to make it throw
+    const appendSpy = vi.spyOn(AppendOnlyLedger.prototype, "append").mockImplementation(() => {
+      throw new Error("simulated ledger write failure");
+    });
+
+    const result = await runPlan(plan, adapter, { sessionId, ledgerBaseDir: tmpDir });
+
+    // runPlan must not propagate the ledger error
+    expect(result.steps).toHaveLength(1);
+    expect(result.steps[0]?.status).toBe("PASS");
+    expect(result.overallStatus).toBe("PASS");
+    // signature is undefined because the append failed
+    expect(result.steps[0]?.signature).toBeUndefined();
+
+    appendSpy.mockRestore();
   });
 });

@@ -215,8 +215,11 @@ export class AppendOnlyLedger {
    * - Throws LedgerSerializeError if `detail` is not JSON-serializable.
    *
    * @param input - The caller-provided semantic fields (no seq/event_id/ts).
+   * @returns The assigned seq (monotonically increasing sequence number) and ts
+   *   (ISO-8601 UTC timestamp) for this event. Callers that need to sign the event
+   *   (e.g. HmacSigner) must use these values to reproduce the canonical payload.
    */
-  append(input: Omit<LedgerEvent, "event_id" | "seq" | "ts">): void {
+  append(input: Omit<LedgerEvent, "event_id" | "seq" | "ts">): { seq: number; ts: string } {
     if (this.closed) {
       throw new LedgerClosedError();
     }
@@ -256,6 +259,8 @@ export class AppendOnlyLedger {
 
     // Append — 'a' flag: creates if absent, never truncates.
     fs.appendFileSync(this.filePath, line, "utf8");
+
+    return { seq: this.seq, ts: event.ts };
   }
 
   /**

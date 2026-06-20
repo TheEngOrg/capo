@@ -530,6 +530,46 @@ describe("AppendOnlyLedger — golden path", () => {
 });
 
 // ---------------------------------------------------------------------------
+// WS-GO-01: AppendOnlyLedger.append() return value
+// ---------------------------------------------------------------------------
+
+describe("AppendOnlyLedger.append() return value (WS-GO-01)", () => {
+  let tempDir: string;
+  let ledger: AppendOnlyLedger;
+  const SESSION_ID = "session-go01-retval";
+
+  beforeEach(() => {
+    tempDir = makeTempDir();
+    ledger = new AppendOnlyLedger({ session_id: SESSION_ID, baseDir: tempDir });
+  });
+
+  afterEach(() => {
+    removeTempDir(tempDir);
+  });
+
+  it("returns { seq, ts } — seq increments monotonically", () => {
+    const r1 = ledger.append(makeEventInput({ phase: "EXECUTE", verdict: "PASS" }));
+    const r2 = ledger.append(makeEventInput({ phase: "EXECUTE", verdict: "FAIL" }));
+
+    // seq starts at 1, increments by 1
+    expect(r1.seq).toBe(1);
+    expect(r2.seq).toBe(2);
+
+    // ts is an ISO-8601 UTC timestamp
+    expect(r1.ts).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/);
+    expect(r2.ts).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/);
+
+    // Verify return values match what's written to file
+    const filePath = path.join(tempDir, "ledger", `${SESSION_ID}.jsonl`);
+    const lines = readLines(filePath);
+    expect(lines[0]?.seq).toBe(r1.seq);
+    expect(lines[0]?.ts).toBe(r1.ts);
+    expect(lines[1]?.seq).toBe(r2.seq);
+    expect(lines[1]?.ts).toBe(r2.ts);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // BOUNDARY: nothing written outside the injected base dir (isolation)
 // ---------------------------------------------------------------------------
 

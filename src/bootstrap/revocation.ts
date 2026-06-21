@@ -33,6 +33,7 @@ export type RevocationVerdict = "PASS" | "BLOCKED";
 export interface RevocationResult {
   verdict: RevocationVerdict;
   reason?: string;
+  warning?: string;
 }
 
 export interface CheckRevocationOptions {
@@ -92,6 +93,21 @@ function isRevocationList(value: unknown): value is RevocationList {
  */
 export async function checkRevocation(opts: CheckRevocationOptions): Promise<RevocationResult> {
   const { data, signature, publicKey, keyId, revocationList, revocationListFetcher } = opts;
+
+  // -------------------------------------------------------------------------
+  // WS-GO-02: Plugin-context fail-open path.
+  // When CLAUDE_PLUGIN_ROOT is set and non-empty, a missing signature returns
+  // PASS with a warning instead of BLOCKED. A present signature (even in plugin
+  // context) runs through the normal Ed25519 verify path below.
+  // -------------------------------------------------------------------------
+
+  const isPluginContext =
+    typeof process.env["CLAUDE_PLUGIN_ROOT"] === "string" &&
+    process.env["CLAUDE_PLUGIN_ROOT"].length > 0;
+
+  if ((signature === undefined || signature === null) && isPluginContext) {
+    return { verdict: "PASS", warning: "unsigned-plugin-context" };
+  }
 
   // -------------------------------------------------------------------------
   // Step 1 — Validate signature presence and length before doing any crypto.

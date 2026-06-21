@@ -25,6 +25,11 @@ jobs:
       - name: Type check
         run: npm run typecheck
 
+      - name: Bundle CLI entrypoint
+        # WS-GO-02: bin/teo-run.js is gitignored (esbuild artifact).
+        # Build it before tests so teo-run.test.ts subprocess tests can find it.
+        run: npm run bundle
+
       - name: Test with coverage
         run: npm run test:cov
 

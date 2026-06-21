@@ -1,0 +1,179 @@
+// =============================================================================
+// teo-run-entry.ts — CLI entrypoint for TEO runtime commands (WS-GO-02)
+//
+// CONTRACT (CLI arg protocol):
+//   node bin/teo-run.js <command> '<json-string>'
+//
+// COMMANDS:
+//   provision       — calls provision() with JSON opts
+//   validate-plan   — validates JSON against Zod PlanSchema
+//   sign            — calls HmacSigner.sign() with payload
+//   ledger-append   — calls AppendOnlyLedger.append()
+//   ledger-close    — calls AppendOnlyLedger.close()
+//
+// OUTPUT CONTRACT:
+//   All stdout is a single JSON object. Errors are JSON { error: string }.
+//   Exit code 0 = success, 1+ = error.
+// =============================================================================
+
+import { provision } from "../bootstrap/provision.js";
+import { PlanSchema } from "../core/plan.js";
+import { HmacSigner } from "../core/sign.js";
+import { AppendOnlyLedger } from "../core/ledger.js";
+
+// ---------------------------------------------------------------------------
+// Output helpers
+// ---------------------------------------------------------------------------
+
+function writeJson(obj: unknown): void {
+  process.stdout.write(JSON.stringify(obj) + "\n");
+}
+
+function exitError(obj: unknown): never {
+  writeJson(obj);
+  process.exit(1);
+}
+
+// ---------------------------------------------------------------------------
+// Command handlers
+// ---------------------------------------------------------------------------
+
+async function handleProvision(args: unknown): Promise<void> {
+  const opts = args as Parameters<typeof provision>[0];
+
+  // Convert Uint8Array-like serialized objects back to Uint8Array for revocation
+  const rev = opts.revocationOpts as Record<string, unknown>;
+  if (Array.isArray(rev["signature"])) {
+    rev["signature"] = new Uint8Array(rev["signature"] as number[]);
+  }
+  if (Array.isArray(rev["publicKey"])) {
+    rev["publicKey"] = new Uint8Array(rev["publicKey"] as number[]);
+  }
+
+  let result: Awaited<ReturnType<typeof provision>>;
+  try {
+    result = await provision(opts);
+  } catch (err) {
+    // provision() should not throw for anticipated errors, but if it does (e.g. ENOENT
+    // from listAgentIds on a nonexistent bundleDir), wrap it as a structured error result.
+    const message = err instanceof Error ? err.message : String(err);
+    result = { status: "error", kind: "io_error", reason: message };
+  }
+
+  // Provision errors still exit 1 (to signal error to shell)
+  if (result.status === "error") {
+    writeJson(result);
+    process.exit(1);
+  }
+
+  writeJson(result);
+}
+
+function handleValidatePlan(args: unknown): void {
+  const parsed = PlanSchema.safeParse(args);
+
+  if (parsed.success) {
+    writeJson({ valid: true });
+  } else {
+    writeJson({
+      valid: false,
+      errors: parsed.error.issues,
+    });
+  }
+}
+
+function handleSign(args: unknown): void {
+  const a = args as Record<string, unknown>;
+  const baseDir = a["baseDir"] as string | undefined;
+  const keyring_id = a["keyring_id"] as string | undefined;
+  const signerOpts: ConstructorParameters<typeof HmacSigner>[0] = {};
+  if (baseDir !== undefined) signerOpts.baseDir = baseDir;
+  if (keyring_id !== undefined) signerOpts.keyring_id = keyring_id;
+  const signer = new HmacSigner(signerOpts);
+
+  const payload = a["payload"] as Parameters<typeof signer.sign>[0];
+  const signature = signer.sign(payload);
+
+  writeJson({ signature });
+}
+
+function handleLedgerAppend(args: unknown): void {
+  const a = args as Record<string, unknown>;
+  const baseDir = a["baseDir"] as string | undefined;
+  const ledgerOpts: ConstructorParameters<typeof AppendOnlyLedger>[0] = {
+    session_id: a["session_id"] as string,
+  };
+  if (baseDir !== undefined) ledgerOpts.baseDir = baseDir;
+  const ledger = new AppendOnlyLedger(ledgerOpts);
+
+  const entry = a["entry"] as Parameters<typeof ledger.append>[0];
+  const result = ledger.append(entry);
+
+  writeJson(result);
+}
+
+function handleLedgerClose(args: unknown): void {
+  const a = args as Record<string, unknown>;
+  const baseDir = a["baseDir"] as string | undefined;
+  const ledgerOpts: ConstructorParameters<typeof AppendOnlyLedger>[0] = {
+    session_id: a["session_id"] as string,
+  };
+  if (baseDir !== undefined) ledgerOpts.baseDir = baseDir;
+  const ledger = new AppendOnlyLedger(ledgerOpts);
+
+  const summary = a["summary"] as Parameters<typeof ledger.close>[0];
+  ledger.close(summary);
+
+  writeJson({ ok: true });
+}
+
+// ---------------------------------------------------------------------------
+// Main
+// ---------------------------------------------------------------------------
+
+async function main(): Promise<void> {
+  const [, , command, jsonArg] = process.argv;
+
+  // T15b: no command argument → exit 1
+  if (!command) {
+    exitError({ error: "No command specified. Usage: teo-run <command> '<json>'" });
+  }
+
+  // Parse the JSON argument
+  let args: unknown;
+  try {
+    args = JSON.parse(jsonArg ?? "{}");
+  } catch {
+    exitError({ error: `Invalid JSON argument: ${jsonArg}` });
+  }
+
+  try {
+    switch (command) {
+      case "provision":
+        await handleProvision(args);
+        break;
+      case "validate-plan":
+        handleValidatePlan(args);
+        break;
+      case "sign":
+        handleSign(args);
+        break;
+      case "ledger-append":
+        handleLedgerAppend(args);
+        break;
+      case "ledger-close":
+        handleLedgerClose(args);
+        break;
+      default:
+        exitError({ error: `Unknown command: ${command}` });
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    exitError({ error: message });
+  }
+}
+
+main().catch((err: unknown) => {
+  const message = err instanceof Error ? err.message : String(err);
+  exitError({ error: message });
+});

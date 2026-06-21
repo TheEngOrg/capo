@@ -23,7 +23,14 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       include: ["src/**/*.ts"],
-      exclude: ["src/**/*.test.ts", "src/**/index.ts"],
+      exclude: [
+        "src/**/*.test.ts",
+        "src/**/index.ts",
+        // WS-GO-02: CLI entrypoint — tested via subprocess integration (spawnSync in
+        // teo-run.test.ts). In-process v8 instrumentation cannot reach across the
+        // process boundary, so this file is excluded per ADR-064 peripheral-scaffold policy.
+        "src/skill/teo-run-entry.ts",
+      ],
       // Per-file 100% thresholds on critical-path modules.
       // Global thresholds are intentionally omitted — peripheral files should
       // not drag down or be forced to 100%.

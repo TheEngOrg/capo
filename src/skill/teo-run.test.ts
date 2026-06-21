@@ -473,3 +473,67 @@ describe("teo-run CLI — golden path: each command returns expected output", ()
     expect(seq2).toBeGreaterThanOrEqual(1);
   });
 });
+
+// =============================================================================
+// WS-GO-04: S8 follow-on — handleProvision() emits warning to stderr
+//
+// This test will FAIL today (or be SKIPPED if bin absent) because:
+//   - handleProvision() in teo-run-entry.ts does not yet write result.warning to stderr.
+// =============================================================================
+
+describe("teo-run CLI — WS-GO-04 S8: provision warning emitted to stderr", () => {
+  it.skipIf(!fs.existsSync(BIN_PATH))(
+    "T-S8: provision with CLAUDE_PLUGIN_ROOT set and no bundle signature → stdout clean JSON, stderr contains 'unsigned-plugin-context'",
+    () => {
+      // Arrange: create a real bundle dir with a stub .md file
+      const bundleDir = makeTempDir();
+      const homeDir = makeTempDir();
+
+      const content =
+        `---\n` +
+        `agent_id: stub-agent\n` +
+        `name: Stub Agent\n` +
+        `role: Stub role.\n` +
+        `disallowedTools_default:\n` +
+        `---\n\n` +
+        `# stub-agent constitution\n\nBody.\n`;
+      fs.writeFileSync(path.join(bundleDir, "stub-agent.md"), content, "utf8");
+
+      // Use revocationOpts that will cause checkRevocation to return
+      // { verdict: "PASS", warning: "unsigned-plugin-context" }
+      // This requires provision.ts to propagate the warning and
+      // handleProvision() to write it to stderr.
+      const provisionOpts = JSON.stringify({
+        homeDir,
+        host: { kind: "claude-code-plugin", pluginRoot: bundleDir },
+        revocationOpts: {
+          // No real signature — will trigger unsigned-plugin-context warning
+          // from checkRevocation when in plugin context with no sig verification
+          signature: Array.from(new Uint8Array(64).fill(0x00)),
+          publicKey: Array.from(new Uint8Array(32).fill(0x00)),
+          keyId: "s8-test-key",
+          revocationList: { revoked_keys: [] },
+        },
+      });
+
+      const { exitCode, stdout, stdoutRaw, stderr } = runCli("provision", provisionOpts, {
+        CLAUDE_PLUGIN_ROOT: bundleDir,
+      });
+
+      // stdout must be clean JSON (parseable)
+      expect(() => JSON.parse(stdoutRaw.trim())).not.toThrow();
+
+      // stdout must have a status field (ok or already_provisioned)
+      expect(stdout).toMatchObject({
+        status: expect.stringMatching(/^(ok|already_provisioned)$/),
+      });
+
+      // Exit 0 for success
+      expect(exitCode).toBe(0);
+
+      // stderr must contain the warning "unsigned-plugin-context"
+      // This FAILS today — handleProvision() does not yet write to stderr.
+      expect(stderr).toContain("unsigned-plugin-context");
+    }
+  );
+});

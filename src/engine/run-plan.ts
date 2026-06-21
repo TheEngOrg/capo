@@ -124,10 +124,15 @@ export async function runPlan(
         });
 
         stepResult.signature = signature;
+        stepResult.signingStatus = "signed";
       } catch {
         // Swallow ledger/signer errors — never propagate to RunResult.
         // stepResult.signature remains undefined.
+        stepResult.signingStatus = "signing_failed";
       }
+    } else {
+      // Unsigned path: no sessionId provided — unsigned by design.
+      stepResult.signingStatus = "unsigned_by_design";
     }
 
     return stepResult;

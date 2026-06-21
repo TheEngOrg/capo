@@ -73,6 +73,13 @@ export interface StepResult {
    * Absent on unsigned (zero-footprint CI) runs.
    */
   signature?: string;
+  /**
+   * Signing status for this step.
+   * - "signed"             — step was signed via HmacSigner (signed run path)
+   * - "unsigned_by_design" — no sessionId provided; unsigned path by design
+   * - "signing_failed"     — signing was attempted but failed (ledger/signer error)
+   */
+  signingStatus?: "signed" | "unsigned_by_design" | "signing_failed";
 }
 
 /**
@@ -323,6 +330,15 @@ export class TopologicalRunner {
       const executorPromise = Promise.resolve(this.executor(task, context)).then(
         (result) => {
           clearTimeout(timer);
+          // Runtime guard: coerce missing or invalid status to FAILED
+          const VALID_STATUSES: ReadonlySet<string> = new Set(["PASS", "FAILED", "SKIPPED"]);
+          if (!VALID_STATUSES.has(String(result.status))) {
+            return {
+              ...result,
+              status: "FAILED" as const,
+              detail: `executor returned invalid status: ${String(result.status)}`,
+            };
+          }
           return result;
         },
         (err: unknown) => {

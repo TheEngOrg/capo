@@ -653,3 +653,66 @@ describe("runPlan() — ledger error isolation", () => {
     appendSpy.mockRestore();
   });
 });
+
+// ---------------------------------------------------------------------------
+// WS-GO-04: signingStatus field on StepResult
+//
+// These tests will FAIL today:
+//   - StepResult does not yet have a signingStatus field
+//   - runPlan() does not yet populate signingStatus on each step
+// ---------------------------------------------------------------------------
+
+describe("runPlan() — signingStatus field (WS-GO-04)", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "teo-go04-sigstatus-"));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  // T-SIGN-1: runPlan() with sessionId → all step results have signingStatus: "signed"
+  it("T-SIGN-1: runPlan() with sessionId → all step results have signingStatus: 'signed'", async () => {
+    const sessionId = "go04-sign-status-1";
+    const taskA = makeAgentTask("sign-status-task-a");
+    const taskB = makeAgentTask("sign-status-task-b", ["sign-status-task-a"]);
+    const plan = makePlan([taskA, taskB], { plan_id: "go04-sign-status-plan" });
+    const adapter = makeMockAdapter();
+
+    // Act: signed path with sessionId
+    const result = await runPlan(plan, adapter, { sessionId, ledgerBaseDir: tmpDir });
+
+    expect(result.overallStatus).toBe("PASS");
+    expect(result.steps).toHaveLength(2);
+
+    // Every step must have signingStatus: "signed"
+    // This FAILS today — StepResult.signingStatus field not yet added.
+    for (const step of result.steps) {
+      const stepWithStatus = step as RunResult["steps"][number] & { signingStatus?: string };
+      expect(stepWithStatus.signingStatus).toBe("signed");
+    }
+  });
+
+  // T-SIGN-2: runPlan() without sessionId → all step results have signingStatus: "unsigned_by_design"
+  it("T-SIGN-2: runPlan() without sessionId → all step results have signingStatus: 'unsigned_by_design'", async () => {
+    const taskA = makeAgentTask("unsigned-status-task-a");
+    const taskB = makeAgentTask("unsigned-status-task-b", ["unsigned-status-task-a"]);
+    const plan = makePlan([taskA, taskB], { plan_id: "go04-unsigned-status-plan" });
+    const adapter = makeMockAdapter();
+
+    // Act: unsigned path — no sessionId
+    const result = await runPlan(plan, adapter, { ledgerBaseDir: tmpDir });
+
+    expect(result.overallStatus).toBe("PASS");
+    expect(result.steps).toHaveLength(2);
+
+    // Every step must have signingStatus: "unsigned_by_design"
+    // This FAILS today — StepResult.signingStatus field not yet added.
+    for (const step of result.steps) {
+      const stepWithStatus = step as RunResult["steps"][number] & { signingStatus?: string };
+      expect(stepWithStatus.signingStatus).toBe("unsigned_by_design");
+    }
+  });
+});

@@ -1941,3 +1941,82 @@ describe("provision() — WS-GO-02: warning propagation and manifest schema", ()
     expect(manifest).not.toHaveProperty("files");
   });
 });
+
+// =============================================================================
+// WS-GO-04: S3 follow-on — pluginRoot containment check
+//
+// These tests will FAIL today — provision.ts does not yet check that bundleDir
+// is contained within pluginRoot.
+// =============================================================================
+
+describe("provision() — WS-GO-04 S3: pluginRoot containment check", () => {
+  it("T-CONTAIN-1: bundleDir traverses above pluginRoot → status error, reason contains 'containment'", async () => {
+    // Arrange: a valid pluginRoot temp dir, but bundleDir points ABOVE it via "../"
+    const pluginRoot = fs.mkdtempSync(path.join(os.tmpdir(), "teo-go04-contain-root-"));
+    tempDirs.push(pluginRoot);
+    const homeDir = makeTempHome();
+
+    // bundleDir that traverses above pluginRoot: resolve(<pluginRoot> + "/../sensitive")
+    // path.resolve will collapse this to the parent of pluginRoot
+    const traversingBundleDir = path.join(pluginRoot, "..", "sensitive");
+
+    const result = await provision({
+      homeDir,
+      bundleDir: traversingBundleDir,
+      host: { kind: "claude-code-plugin", pluginRoot },
+      revocationOpts: {
+        signature: new Uint8Array(64).fill(0x01),
+        publicKey: new Uint8Array(32).fill(0x02),
+        keyId: "go04-contain-key",
+        revocationList: { revoked_keys: [] },
+      },
+    });
+
+    // The containment check fires before revocation — so even with a valid revocation
+    // setup, this must return error with "containment" in the reason.
+    // This FAILS today — containment check is not yet in provision.ts.
+    expect(result.status).toBe("error");
+    if (result.status !== "error") throw new Error("narrowing guard");
+    expect(result.reason).toMatch(/containment/i);
+  });
+
+  it("T-CONTAIN-2: bundleDir within pluginRoot (normal path) → NOT blocked by containment check", async () => {
+    // Arrange: a valid pluginRoot, bundleDir is a subdirectory of pluginRoot.
+    // This is the happy path — must NOT be blocked by the containment check.
+    const pluginRoot = fs.mkdtempSync(path.join(os.tmpdir(), "teo-go04-contain-ok-root-"));
+    tempDirs.push(pluginRoot);
+
+    // Create a "agents" subdir inside pluginRoot with a stub .md file
+    const validBundleDir = path.join(pluginRoot, "agents");
+    fs.mkdirSync(validBundleDir, { recursive: true });
+    const content =
+      `---\n` +
+      `agent_id: stub\n` +
+      `name: Stub\n` +
+      `role: Stub role.\n` +
+      `disallowedTools_default:\n` +
+      `---\n\n` +
+      `# stub\n\nBody.\n`;
+    fs.writeFileSync(path.join(validBundleDir, "stub.md"), content, "utf8");
+
+    const homeDir = makeTempHome();
+
+    // checkRevocation is mocked to PASS by default (from beforeEach)
+    const result = await provision({
+      homeDir,
+      bundleDir: validBundleDir,
+      host: { kind: "claude-code-plugin", pluginRoot },
+      revocationOpts: {
+        signature: new Uint8Array(64).fill(0x01),
+        publicKey: new Uint8Array(32).fill(0x02),
+        keyId: "go04-contain-ok-key",
+        revocationList: { revoked_keys: [] },
+      },
+    });
+
+    // Must NOT be blocked — containment check passes, provision proceeds normally
+    expect(result.status).not.toBe("error");
+    // Either ok or already_provisioned is fine
+    expect(["ok", "already_provisioned"]).toContain(result.status);
+  });
+});

@@ -168,12 +168,32 @@ export async function provision(opts: ProvisionOptions): Promise<ProvisionResult
   let bundleDir = opts.bundleDir;
   if (!bundleDir) {
     if (host.kind === "claude-code-plugin" && host.pluginRoot) {
-      bundleDir = path.join(host.pluginRoot, "agents");
+      bundleDir = host.pluginRoot;
     } else {
       return {
         status: "error",
         kind: "io_error",
         reason: "bundleDir is required in standalone context",
+      };
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // S3: pluginRoot containment check — bundleDir must not escape pluginRoot.
+  // This check fires before any filesystem operations (before listAgentIds()).
+  // -------------------------------------------------------------------------
+
+  if (host.kind === "claude-code-plugin" && host.pluginRoot) {
+    const resolvedBundleDir = path.resolve(bundleDir);
+    const resolvedPluginRoot = path.resolve(host.pluginRoot);
+    if (
+      !resolvedBundleDir.startsWith(resolvedPluginRoot + path.sep) &&
+      resolvedBundleDir !== resolvedPluginRoot
+    ) {
+      return {
+        status: "error",
+        kind: "io_error",
+        reason: "pluginRoot containment check failed: bundleDir escapes plugin root",
       };
     }
   }

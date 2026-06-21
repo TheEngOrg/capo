@@ -10,7 +10,7 @@
 //
 // WS-GO-02: Role-shift from agent-file-copy to data-dir bootstrap.
 //   - Idempotency trigger: ledger/ AND keyring/ both present.
-//   - bundleDir optional in plugin context (defaults to ${pluginRoot}/agents).
+//   - bundleDir optional in plugin context (defaults to path.join(pluginRoot, "agents")).
 //   - manifest.json schema: no agents_dir, no files.
 //   - ProvisionResult ok/already_provisioned arms gain optional warning?.
 //
@@ -168,7 +168,7 @@ export async function provision(opts: ProvisionOptions): Promise<ProvisionResult
   let bundleDir = opts.bundleDir;
   if (!bundleDir) {
     if (host.kind === "claude-code-plugin" && host.pluginRoot) {
-      bundleDir = host.pluginRoot;
+      bundleDir = path.join(host.pluginRoot, "agents");
     } else {
       return {
         status: "error",

@@ -715,4 +715,38 @@ describe("runPlan() — signingStatus field (WS-GO-04)", () => {
       expect(stepWithStatus.signingStatus).toBe("unsigned_by_design");
     }
   });
+
+  // T-SIGN-3: signed run + dependency chain: task-A FAILED → task-B SKIPPED.
+  // SKIPPED steps bypass the executor entirely so they never get signed.
+  // After the post-process pass, they must carry signingStatus: "unsigned_by_design".
+  it("T-SIGN-3: signed run with SKIPPED step → steps[0].signingStatus='signed', steps[1].signingStatus='unsigned_by_design'", async () => {
+    const sessionId = "go04-sign-status-3";
+    const taskA = makeAgentTask("sign-status-skip-a");
+    const taskB = makeAgentTask("sign-status-skip-b", ["sign-status-skip-a"]);
+    const plan = makePlan([taskA, taskB], { plan_id: "go04-sign-status-skip-plan" });
+    const adapter = makeMockAdapter();
+
+    // Make task-A return FAILED — task-B will be SKIPPED (never enters executor)
+    adapter.spawnAgent.mockResolvedValueOnce({
+      taskId: "sign-status-skip-a",
+      status: "FAILED" as const,
+      detail: "forced failure for T-SIGN-3",
+    });
+
+    const result = await runPlan(plan, adapter, { sessionId, ledgerBaseDir: tmpDir });
+
+    expect(result.overallStatus).toBe("FAILED");
+    expect(result.steps).toHaveLength(2);
+
+    const stepA = result.steps.find((s) => s.taskId === "sign-status-skip-a");
+    const stepB = result.steps.find((s) => s.taskId === "sign-status-skip-b");
+
+    // task-A went through the executor on a signed run → signed
+    expect(stepA?.status).toBe("FAILED");
+    expect(stepA?.signingStatus).toBe("signed");
+
+    // task-B was SKIPPED (bypassed executor) → post-process stamps it unsigned_by_design
+    expect(stepB?.status).toBe("SKIPPED");
+    expect(stepB?.signingStatus).toBe("unsigned_by_design");
+  });
 });

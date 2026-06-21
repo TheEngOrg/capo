@@ -147,6 +147,15 @@ export async function runPlan(
   const runner = new TopologicalRunner(runnerOptions);
   const result = await runner.run(plan);
 
+  // Post-process: SKIPPED steps (and any other path that bypasses the executor)
+  // never go through the executor and therefore have signingStatus undefined.
+  // Stamp them with "unsigned_by_design" to ensure sentinel completeness.
+  for (const step of result.steps) {
+    if (step.signingStatus === undefined) {
+      step.signingStatus = "unsigned_by_design";
+    }
+  }
+
   // After all steps complete, close the ledger with the workflow summary.
   if (ledger !== undefined) {
     try {

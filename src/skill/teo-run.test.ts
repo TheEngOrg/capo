@@ -504,6 +504,7 @@ describe("teo-run CLI — WS-GO-04 S8: provision warning emitted to stderr", () 
       // This requires provision.ts to propagate the warning and
       // handleProvision() to write it to stderr.
       const provisionOpts = JSON.stringify({
+        bundleDir, // explicit bundleDir so provision() reads agents from this dir (not pluginRoot/agents)
         homeDir,
         host: { kind: "claude-code-plugin", pluginRoot: bundleDir },
         revocationOpts: {

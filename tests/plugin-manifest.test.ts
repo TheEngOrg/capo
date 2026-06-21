@@ -28,18 +28,21 @@
 //   Claude Code's plugin schema actually supports. Dev should consult the
 //   official plugins reference for the exact accepted types for `agents`.
 //
-// CI CONSTRAINT NOTE (test #2):
-//   spawnSync("claude", [...]) requires `claude` on PATH in the test runner.
-//   If CI cannot guarantee this, the validate-exit-0 assertion should run as a
-//   separate pre-release shell gate rather than inside vitest. The test will
-//   fail loudly (not silently skip) when `claude` is absent — that is
-//   intentional: a missing `claude` in CI is itself a misconfiguration that
-//   must not go unnoticed.
+// CI CONSTRAINT NOTE (test M-02):
+//   M-02 runs the REAL `claude plugin validate` via spawnSync — requires `claude`
+//   on PATH. Set SKIP_CLAUDE_BINARY_TESTS=1 to skip it where claude is unavailable
+//   (e.g. GitHub Actions). It STILL fails loudly if claude is absent AND the env var
+//   is NOT set (a missing binary without an explicit skip is a misconfiguration).
+//   IMPORTANT: M-02 is only an in-suite PROXY. Skipping it in CI means the REAL
+//   install-validation gate is scripts/verify-plugin-install.sh, which MUST run as a
+//   pre-release gate (WS-GO-07) — otherwise "CI green" does NOT mean "installable".
 //
 // Test order: misuse → boundary → golden path  (QA ADR-064 policy)
 // =============================================================================
 
 import { describe, it, expect } from "vitest";
+
+const itM02 = process.env.SKIP_CLAUDE_BINARY_TESTS === "1" ? it.skip : it;
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { spawnSync } from "node:child_process";
@@ -96,7 +99,7 @@ describe("plugin.json misuse guards", () => {
     }
   });
 
-  it("M-02: `claude plugin validate` exits 0 — canonical acceptance bar", () => {
+  itM02("M-02: `claude plugin validate` exits 0 — canonical acceptance bar", () => {
     // Verify `claude` is on PATH before attempting. If absent, fail loudly
     // (a missing `claude` in the test env is a misconfiguration, not a skip).
     const whichResult = spawnSync("which", ["claude"], { encoding: "utf8" });

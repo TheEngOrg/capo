@@ -31,6 +31,9 @@ jobs:
         run: npm run bundle
 
       - name: Test with coverage
+        env:
+          # claude binary not available in GH Actions — real install gate is scripts/verify-plugin-install.sh (run before release per WS-GO-07)
+          SKIP_CLAUDE_BINARY_TESTS: "1"
         run: npm run test:cov
 
       - name: Lockfile sync check

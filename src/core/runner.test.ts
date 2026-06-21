@@ -578,3 +578,82 @@ describe("TopologicalRunner — unknown needs ref (defensive)", () => {
     expect(stepB?.status).toBe("PASS");
   });
 });
+
+// =============================================================================
+// WS-GO-04: runtime guard — missing/invalid status coercion
+//
+// These tests will FAIL today — runner.ts does not yet have a runtime guard
+// that coerces invalid adapter results to { status: "FAILED", detail: "..." }.
+// =============================================================================
+
+describe("runtime guard — missing status coercion (WS-GO-04)", () => {
+  // T-NEW-1: adapter returns { taskId } with no status field → coerced to FAILED
+  it("T-NEW-1: adapter returns { taskId } (no status) → step coerced to FAILED with 'invalid status' in detail", async () => {
+    // Arrange: executor that returns an object missing the status field entirely.
+    // Cast through any to bypass TypeScript — simulates a real-world contract breach.
+    const executor: Executor = async (task: TEOTask, _ctx: RunContext): Promise<StepResult> => {
+      return { taskId: task.id } as unknown as StepResult;
+    };
+
+    const runner = new TopologicalRunner({ executor });
+    const plan = makePlan([makeTask("t1")]);
+
+    // Act — must NOT throw; the guard must absorb the contract violation
+    const result = await runner.run(plan);
+
+    // The step must be coerced to FAILED (not left as undefined/garbage status)
+    // This FAILS today — no guard in runner.ts.
+    expect(result.overallStatus).toBe("FAILED");
+    const step = result.steps.find((s) => s.taskId === "t1");
+    expect(step).toBeDefined();
+    expect(step!.status).toBe("FAILED");
+    expect(step!.detail).toMatch(/invalid status/i);
+  });
+
+  // T-NEW-2: adapter returns { taskId, status: "BANANA" } → coerced to FAILED
+  it("T-NEW-2: adapter returns { taskId, status: 'BANANA' } (invalid string) → coerced to FAILED with 'invalid status' in detail", async () => {
+    // Arrange: executor that returns an unrecognized status string.
+    const executor: Executor = async (task: TEOTask, _ctx: RunContext): Promise<StepResult> => {
+      return { taskId: task.id, status: "BANANA" as unknown as StepResult["status"] };
+    };
+
+    const runner = new TopologicalRunner({ executor });
+    const plan = makePlan([makeTask("t1")]);
+
+    // Act
+    const result = await runner.run(plan);
+
+    // The step must be coerced to FAILED with "invalid status" in detail
+    // This FAILS today — no guard in runner.ts.
+    expect(result.overallStatus).toBe("FAILED");
+    const step = result.steps.find((s) => s.taskId === "t1");
+    expect(step).toBeDefined();
+    expect(step!.status).toBe("FAILED");
+    expect(step!.detail).toMatch(/invalid status/i);
+  });
+
+  // T-NEW-3: adapter returns valid { taskId, status: "PASS" } → NOT coerced (passthrough)
+  it("T-NEW-3: adapter returns { taskId, status: 'PASS' } (valid) → NOT coerced, status preserved as PASS", async () => {
+    // Arrange: executor that returns a valid PASS result.
+    const executor: Executor = async (task: TEOTask, _ctx: RunContext): Promise<StepResult> => {
+      return { taskId: task.id, status: "PASS" };
+    };
+
+    const runner = new TopologicalRunner({ executor });
+    const plan = makePlan([makeTask("t1")]);
+
+    // Act
+    const result = await runner.run(plan);
+
+    // Valid PASS must pass through uncoerced — this already works today,
+    // but the test is important as a regression guard once the guard is added.
+    expect(result.overallStatus).toBe("PASS");
+    const step = result.steps.find((s) => s.taskId === "t1");
+    expect(step).toBeDefined();
+    expect(step!.status).toBe("PASS");
+    // detail should NOT contain "invalid status" — either undefined or a non-coercion message
+    if (step!.detail !== undefined) {
+      expect(step!.detail).not.toMatch(/invalid status/i);
+    }
+  });
+});

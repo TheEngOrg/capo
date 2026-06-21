@@ -10,7 +10,7 @@
 //
 // WS-GO-02: Role-shift from agent-file-copy to data-dir bootstrap.
 //   - Idempotency trigger: ledger/ AND keyring/ both present.
-//   - bundleDir optional in plugin context (defaults to ${pluginRoot}/agents).
+//   - bundleDir optional in plugin context (defaults to path.join(pluginRoot, "agents")).
 //   - manifest.json schema: no agents_dir, no files.
 //   - ProvisionResult ok/already_provisioned arms gain optional warning?.
 //
@@ -174,6 +174,26 @@ export async function provision(opts: ProvisionOptions): Promise<ProvisionResult
         status: "error",
         kind: "io_error",
         reason: "bundleDir is required in standalone context",
+      };
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // S3: pluginRoot containment check — bundleDir must not escape pluginRoot.
+  // This check fires before any filesystem operations (before listAgentIds()).
+  // -------------------------------------------------------------------------
+
+  if (host.kind === "claude-code-plugin" && host.pluginRoot) {
+    const resolvedBundleDir = path.resolve(bundleDir);
+    const resolvedPluginRoot = path.resolve(host.pluginRoot);
+    if (
+      !resolvedBundleDir.startsWith(resolvedPluginRoot + path.sep) &&
+      resolvedBundleDir !== resolvedPluginRoot
+    ) {
+      return {
+        status: "error",
+        kind: "io_error",
+        reason: "pluginRoot containment check failed: bundleDir escapes plugin root",
       };
     }
   }

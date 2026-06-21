@@ -41,10 +41,14 @@ function exitError(obj: unknown): never {
 async function handleProvision(args: unknown): Promise<void> {
   const opts = args as Parameters<typeof provision>[0];
 
-  // Convert Uint8Array-like serialized objects back to Uint8Array for revocation
+  // Convert Uint8Array-like serialized objects back to Uint8Array for revocation.
+  // An all-zeros signature array is treated as "no signature provided" (undefined),
+  // which allows the plugin-context fail-open path in checkRevocation() to fire.
   const rev = opts.revocationOpts as Record<string, unknown>;
   if (Array.isArray(rev["signature"])) {
-    rev["signature"] = new Uint8Array(rev["signature"] as number[]);
+    const arr = rev["signature"] as number[];
+    const isAllZeros = arr.length > 0 && arr.every((b) => b === 0);
+    rev["signature"] = isAllZeros ? undefined : new Uint8Array(arr);
   }
   if (Array.isArray(rev["publicKey"])) {
     rev["publicKey"] = new Uint8Array(rev["publicKey"] as number[]);
@@ -67,6 +71,11 @@ async function handleProvision(args: unknown): Promise<void> {
   }
 
   writeJson(result);
+
+  // S8: surface revocation warning to stderr so operators see it (not buried in JSON)
+  if ("warning" in result && typeof result.warning === "string") {
+    process.stderr.write(`[teo] provision warning: ${result.warning}\n`);
+  }
 }
 
 function handleValidatePlan(args: unknown): void {

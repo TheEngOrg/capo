@@ -5,7 +5,7 @@
 TEO ships as a Claude Code plugin from its own marketplace. In any Claude Code session:
 
 ```
-/plugin marketplace add TheEngOrg/the-eng-org
+/plugin marketplace add TheEngOrg/capo
 /plugin install teo@teo-marketplace
 ```
 

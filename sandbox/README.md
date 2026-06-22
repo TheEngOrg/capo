@@ -132,4 +132,4 @@ PASS: all E2E trace checks complete
 
 **STEP-4 Check 7 (workstream state file) is a WARN not a FAIL.** Sage may legitimately write only to `pipeline/` for short tasks.
 
-**These tests verify the v0.1.0-alpha install path** (`marketplace.json` source: `{ "source": "github", "repo": "TheEngOrg/the-eng-org" }`). WS-GO-07-swap is complete — the GitHub source is the committed form. Run `scripts/verify-plugin-install.sh` and get a PASS before tagging any release.
+**These tests verify the v0.1.0-alpha install path** (`marketplace.json` source: `{ "source": "github", "repo": "TheEngOrg/capo" }`). WS-GO-07-swap is complete — the GitHub source is the committed form. Run `scripts/verify-plugin-install.sh` and get a PASS before tagging any release.

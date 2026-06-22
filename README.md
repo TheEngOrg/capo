@@ -9,7 +9,7 @@ It installs as a Claude Code plugin. It does not modify your project, copy files
 ## Install
 
 ```
-/plugin marketplace add TheEngOrg/the-eng-org
+/plugin marketplace add TheEngOrg/capo
 /plugin install teo@teo-marketplace
 ```
 

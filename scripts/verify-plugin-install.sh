@@ -20,15 +20,11 @@
 #   This script catches both classes of failure by running the full install
 #   sequence, not just the linter.
 #
-# LOCAL vs. PUBLIC marketplace.json
-#   The committed marketplace.json uses `"source": "./"` — the LOCAL/DOGFOOD
-#   form that resolves to the current working directory. This is correct for
-#   private-repo dogfood testing and for this gate.
-#   FOR PUBLIC RELEASE, `source` must be swapped to:
+# MARKETPLACE SOURCE
+#   The committed marketplace.json uses the GitHub source form:
 #     { "source": "github", "repo": "TheEngOrg/the-eng-org" }
-#   This script verifies the local form. Do NOT push to the public marketplace
-#   without that swap. See WS-GO-05 and the public-vs-local DECISION doc for
-#   the resolution strategy.
+#   This script verifies the PUBLIC github-sourced form against a real install.
+#   This IS the canonical pre-tag gate — run it before tagging any release.
 #
 # USAGE
 #   First time:   chmod +x scripts/verify-plugin-install.sh
@@ -63,16 +59,16 @@ echo "    OK: validate passed"
 echo ""
 
 # ---------------------------------------------------------------------------
-# Step 2: register/update local marketplace
+# Step 2: register/update github marketplace
 # ---------------------------------------------------------------------------
-echo "[2/5] Registering/updating local marketplace..."
+echo "[2/5] Registering/updating github marketplace..."
 cd "${REPO_ROOT}"
 if claude plugin marketplace update teo-marketplace 2>/dev/null; then
   echo "    OK: marketplace updated (teo-marketplace already registered)"
 else
   echo "    INFO: teo-marketplace not registered yet — adding now..."
-  if ! claude plugin marketplace add ./; then
-    echo "✘ FAIL: marketplace — could not register local marketplace."
+  if ! claude plugin marketplace add TheEngOrg/the-eng-org; then
+    echo "✘ FAIL: marketplace — could not register github marketplace."
     echo "        Ensure .claude-plugin/marketplace.json is present and valid."
     exit 1
   fi
@@ -94,9 +90,9 @@ echo "    OK: clean slate ready"
 echo ""
 
 # ---------------------------------------------------------------------------
-# Step 4: install from local marketplace
+# Step 4: install from github marketplace
 # ---------------------------------------------------------------------------
-echo "[4/5] Installing teo from local marketplace..."
+echo "[4/5] Installing teo from github marketplace..."
 if ! claude plugin install teo@teo-marketplace; then
   echo "✘ FAIL: install — claude plugin install teo@teo-marketplace exited non-zero."
   echo "        This is the gate that catches validate-passing / install-failing bugs."
@@ -160,8 +156,6 @@ echo ""
 # ---------------------------------------------------------------------------
 echo "✔ PASS: teo plugin install verified"
 echo ""
-echo "NOTE: This verified the LOCAL marketplace.json (source: \"./\")."
-echo "      Before public release, swap marketplace.json source to:"
-echo "        { \"source\": \"github\", \"repo\": \"TheEngOrg/the-eng-org\" }"
-echo "      and re-run this gate against the public marketplace."
+echo "NOTE: This verified the PUBLIC github-sourced marketplace (TheEngOrg/the-eng-org)."
+echo "      This is the canonical pre-tag gate. Run before tagging any release."
 exit 0

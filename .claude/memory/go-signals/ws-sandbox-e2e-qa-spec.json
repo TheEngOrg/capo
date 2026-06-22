@@ -1,0 +1,144 @@
+{
+  "schema_version": "1.0.0",
+  "workstream_id": "WS-SANDBOX-E2E",
+  "spec_version": "1",
+  "date": "2026-06-22",
+  "from_agent": "qa",
+  "to_phase": "dev",
+  "phase": "qa-spec",
+
+  "steps": [
+    {
+      "id": "STEP-1-INSTALL",
+      "human_run": true,
+      "description": "Brodie runs the existing real-install gate script from the repo root. The sandbox README must exist before this step. Pass = script exits 0 with Agents(21)/Skills(15)/Hooks(5) confirmed. This gate is already authored at scripts/verify-plugin-install.sh — dev does NOT rewrite it; the sandbox only adds the README test plan pointing to it.",
+      "pass_criteria": [
+        "sandbox/README.md exists and contains the step-by-step test plan with exact CLI commands",
+        "`bash scripts/verify-plugin-install.sh` exits 0",
+        "Output contains 'OK: Agents (21) confirmed'",
+        "Output contains 'OK: Skills (15) confirmed'",
+        "Output contains 'OK: Hooks (5) confirmed'",
+        "Output ends with '✔ PASS: teo plugin install verified'"
+      ]
+    },
+    {
+      "id": "STEP-2-VALIDATE",
+      "human_run": false,
+      "description": "Autonomous script: sandbox/scripts/validate-plugin.sh. Runs `claude plugin validate` on the manifest, then verifies all 21 agent flat files and all 15 skill directories exist on disk. No live Claude binary calls beyond the validate invocation. Pure filesystem verification.",
+      "pass_criteria": [
+        "sandbox/scripts/validate-plugin.sh is executable and exits 0 when the repo is in a valid state",
+        "`claude plugin validate .claude-plugin/plugin.json` exits 0 (captured internally by the script)",
+        "plugin.json contains required top-level fields: name, version, skills, hooks",
+        "plugin.json does NOT contain an 'agents' field (agents are flat .md files, not a manifest pointer)",
+        "Exactly 21 .md files exist under .claude/agents/ — script asserts count == 21",
+        "Exactly 15 directories exist under .claude/skills/ — script asserts count == 15",
+        "Script outputs one PASS/FAIL line per check; exits non-zero on any failure",
+        "Script exits 1 and prints a descriptive error if any agent .md file is missing",
+        "Script exits 1 and prints a descriptive error if any skill directory is missing",
+        "Misuse case: if plugin.json has an 'agents' field (directory string), script emits a warning ('WARNING: agents field present — install will likely reject this')"
+      ]
+    },
+    {
+      "id": "STEP-3A-RUN-MECHANICAL",
+      "human_run": true,
+      "description": "Brodie types `/teo fix the typo in sandbox/fixtures/broken-readme.md` into a Claude Code session with TEO installed. The fixture file must contain a deliberate, unambiguous typo (e.g., 'teh' instead of 'the'). Pass = Sage pipeline fires, dev agent edits the file, sage-result.json is written.",
+      "pass_criteria": [
+        "sandbox/fixtures/broken-readme.md exists with a deliberate, documented typo",
+        "sandbox/fixtures/broken-readme.md.original exists as a pristine copy for diff verification",
+        "After Brodie runs the prompt: .claude/memory/pipeline/sage-result.json exists",
+        ".claude/memory/pipeline/sage-result.json is valid JSON (parseable with `jq .`)",
+        ".claude/memory/pipeline/sage-result.json contains a 'status' field",
+        ".claude/memory/pipeline/sage-result.json contains a 'completed_steps' array",
+        "'completed_steps' is non-empty (at least one step recorded)",
+        "sandbox/fixtures/broken-readme.md content differs from the .original copy (typo was fixed)",
+        "The typo string is absent from sandbox/fixtures/broken-readme.md post-task"
+      ]
+    },
+    {
+      "id": "STEP-3B-RUN-ARCHITECTURAL",
+      "human_run": true,
+      "description": "Brodie types `teo plan add a health-check endpoint to the sandbox` into Claude Code. This routes through the Tier-1 dispatcher trigger 'teo plan *' to Sage. Pass = pipeline fires and plan artifacts or pipeline_phase evidence appears.",
+      "pass_criteria": [
+        "After Brodie runs the prompt: .claude/memory/pipeline/sage-result.json is updated",
+        ".claude/memory/pipeline/sage-result.json 'status' field is present and non-empty",
+        "Either: .claude/memory/plans/ directory exists with at least one file, OR sage-result.json 'pipeline_phase' field contains the substring 'plan'",
+        ".claude/memory/pipeline/sage-result.json 'completed_steps' array contains at least one entry referencing a planning activity (e.g., 'product-manager', 'plan', 'spec', or 'qa-spec')",
+        "Sage did NOT attempt to write implementation code for this prompt (plan-only path)"
+      ]
+    },
+    {
+      "id": "STEP-4-VERIFY-TRACES",
+      "human_run": false,
+      "description": "Autonomous script: sandbox/scripts/verify-traces.sh. Runs post-task (after STEP-3A) to verify what ACTUALLY exists on disk. Explicitly does NOT check for HMAC ledger files — those are not wired. Checks pipeline output, Sage workstream state files, and fixture diff.",
+      "pass_criteria": [
+        "sandbox/scripts/verify-traces.sh is executable and exits 0 when all checks pass",
+        "Check 1 — sage-result.json existence: .claude/memory/pipeline/sage-result.json exists; script exits 1 with 'FAIL: sage-result.json missing' if absent",
+        "Check 2 — sage-result.json validity: file parses as valid JSON via `jq .`; script exits 1 with 'FAIL: sage-result.json is not valid JSON' if malformed",
+        "Check 3 — status field: sage-result.json has a 'status' field; script exits 1 if absent",
+        "Check 4 — completed_steps non-empty: sage-result.json 'completed_steps' is an array with length > 0; script exits 1 if empty or missing",
+        "Check 5 — fixture modified: sandbox/fixtures/broken-readme.md differs from sandbox/fixtures/broken-readme.md.original (md5/diff check); script exits 1 if files are identical (typo not fixed)",
+        "Check 6 — typo absent: the known typo string is absent from sandbox/fixtures/broken-readme.md; script exits 1 if still present",
+        "Check 7 — workstream state file: .claude/memory/ contains at least one non-pipeline file written during the session (any .json file outside the pipeline/ subdirectory); script emits a warning (not failure) if none found — this is best-effort because Sage may write to pipeline/ only",
+        "Check 8 — NO ledger assertion: script explicitly does NOT check for .claude/memory/traces/ ledger files and outputs 'NOTE: HMAC ledger not checked — runtime engine not wired'",
+        "Misuse case: if run before STEP-3A (sage-result.json absent), script exits 1 with clear message ('FAIL: run STEP-3A first')",
+        "Misuse case: if broken-readme.md matches the .original (task never ran or failed silently), script exits 1 explicitly"
+      ]
+    }
+  ],
+
+  "autonomous_deliverables": [
+    "sandbox/README.md — test plan with step-by-step instructions, exact CLI commands, expected output per step, and known limitations",
+    "sandbox/scripts/validate-plugin.sh — executable; validates manifest fields + asset counts (21 agents, 15 skills); exits non-zero on any failure",
+    "sandbox/scripts/verify-traces.sh — executable; verifies post-task pipeline state; 8 explicit checks; exits non-zero on failure; explicitly skips ledger",
+    "sandbox/fixtures/broken-readme.md — contains a deliberate, documented typo for STEP-3A",
+    "sandbox/fixtures/broken-readme.md.original — pristine copy for diff verification in STEP-4"
+  ],
+
+  "brodie_run_commands": [
+    {
+      "step": "STEP-1-INSTALL",
+      "command": "bash scripts/verify-plugin-install.sh",
+      "cwd": "/Users/brodieyazaki/personal/agent-tools/the-eng-org",
+      "note": "Run from repo root. First-time: chmod +x scripts/verify-plugin-install.sh if needed."
+    },
+    {
+      "step": "STEP-2-VALIDATE",
+      "command": "bash sandbox/scripts/validate-plugin.sh",
+      "cwd": "/Users/brodieyazaki/personal/agent-tools/the-eng-org",
+      "note": "Autonomous but Brodie can run to confirm. No Claude binary output to interpret."
+    },
+    {
+      "step": "STEP-3A-RUN-MECHANICAL",
+      "command": "/teo fix the typo in sandbox/fixtures/broken-readme.md",
+      "cwd": "Claude Code session (TEO plugin installed)",
+      "note": "Type this verbatim into the Claude Code chat. Tier-1 trigger '/teo *' routes to Sage immediately."
+    },
+    {
+      "step": "STEP-3B-RUN-ARCHITECTURAL",
+      "command": "teo plan add a health-check endpoint to the sandbox",
+      "cwd": "Claude Code session (TEO plugin installed)",
+      "note": "Type without leading slash. 'teo plan *' is a Tier-1 trigger. Run AFTER STEP-3A — sage-result.json will be overwritten."
+    },
+    {
+      "step": "STEP-4-VERIFY-TRACES",
+      "command": "bash sandbox/scripts/verify-traces.sh",
+      "cwd": "/Users/brodieyazaki/personal/agent-tools/the-eng-org",
+      "note": "Run after STEP-3A completes. Exits 0 = all checks passed. Exits non-zero = prints which check failed."
+    }
+  ],
+
+  "known_limitations": [
+    "HMAC signed ledger is NOT verified — src/core and src/engine are not wired to the plugin path. post-tool-use.sh and task-completed.sh are stubs (exit 0). The verify-traces.sh script explicitly skips ledger checks and notes this.",
+    "STEP-3A and STEP-3B overwrite the same sage-result.json. Run verify-traces.sh between them if you want to capture both states. The spec assumes STEP-3A runs first and STEP-4 validates STEP-3A state.",
+    "STEP-3B pass criteria use OR conditions (plans/ directory OR pipeline_phase field) because Sage's plan output path is not fully deterministic — either evidence form is acceptable.",
+    "The STEP-2-VALIDATE 'agents field warning' check (misuse case) requires dev to inject a test fixture with an agents field — this is a documented misuse test, not run against the live plugin.json.",
+    "sandbox/scripts/validate-plugin.sh calls `claude plugin validate` which requires the claude CLI binary. If the CLI is not on PATH, the script must print 'FAIL: claude CLI not found' and exit 1.",
+    "STEP-4 Check 7 (workstream state file) is a WARN not a FAIL because Sage may legitimately write only to pipeline/ for short tasks. This is a best-effort check, not a gate.",
+    "These tests verify the v0.1.0-alpha LOCAL install path (marketplace.json source: './'). The public-release path (source: 'github', repo: 'TheEngOrg/the-eng-org') requires a separate run of verify-plugin-install.sh after that swap — tracked in WS-GO-05 and WS-GO-07."
+  ],
+
+  "artifact_paths": [
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/.claude/memory/go-signals/ws-sandbox-e2e-qa-spec.json"
+  ],
+  "timestamp": "2026-06-22T00:00:00Z"
+}

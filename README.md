@@ -54,7 +54,7 @@ Then start any workflow with `/teo`.
 
 ## Sponsor
 
-If CAPO saves you time, consider supporting development: [github.com/sponsors/brodieyazaki](https://github.com/sponsors/brodieyazaki)
+If CAPO saves you time, consider supporting development: [github.com/sponsors/bywonton](https://github.com/sponsors/bywonton)
 
 ## License
 

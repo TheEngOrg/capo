@@ -343,3 +343,198 @@ describe("golden: development-workflow.md references docs+tests as part of done"
     expect(containsAnyOf(content, EXCEPTION_TERMS)).toBe(true);
   });
 });
+
+// =============================================================================
+// WS-SHARED-FILES — Strip context_manifest frontmatter + fix dead body refs
+//
+// These tests are GREEN — implementation already present on this branch (310bf7a).
+//
+// Changes under test:
+//   1. Remove `context_manifest:` blocks from all 18 agents that carry them.
+//      (gcp-infra-specialist, system-integration-specialist, studio-director
+//       have no block — they are excluded from the frontmatter tests.)
+//   2. Remove body-text references to cut skills / non-shipped shared files:
+//      - teo-apply-edit-contract.md  (skill was cut; body ref in engineering-manager.md)
+//      - teo-create-document-contract.md  (skill was cut; body refs in cto.md,
+//        engineering-director.md, product-manager.md, staff-engineer.md)
+//   3. Fix studio-director.md bare resource links to add "if present" hedge.
+//
+// Ordering: misuse → boundary → golden path (ADR-064 critical-path policy)
+// =============================================================================
+
+// ---------------------------------------------------------------------------
+// Shipped agent list (21 total)
+// ---------------------------------------------------------------------------
+const SHIPPED_AGENTS: string[] = [
+  "acceptance-engineer.md",
+  "api-designer.md",
+  "art-director.md",
+  "capo.md",
+  "cto.md",
+  "data-engineer.md",
+  "design.md",
+  "dev-haiku.md",
+  "dev.md",
+  "devops-engineer.md",
+  "engineering-director.md",
+  "engineering-manager.md",
+  "gcp-infra-specialist.md",
+  "product-manager.md",
+  "product-owner.md",
+  "qa.md",
+  "security-engineer.md",
+  "staff-engineer.md",
+  "studio-director.md",
+  "system-integration-specialist.md",
+  "technical-writer.md",
+];
+
+// ---------------------------------------------------------------------------
+// MISUSE — content that MUST NOT appear in any shipped agent after the change
+// ---------------------------------------------------------------------------
+
+describe("misuse(WS-SHARED-FILES): no shipped agent may contain context_manifest frontmatter", () => {
+  // MISUSE: context_manifest is dead metadata — Claude Code's native runtime
+  // does not process it. Leaving it in shipped agent files misleads authors
+  // into thinking shared files are automatically injected at runtime.
+  // A file that still contains context_manifest: after the change is a
+  // regression — the strip was incomplete.
+
+  for (const filename of SHIPPED_AGENTS) {
+    it(`agents/${filename} does NOT contain context_manifest: in its frontmatter`, () => {
+      const content = readFile(`agents/${filename}`);
+      // Extract frontmatter only (between first two --- delimiters)
+      const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
+      const frontmatter = frontmatterMatch ? frontmatterMatch[1] : "";
+      expect(frontmatter).not.toContain("context_manifest:");
+    });
+  }
+});
+
+describe("misuse(WS-SHARED-FILES): no shipped agent body may reference teo-apply-edit-contract.md", () => {
+  // MISUSE: teo-apply-edit was cut from the plugin. Any surviving body reference
+  // points to a file that does not exist at runtime — agents will attempt to
+  // follow a contract they cannot load, or mislead maintainers into thinking
+  // the skill is still active.
+  // The known body reference is in engineering-manager.md ~line 144; however
+  // we assert across all agents so a future copy-paste regression is caught.
+
+  for (const filename of SHIPPED_AGENTS) {
+    it(`agents/${filename} body does NOT reference teo-apply-edit-contract.md`, () => {
+      const content = readFile(`agents/${filename}`);
+      // Strip frontmatter before checking body — the shared_files list in
+      // context_manifest is also a source of this string but vanishes with
+      // the block strip. This test targets surviving body references only.
+      const body = content.replace(/^---\n[\s\S]*?\n---\n/, "");
+      expect(body).not.toContain("teo-apply-edit-contract.md");
+    });
+  }
+});
+
+describe("misuse(WS-SHARED-FILES): no shipped agent body may reference teo-create-document-contract.md", () => {
+  // MISUSE: teo-create-document was cut. Same failure mode as teo-apply-edit —
+  // agents that read this reference will attempt to follow a missing contract.
+  // Body references confirmed in: cto.md ~89, engineering-director.md ~88,
+  // product-manager.md ~91, staff-engineer.md ~178. Assert across all agents
+  // to catch any future copy-paste.
+
+  for (const filename of SHIPPED_AGENTS) {
+    it(`agents/${filename} body does NOT reference teo-create-document-contract.md`, () => {
+      const content = readFile(`agents/${filename}`);
+      const body = content.replace(/^---\n[\s\S]*?\n---\n/, "");
+      expect(body).not.toContain("teo-create-document-contract.md");
+    });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// BOUNDARY — structural invariants that must survive the strip
+// ---------------------------------------------------------------------------
+
+describe("boundary(WS-SHARED-FILES): valid frontmatter delimiters survive after strip", () => {
+  // BOUNDARY: the strip operation must not corrupt the YAML frontmatter block.
+  // Each agent must still open and close with --- delimiters. A strip that
+  // removes too aggressively (e.g., takes the closing --- with it) would break
+  // Claude Code's ability to parse the agent's name/description/model/tools.
+
+  for (const filename of SHIPPED_AGENTS) {
+    it(`agents/${filename} still has opening and closing --- frontmatter delimiters`, () => {
+      const content = readFile(`agents/${filename}`);
+      // File must start with --- and have a second --- closing the block
+      expect(content.startsWith("---\n")).toBe(true);
+      // After the opening ---, there must be at least one more ---
+      const withoutOpening = content.slice(4);
+      expect(withoutOpening).toContain("---");
+    });
+  }
+});
+
+describe("boundary(WS-SHARED-FILES): required frontmatter fields survive after strip", () => {
+  // BOUNDARY: stripping context_manifest must leave the remaining YAML fields
+  // intact. Claude Code requires name, description, model, and tools to
+  // register the agent. Loss of any of these fields silently disables the agent.
+
+  for (const filename of SHIPPED_AGENTS) {
+    it(`agents/${filename} frontmatter still contains name, description, model, tools`, () => {
+      const content = readFile(`agents/${filename}`);
+      const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
+      const frontmatter = frontmatterMatch ? frontmatterMatch[1] : "";
+      expect(frontmatter).toMatch(/^name:/m);
+      expect(frontmatter).toMatch(/^description:/m);
+      expect(frontmatter).toMatch(/^model:/m);
+      expect(frontmatter).toMatch(/^tools:/m);
+    });
+  }
+});
+
+describe("boundary(WS-SHARED-FILES): studio-director.md shared-file links carry 'if present' hedge", () => {
+  // BOUNDARY: studio-director.md references visual-formatting.md and
+  // handoff-protocol.md as bare resource links in a Process References section
+  // (lines ~159-160). These files may not exist in every install.
+  // A bare link without "if present" causes agents to treat the file as
+  // required and attempt to load it at spawn — failing silently or hallucinating
+  // content when absent.
+  // After the fix the references must be qualified ("if present" or equivalent).
+
+  it("studio-director.md visual-formatting.md reference includes 'if present' qualification", () => {
+    const content = readFile("agents/studio-director.md");
+    // Find the line mentioning visual-formatting.md; the "if present" hedge
+    // must appear on that same line or within 3 lines following it.
+    const lines = content.split("\n");
+    const refLineIdx = lines.findIndex((l) => l.includes("visual-formatting.md"));
+    expect(refLineIdx).toBeGreaterThanOrEqual(0); // reference must still exist, just hedged
+    const window = lines.slice(refLineIdx, refLineIdx + 4).join("\n");
+    expect(window.toLowerCase()).toContain("if present");
+  });
+
+  it("studio-director.md handoff-protocol.md reference includes 'if present' qualification", () => {
+    const content = readFile("agents/studio-director.md");
+    const lines = content.split("\n");
+    const refLineIdx = lines.findIndex((l) => l.includes("handoff-protocol.md"));
+    expect(refLineIdx).toBeGreaterThanOrEqual(0);
+    const window = lines.slice(refLineIdx, refLineIdx + 4).join("\n");
+    expect(window.toLowerCase()).toContain("if present");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GOLDEN PATH — all 21 files exist and are clean
+// ---------------------------------------------------------------------------
+
+describe("golden(WS-SHARED-FILES): all 21 shipped agent files exist (no accidental deletion)", () => {
+  // GOLDEN: the strip operation must not delete any agent files. A count check
+  // plus per-file existence check catches a dev who accidentally deleted or
+  // renamed a file during the cleanup pass.
+
+  it("agents/ directory contains exactly 21 shipped agent files", () => {
+    const agentsDir = root("agents");
+    const files = fs.readdirSync(agentsDir).filter((f) => f.endsWith(".md"));
+    expect(files.length).toBe(21);
+  });
+
+  for (const filename of SHIPPED_AGENTS) {
+    it(`agents/${filename} exists on disk`, () => {
+      expect(() => readFile(`agents/${filename}`)).not.toThrow();
+    });
+  }
+});

@@ -1,4 +1,5 @@
 import * as esbuild from "esbuild";
+import { chmodSync } from "node:fs";
 
 await esbuild.build({
   entryPoints: ["src/skill/teo-run-entry.ts"],
@@ -12,3 +13,4 @@ await esbuild.build({
   banner: { js: "#!/usr/bin/env node" },
   minify: false,
 });
+chmodSync("bin/teo-run.js", 0o755);

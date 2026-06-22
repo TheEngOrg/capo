@@ -26,6 +26,31 @@ Classifies workstreams at intake, then coordinates the appropriate track: MECHAN
 - `--force-mechanical` — Override classification, use MECHANICAL track regardless of rules
 - `--force-architectural` — Override classification, use ARCHITECTURAL track regardless of rules
 
+## Engine Binary Guard
+
+**This check runs BEFORE Step 0 and BEFORE any classification, spawn, or memory write.**
+
+Verify that the engine binary is reachable on PATH and functional:
+
+```bash
+command -v teo-run.js && teo-run.js validate-plan '{}'
+```
+
+This exercises the binary with zero disk writes (`validate-plan` runs a Zod parse and returns `{"valid":...}`). `command -v` confirms the binary is on PATH before executing it.
+
+A `valid:false` result here is EXPECTED for the empty-object probe and does NOT indicate failure — the guard passes if the command's EXIT CODE is 0 (binary reachable and ran). Do not halt on the `valid:false` payload; only halt if `command -v teo-run.js` finds nothing or the binary cannot execute.
+
+If `teo-run.js` is not found on PATH — surface this error and stop immediately, do not proceed to classification, spawning, or writing memory:
+
+```
+ERROR: teo-run.js not found on PATH.
+The teo-build skill requires the TEO engine binary to be reachable.
+Install TEO as a Claude Code plugin so that bin/ is added to PATH,
+then retry this workstream.
+```
+
+Do not classify, spawn agents, or write to memory if this guard fails.
+
 ## Step 0: Classify at Intake
 
 Before spawning any agent, classify the workstream by applying R1-R8 and M1-M5 rules to the ticket or request description. Run `teo-classify-workstream <workstream-id>` before spawning any agent; if the script is not found, fall back to manual classification (fail-open).

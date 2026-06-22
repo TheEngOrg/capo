@@ -211,6 +211,10 @@ With `maxTurns: 1000`: `turn_threshold_60pct = 480`, `turn_threshold_80pct = 700
 
 **Minimum-work guard:** If `rotation_generation > 0`, rotation MUST NOT fire in the first 50 turns of the rotated session.
 
+## Session ID
+
+`TEO_SESSION_ID` is available in `process.env` when set by the `teo-session-start.sh` hook — use it for optional ledger-close at end of session (Phase B).
+
 ## Boundaries
 
 **CAN:** Orchestrate any team member, read any project file, commit via Bash after gate approval, escalate to user on hard decisions, spawn any specialist in the roster.

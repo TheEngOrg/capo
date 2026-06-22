@@ -1058,8 +1058,8 @@ function getErrorMap() {
 
 // node_modules/zod/v3/helpers/parseUtil.js
 var makeIssue = (params) => {
-  const { data, path: path5, errorMaps, issueData } = params;
-  const fullPath = [...path5, ...issueData.path || []];
+  const { data, path: path6, errorMaps, issueData } = params;
+  const fullPath = [...path6, ...issueData.path || []];
   const fullIssue = {
     ...issueData,
     path: fullPath
@@ -1175,11 +1175,11 @@ var errorUtil;
 
 // node_modules/zod/v3/types.js
 var ParseInputLazyPath = class {
-  constructor(parent, value, path5, key) {
+  constructor(parent, value, path6, key) {
     this._cachedPath = [];
     this.parent = parent;
     this.data = value;
-    this._path = path5;
+    this._path = path6;
     this._key = key;
   }
   get path() {
@@ -5103,6 +5103,10 @@ var AppendOnlyLedger = class {
 };
 
 // src/skill/teo-run-entry.ts
+import * as crypto3 from "node:crypto";
+import * as fs5 from "node:fs";
+import * as path5 from "node:path";
+import * as os4 from "node:os";
 function writeJson(obj) {
   process.stdout.write(JSON.stringify(obj) + "\n");
 }
@@ -5173,6 +5177,52 @@ function handleLedgerAppend(args) {
   const result = ledger.append(entry);
   writeJson(result);
 }
+async function handleInitSession(args) {
+  const a = args;
+  const rawCommandInput = a["command_input"];
+  const baseDir = a["baseDir"];
+  const projectDir = a["project_dir"];
+  const normalized = typeof rawCommandInput === "string" && rawCommandInput.trim().length > 0 ? rawCommandInput.trim().toLowerCase() : "unknown";
+  const hex16 = crypto3.createHash("sha256").update(normalized, "utf8").digest("hex").slice(0, 16);
+  const session_id = `teo-${hex16}`;
+  const resolvedBase = baseDir ?? path5.join(os4.homedir(), ".teo");
+  const resolvedProjectDir = projectDir ?? process.cwd();
+  const ledger = new AppendOnlyLedger({ session_id, baseDir: resolvedBase });
+  ledger.append({
+    session_id,
+    workflow_id: session_id,
+    task_id: null,
+    turn_id: null,
+    actor_id: "SYSTEM",
+    actor_type: "SYSTEM",
+    phase: "PLAN",
+    verdict: null,
+    detail: {
+      event: "SESSION_START",
+      command_input: rawCommandInput ?? null
+    }
+  });
+  const memoryDirs = [
+    path5.join(resolvedProjectDir, ".claude", "memory"),
+    path5.join(resolvedProjectDir, ".claude", "memory", "pipeline"),
+    path5.join(resolvedProjectDir, ".claude", "memory", "traces")
+  ];
+  for (const dir of memoryDirs) {
+    fs5.mkdirSync(dir, { recursive: true });
+  }
+  const envFile = process.env["CLAUDE_ENV_FILE"];
+  if (envFile) {
+    try {
+      fs5.appendFileSync(envFile, `TEO_SESSION_ID=${session_id}
+`, "utf8");
+    } catch (err2) {
+      const message = err2 instanceof Error ? err2.message : String(err2);
+      exitError({ error: `Failed to write TEO_SESSION_ID to CLAUDE_ENV_FILE: ${message}` });
+    }
+  }
+  const ledgerFile = path5.join(resolvedBase, "ledger", `${session_id}.jsonl`);
+  writeJson({ session_id, ledger_file: ledgerFile });
+}
 function handleLedgerClose(args) {
   const a = args;
   const baseDir = a["baseDir"];
@@ -5212,6 +5262,9 @@ async function main() {
         break;
       case "ledger-close":
         handleLedgerClose(args);
+        break;
+      case "init-session":
+        await handleInitSession(args);
         break;
       default:
         exitError({ error: `Unknown command: ${command}` });

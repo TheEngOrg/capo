@@ -1,5 +1,16 @@
 {
   "hooks": {
+    "UserPromptExpansion": [
+      {
+        "matcher": "teo",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/teo-session-start.sh\""
+          }
+        ]
+      }
+    ],
     "SessionStart": [
       {
         "hooks": [

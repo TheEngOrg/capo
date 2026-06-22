@@ -10,6 +10,7 @@
 //   sign            — calls HmacSigner.sign() with payload
 //   ledger-append   — calls AppendOnlyLedger.append()
 //   ledger-close    — calls AppendOnlyLedger.close()
+//   init-session    — write SESSION_START ledger event + mkdir memory dirs
 //
 // OUTPUT CONTRACT:
 //   All stdout is a single JSON object. Errors are JSON { error: string }.
@@ -20,6 +21,10 @@ import { provision } from "../bootstrap/provision.js";
 import { PlanSchema } from "../core/plan.js";
 import { HmacSigner } from "../core/sign.js";
 import { AppendOnlyLedger } from "../core/ledger.js";
+import * as crypto from "node:crypto";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import * as os from "node:os";
 
 // ---------------------------------------------------------------------------
 // Output helpers
@@ -121,6 +126,75 @@ function handleLedgerAppend(args: unknown): void {
   writeJson(result);
 }
 
+function handleInitSession(args: unknown): void {
+  const a = args as Record<string, unknown>;
+  const rawCommandInput = a["command_input"] as string | undefined;
+  const baseDir = a["baseDir"] as string | undefined;
+  const projectDir = a["project_dir"] as string | undefined;
+
+  // Normalize command_input: trim + lowercase, default to "unknown" if empty/whitespace.
+  const normalized =
+    typeof rawCommandInput === "string" && rawCommandInput.trim().length > 0
+      ? rawCommandInput.trim().toLowerCase()
+      : "unknown";
+
+  // Deterministic session_id: SHA-256 of normalized input, first 16 hex chars.
+  // crypto.createHash is deterministic (no randomness) — passes ledger sanitization
+  // because the 16-char hex output contains only [0-9a-f], no / \ or ..
+  const hex16 = crypto.createHash("sha256").update(normalized, "utf8").digest("hex").slice(0, 16);
+  const session_id = `teo-${hex16}`;
+
+  // Resolve ledger base: injected baseDir or os.homedir()/.teo (production default)
+  /* c8 ignore next */
+  const resolvedBase = baseDir ?? path.join(os.homedir(), ".teo");
+
+  // Resolved project dir: injected project_dir or cwd (production default)
+  /* c8 ignore next */
+  const resolvedProjectDir = projectDir ?? process.cwd();
+
+  // Write SESSION_START LedgerEvent via AppendOnlyLedger
+  const ledger = new AppendOnlyLedger({ session_id, baseDir: resolvedBase });
+  ledger.append({
+    session_id,
+    workflow_id: session_id,
+    task_id: null,
+    turn_id: null,
+    actor_id: "SYSTEM",
+    actor_type: "SYSTEM",
+    phase: "PLAN",
+    verdict: null,
+    detail: {
+      event: "SESSION_START",
+      command_input: rawCommandInput ?? null,
+    },
+  });
+
+  // ADR-065: mkdir -p .claude/memory/, .claude/memory/pipeline/, .claude/memory/traces/
+  // These three dirs are the allowed consumer memory dirs.
+  const memoryDirs = [
+    path.join(resolvedProjectDir, ".claude", "memory"),
+    path.join(resolvedProjectDir, ".claude", "memory", "pipeline"),
+    path.join(resolvedProjectDir, ".claude", "memory", "traces"),
+  ];
+  for (const dir of memoryDirs) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+
+  // If CLAUDE_ENV_FILE is set, append TEO_SESSION_ID line to it.
+  const envFile = process.env["CLAUDE_ENV_FILE"];
+  if (envFile) {
+    try {
+      fs.appendFileSync(envFile, `TEO_SESSION_ID=${session_id}\n`, "utf8");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      exitError({ error: `Failed to write TEO_SESSION_ID to CLAUDE_ENV_FILE: ${message}` });
+    }
+  }
+
+  const ledgerFile = path.join(resolvedBase, "ledger", `${session_id}.jsonl`);
+  writeJson({ session_id, ledger_file: ledgerFile });
+}
+
 function handleLedgerClose(args: unknown): void {
   const a = args as Record<string, unknown>;
   const baseDir = a["baseDir"] as string | undefined;
@@ -172,6 +246,9 @@ async function main(): Promise<void> {
         break;
       case "ledger-close":
         handleLedgerClose(args);
+        break;
+      case "init-session":
+        handleInitSession(args);
         break;
       default:
         exitError({ error: `Unknown command: ${command}` });

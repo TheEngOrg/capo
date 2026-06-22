@@ -475,6 +475,280 @@ describe("teo-run CLI — golden path: each command returns expected output", ()
 });
 
 // =============================================================================
+// WS-GO-05a: init-session command tests
+// =============================================================================
+
+describe("teo-run CLI — init-session: misuse cases", () => {
+  // IS-M1: malformed JSON → exit 1, { error: /json/i }
+  it("IS-M1. malformed JSON arg → exit 1, error mentions JSON", () => {
+    const { exitCode, stdout } = runCli("init-session", "not-valid-json{{{");
+
+    expect(exitCode).toBe(1);
+    expect(stdout).toMatchObject({ error: expect.stringMatching(/json/i) });
+  });
+
+  // IS-M2: command_input containing path separators still yields safe session_id (no / \ ..)
+  it("IS-M2. command_input with path separators yields safe session_id (no / \\ or ..)", () => {
+    const baseDir = makeTempDir();
+    const projectDir = makeTempDir();
+    const input = JSON.stringify({
+      command_input: "teo build ../../../etc/passwd",
+      baseDir,
+      project_dir: projectDir,
+    });
+
+    const { exitCode, stdout } = runCli("init-session", input);
+
+    expect(exitCode).toBe(0);
+    const result = stdout as Record<string, unknown>;
+    const sid = result["session_id"] as string;
+    expect(sid).not.toContain("/");
+    expect(sid).not.toContain("\\");
+    expect(sid).not.toContain("..");
+    expect(sid).toMatch(/^teo-[0-9a-f]{16}$/);
+  });
+
+  // IS-M3: CLAUDE_ENV_FILE set to a path in a non-existent dir → exit non-zero
+  it("IS-M3. CLAUDE_ENV_FILE set to unwritable path → exit non-zero with error JSON", () => {
+    const baseDir = makeTempDir();
+    const projectDir = makeTempDir();
+    const input = JSON.stringify({
+      command_input: "teo build test",
+      baseDir,
+      project_dir: projectDir,
+    });
+
+    const { exitCode, stdout } = runCli("init-session", input, {
+      CLAUDE_ENV_FILE: "/nonexistent-dir-teo-test/no-such-dir/env.txt",
+    });
+
+    expect(exitCode).toBe(1);
+    expect(stdout).toMatchObject({ error: expect.any(String) });
+  });
+});
+
+describe("teo-run CLI — init-session: boundary cases", () => {
+  // IS-B1: empty string command_input → stable hash of "unknown"
+  it("IS-B1. empty string command_input → stable session_id (hashes 'unknown')", () => {
+    const baseDir = makeTempDir();
+    const projectDir = makeTempDir();
+    const input = JSON.stringify({ command_input: "", baseDir, project_dir: projectDir });
+
+    const { exitCode, stdout } = runCli("init-session", input);
+
+    expect(exitCode).toBe(0);
+    const result = stdout as Record<string, unknown>;
+    expect(result["session_id"]).toMatch(/^teo-[0-9a-f]{16}$/);
+  });
+
+  // IS-B2: whitespace-only command_input → same session_id as empty (both hash "unknown")
+  it("IS-B2. whitespace-only command_input → same session_id as empty input", () => {
+    const baseDir1 = makeTempDir();
+    const baseDir2 = makeTempDir();
+    const projectDir1 = makeTempDir();
+    const projectDir2 = makeTempDir();
+
+    const emptyInput = JSON.stringify({
+      command_input: "",
+      baseDir: baseDir1,
+      project_dir: projectDir1,
+    });
+    const wsInput = JSON.stringify({
+      command_input: "   ",
+      baseDir: baseDir2,
+      project_dir: projectDir2,
+    });
+
+    const { stdout: out1 } = runCli("init-session", emptyInput);
+    const { stdout: out2 } = runCli("init-session", wsInput);
+
+    expect((out1 as Record<string, unknown>)["session_id"]).toBe(
+      (out2 as Record<string, unknown>)["session_id"]
+    );
+  });
+
+  // IS-B3: baseDir injection writes to temp dir — NEVER to ~/.teo
+  it("IS-B3. injected baseDir writes ledger to temp, not ~/.teo", () => {
+    const baseDir = makeTempDir();
+    const projectDir = makeTempDir();
+    const input = JSON.stringify({
+      command_input: "teo build zero-footprint",
+      baseDir,
+      project_dir: projectDir,
+    });
+
+    const { exitCode, stdout } = runCli("init-session", input);
+
+    expect(exitCode).toBe(0);
+    const result = stdout as Record<string, unknown>;
+    const ledgerFile = result["ledger_file"] as string;
+    // Ledger file must be under the injected baseDir, not ~/.teo
+    expect(ledgerFile).toContain(baseDir);
+    expect(ledgerFile).not.toContain(".teo");
+    // File must exist
+    expect(fs.existsSync(ledgerFile)).toBe(true);
+  });
+
+  // IS-B4: idempotent mkdir — calling init-session twice to same projectDir succeeds both times
+  it("IS-B4. idempotent mkdir — calling init-session twice to same projectDir succeeds", () => {
+    const baseDir = makeTempDir();
+    const projectDir = makeTempDir();
+    const input = JSON.stringify({
+      command_input: "teo build idempotent",
+      baseDir,
+      project_dir: projectDir,
+    });
+
+    const { exitCode: ec1 } = runCli("init-session", input);
+    const { exitCode: ec2 } = runCli("init-session", input);
+
+    expect(ec1).toBe(0);
+    expect(ec2).toBe(0);
+    // All three dirs must exist
+    expect(fs.existsSync(path.join(projectDir, ".claude", "memory"))).toBe(true);
+    expect(fs.existsSync(path.join(projectDir, ".claude", "memory", "pipeline"))).toBe(true);
+    expect(fs.existsSync(path.join(projectDir, ".claude", "memory", "traces"))).toBe(true);
+  });
+
+  // IS-B5: CLAUDE_ENV_FILE unset → succeeds, no error
+  it("IS-B5. CLAUDE_ENV_FILE unset → exit 0, succeeds without writing env file", () => {
+    const baseDir = makeTempDir();
+    const projectDir = makeTempDir();
+    const input = JSON.stringify({
+      command_input: "teo build no-env-file",
+      baseDir,
+      project_dir: projectDir,
+    });
+
+    // Explicitly unset CLAUDE_ENV_FILE
+    const env: Record<string, string> = {};
+    const { exitCode, stdout } = runCli("init-session", input, env);
+
+    expect(exitCode).toBe(0);
+    expect(stdout).toMatchObject({
+      session_id: expect.stringMatching(/^teo-[0-9a-f]{16}$/),
+      ledger_file: expect.any(String),
+    });
+  });
+});
+
+describe("teo-run CLI — init-session: golden path", () => {
+  // IS-G1: golden path — asserts {session_id, ledger_file}, JSONL has 1 SESSION_START line,
+  //        phase PLAN, seq 1, env file gets TEO_SESSION_ID
+  it("IS-G1. golden path: {session_id, ledger_file}, JSONL has SESSION_START seq=1, env file written", () => {
+    const baseDir = makeTempDir();
+    const projectDir = makeTempDir();
+    const envFile = path.join(makeTempDir(), "teo.env");
+    // Create the env file so appendFileSync can write to it
+    fs.writeFileSync(envFile, "", "utf8");
+
+    const input = JSON.stringify({
+      command_input: "teo build WS-GO-05a",
+      baseDir,
+      project_dir: projectDir,
+    });
+
+    const { exitCode, stdout } = runCli("init-session", input, { CLAUDE_ENV_FILE: envFile });
+
+    // Exit 0
+    expect(exitCode).toBe(0);
+
+    const result = stdout as Record<string, unknown>;
+
+    // session_id format
+    const sessionId = result["session_id"] as string;
+    expect(sessionId).toMatch(/^teo-[0-9a-f]{16}$/);
+
+    // ledger_file reported
+    const ledgerFile = result["ledger_file"] as string;
+    expect(typeof ledgerFile).toBe("string");
+    expect(ledgerFile).toContain(sessionId);
+
+    // JSONL exists with exactly 1 line
+    expect(fs.existsSync(ledgerFile)).toBe(true);
+    const lines = fs.readFileSync(ledgerFile, "utf8").trim().split("\n");
+    expect(lines).toHaveLength(1);
+
+    // Parse the single event
+    const event = JSON.parse(lines[0]!) as Record<string, unknown>;
+    expect(event["phase"]).toBe("PLAN");
+    expect(event["seq"]).toBe(1);
+    expect(event["actor_type"]).toBe("SYSTEM");
+    const detail = event["detail"] as Record<string, unknown>;
+    expect(detail["event"]).toBe("SESSION_START");
+
+    // Memory dirs created
+    expect(fs.existsSync(path.join(projectDir, ".claude", "memory"))).toBe(true);
+    expect(fs.existsSync(path.join(projectDir, ".claude", "memory", "pipeline"))).toBe(true);
+    expect(fs.existsSync(path.join(projectDir, ".claude", "memory", "traces"))).toBe(true);
+
+    // Env file has TEO_SESSION_ID line
+    const envContents = fs.readFileSync(envFile, "utf8");
+    expect(envContents).toContain(`TEO_SESSION_ID=${sessionId}`);
+  });
+
+  // IS-G2: determinism — same command_input twice → SAME session_id (canonical gate)
+  it("IS-G2. determinism: same command_input twice → identical session_id both calls", () => {
+    const baseDir1 = makeTempDir();
+    const baseDir2 = makeTempDir();
+    const projectDir1 = makeTempDir();
+    const projectDir2 = makeTempDir();
+
+    const commandInput = "teo build WS-GO-05a";
+    const input1 = JSON.stringify({
+      command_input: commandInput,
+      baseDir: baseDir1,
+      project_dir: projectDir1,
+    });
+    const input2 = JSON.stringify({
+      command_input: commandInput,
+      baseDir: baseDir2,
+      project_dir: projectDir2,
+    });
+
+    const { exitCode: ec1, stdout: out1 } = runCli("init-session", input1);
+    const { exitCode: ec2, stdout: out2 } = runCli("init-session", input2);
+
+    expect(ec1).toBe(0);
+    expect(ec2).toBe(0);
+
+    const sid1 = (out1 as Record<string, unknown>)["session_id"] as string;
+    const sid2 = (out2 as Record<string, unknown>)["session_id"] as string;
+
+    // The canonical determinism gate: same input → same session_id
+    expect(sid1).toBe(sid2);
+    expect(sid1).toMatch(/^teo-[0-9a-f]{16}$/);
+  });
+
+  // IS-G3: case/whitespace normalization — "TEO Build WS" === "teo build ws" (same session_id)
+  it("IS-G3. normalization: uppercase + leading space → same session_id as lowercase trimmed", () => {
+    const baseDir1 = makeTempDir();
+    const baseDir2 = makeTempDir();
+    const projectDir1 = makeTempDir();
+    const projectDir2 = makeTempDir();
+
+    const input1 = JSON.stringify({
+      command_input: "  TEO Build WS  ",
+      baseDir: baseDir1,
+      project_dir: projectDir1,
+    });
+    const input2 = JSON.stringify({
+      command_input: "teo build ws",
+      baseDir: baseDir2,
+      project_dir: projectDir2,
+    });
+
+    const { stdout: out1 } = runCli("init-session", input1);
+    const { stdout: out2 } = runCli("init-session", input2);
+
+    const sid1 = (out1 as Record<string, unknown>)["session_id"] as string;
+    const sid2 = (out2 as Record<string, unknown>)["session_id"] as string;
+
+    expect(sid1).toBe(sid2);
+  });
+});
+
+// =============================================================================
 // WS-GO-04: S8 follow-on — handleProvision() emits warning to stderr
 //
 // This test will FAIL today (or be SKIPPED if bin absent) because:

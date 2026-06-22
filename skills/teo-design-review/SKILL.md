@@ -181,4 +181,4 @@ See `.claude/shared/model-escalation.md` for escalation criteria.
 
 **CAN:** Review visual quality, assess UX patterns, check brand consistency, spawn art-director and design, approve or request changes
 **CANNOT:** Implement design changes directly, override brand guidelines, skip responsive validation
-**ESCALATES TO:** mg-leadership-team (brand guideline conflicts, resource constraints, design system changes)
+**ESCALATES TO:** engineering-manager (brand guideline conflicts, resource constraints, design system changes)

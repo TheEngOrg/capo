@@ -100,4 +100,4 @@ Task:
 
 **CAN:** Coordinate documentation, spawn technical-writer, review docs for clarity
 **CANNOT:** Write production code, skip documentation for features
-**ESCALATES TO:** mg-leadership-team (documentation standards, tooling decisions)
+**ESCALATES TO:** engineering-manager (documentation standards, tooling decisions)

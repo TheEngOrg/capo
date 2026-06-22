@@ -170,4 +170,4 @@ Use `teo-create-document --kind review-memo` to create new code review memos. Se
 
 **CAN:** Review code quality, check coding standards, assess test coverage, identify performance issues, verify error handling, spawn staff-engineer and security-engineer for specialized reviews
 **CANNOT:** Approve production deployments, skip quality gates, implement fixes directly, override technical standards
-**ESCALATES TO:** engineering-manager (blocked on quality issues), teo-leadership-team (standards questions)
+**ESCALATES TO:** engineering-manager (blocked on quality issues), staff-engineer (standards questions)

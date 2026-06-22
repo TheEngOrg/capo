@@ -71,7 +71,7 @@ if claude plugin marketplace update teo-marketplace 2>/dev/null; then
   echo "    OK: marketplace updated (teo-marketplace already registered)"
 else
   echo "    INFO: teo-marketplace not registered yet — adding now..."
-  if ! claude plugin marketplace add .; then
+  if ! claude plugin marketplace add ./; then
     echo "✘ FAIL: marketplace — could not register local marketplace."
     echo "        Ensure .claude-plugin/marketplace.json is present and valid."
     exit 1
@@ -106,15 +106,53 @@ echo "    OK: install succeeded"
 echo ""
 
 # ---------------------------------------------------------------------------
-# Step 5: verify plugin details are resolvable post-install
+# Step 5: verify plugin details are resolvable post-install AND asset counts
 # ---------------------------------------------------------------------------
-echo "[5/5] Verifying installed plugin details..."
-if ! claude plugin details teo; then
+echo "[5/5] Verifying installed plugin details and asset counts..."
+DETAILS_OUTPUT="$(claude plugin details teo 2>&1)" || {
   echo "✘ FAIL: details — claude plugin details teo exited non-zero."
   echo "        Plugin installed but is not resolvable. Check plugin registry state."
   exit 1
+}
+echo "${DETAILS_OUTPUT}"
+
+# Parse counts from lines like "  Agents (21)  name1, name2 ..."
+# grep is robust to leading whitespace; capture the integer inside parens.
+AGENTS_COUNT="$(echo "${DETAILS_OUTPUT}" | grep -i 'Agents' | grep -oE '\([0-9]+\)' | tr -d '()' | head -1)"
+SKILLS_COUNT="$(echo "${DETAILS_OUTPUT}" | grep -i 'Skills' | grep -oE '\([0-9]+\)' | tr -d '()' | head -1)"
+HOOKS_COUNT="$(echo "${DETAILS_OUTPUT}"  | grep -i 'Hooks'  | grep -oE '\([0-9]+\)' | tr -d '()' | head -1)"
+
+PASS=true
+
+if [ "${AGENTS_COUNT}" = "21" ]; then
+  echo "    OK: Agents (21) confirmed"
+else
+  echo "✘ FAIL: expected Agents (21), got '${AGENTS_COUNT}'"
+  PASS=false
 fi
-echo "    OK: details resolved"
+
+if [ "${SKILLS_COUNT}" = "15" ]; then
+  echo "    OK: Skills (15) confirmed"
+else
+  echo "✘ FAIL: expected Skills (15), got '${SKILLS_COUNT}'"
+  PASS=false
+fi
+
+if [ "${HOOKS_COUNT}" = "5" ]; then
+  echo "    OK: Hooks (5) confirmed"
+else
+  echo "✘ FAIL: expected Hooks (5), got '${HOOKS_COUNT}'"
+  PASS=false
+fi
+
+if [ "${PASS}" != "true" ]; then
+  echo ""
+  echo "✘ FAIL: asset count mismatch — plugin.json or agents/ directory structure is wrong."
+  echo "        Agents(0) is the classic symptom of nested paths (agents/<name>/agent.md)"
+  echo "        instead of flat paths (agents/<name>.md). Fix and re-run."
+  exit 1
+fi
+echo "    OK: all asset counts verified"
 echo ""
 
 # ---------------------------------------------------------------------------

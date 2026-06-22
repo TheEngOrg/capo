@@ -105,4 +105,4 @@ Using `Bash(head ...)`, `Bash(cat ...)`, `Bash(ls ...)`, `Bash(grep ...)`, or `B
 
 **CAN:** Set architecture, choose technologies, define technical standards
 **CANNOT:** Manage people, set business priorities, approve budgets
-**ESCALATES TO:** ceo
+**ESCALATES TO:** engineering-director

@@ -198,4 +198,4 @@ See `.claude/shared/model-escalation.md` for escalation criteria.
 
 **CANNOT:** Write production code fixes (recommend to dev), skip WCAG AA requirements, approve inaccessible designs
 
-**ESCALATES TO:** mg-leadership-team (accessibility policy decisions, resource allocation for remediation)
+**ESCALATES TO:** engineering-manager (accessibility policy decisions, resource allocation for remediation)

@@ -9,9 +9,9 @@ metadata:
   spawn_cap: "6"
 ---
 
-# mg-build
+# teo-build
 
-Classifies workstreams at intake, then coordinates the appropriate track: MECHANICAL (single Dev spawn + bash gate) or ARCHITECTURAL (QA, Dev, Staff Engineer, leadership review).
+Classifies workstreams at intake, then coordinates the appropriate track: MECHANICAL (single Dev spawn + bash gate) or ARCHITECTURAL (QA, Dev, Staff Engineer review).
 
 ## Constitution
 
@@ -129,20 +129,14 @@ Pass → report complete. No leadership review required.
 **When:** Classified ARCHITECTURAL at Step 0.
 
 ```
-Step 1: /mg-leadership-team — Executive Review + Workstream Plan
-Step 2: QA writes tests (can overlap with Dev start)
-Step 3: Dev implements against QA tests
-Step 3.5: Dual-specialist review (if code blocks in deliverable)
-Step 4: Staff Engineer internal review
-Step 5: /mg-leadership-team Code Review + Approval
-Step 6: /deployment-engineer merge
+Step 1: QA writes tests (can overlap with Dev start)
+Step 2: Dev implements against QA tests
+Step 2.5: Dual-specialist review (if code blocks in deliverable)
+Step 3: Staff Engineer internal review
+Step 4: /deployment-engineer merge
 ```
 
-### Step 1: Leadership Planning
-
-Invoke `/mg-leadership-team` for Executive Review and Workstream Plan before spawning task agents.
-
-### Step 2: QA Test Specification
+### Step 1: QA Test Specification
 
 ```yaml
 Task:
@@ -157,7 +151,7 @@ Task:
 
 QA and Dev can run in parallel once QA has committed initial test stubs.
 
-### Step 3: Dev Implementation
+### Step 2: Dev Implementation
 
 QA writes a `handoff` message to `messages-qa-dev.json` when test specs are committed. Dev reads this message before starting implementation — this enables QA and Dev to run in parallel, with Dev starting as soon as QA's handoff message appears.
 
@@ -174,7 +168,7 @@ Task:
 
 When Dev completes, it writes a `handoff` message to `messages-dev-staff-engineer.json`.
 
-### Step 3.5: Dual-Specialist Review (conditional)
+### Step 2.5: Dual-Specialist Review (conditional)
 
 After Dev completes, inspect each deliverable file. If it contains fenced code blocks (``` or ~~~), run dual-specialist review. Skip if no code blocks.
 
@@ -189,7 +183,7 @@ Spawn two specialists in parallel (at most one additional spawn beyond normal bu
 - `blocking` — must be fixed before the deliverable is accepted (correctness errors, security issues, broken logic)
 - `warning` — advisory; should be addressed but does not block acceptance
 
-### Step 4: Staff Engineer Review
+### Step 3: Staff Engineer Review
 
 ```yaml
 Task:
@@ -200,26 +194,21 @@ Task:
     Check: standards compliance, architecture, security, performance.
 ```
 
-### Step 5: Leadership Code Review
+### Step 4: Merge
 
-Invoke `/mg-leadership-team review WS-{id}` after Staff Engineer approval.
-
-### Step 6: Merge
-
-After leadership approval, invoke `/deployment-engineer merge feature/ws-{id}-{name}`.
+After Staff Engineer approval, invoke `/deployment-engineer merge feature/ws-{id}-{name}`.
 
 ## Memory Protocol
 
 ```yaml
 read:
   - .claude/memory/workstream-{id}-state.json
-  - .claude/memory/agent-leadership-decisions.json
 
 write: .claude/memory/workstream-{id}-state.json
-  agent_id: mg-build
+  agent_id: teo-build
   track: mechanical | architectural
-  phase: step_0_classify | step_1 | step_2 | step_3 | step_4 | step_5 | step_6
-  delegated_to: dev | qa | staff-engineer | leadership
+  phase: step_0_classify | step_1 | step_2 | step_3 | step_4
+  delegated_to: dev | qa | staff-engineer
   gate_status: pending | passed | failed
   blocker: {description if failed}
 ```
@@ -234,5 +223,5 @@ See `references/output-examples.md` for full template examples.
 ## Boundaries
 
 **CAN:** Classify workstreams, execute full CAD cycle, spawn qa/dev/staff-engineer, track gates, coordinate handoffs, report progress
-**CANNOT:** Write code without tests, skip tests, merge to main, approve without leadership, skip classification
-**ESCALATES TO:** engineering-manager (blockers), mg-leadership-team (final approval)
+**CANNOT:** Write code without tests, skip tests, merge to main, skip classification
+**ESCALATES TO:** engineering-manager (blockers), staff-engineer (final approval)

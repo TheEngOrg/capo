@@ -13,9 +13,12 @@ set -euo pipefail
 # Read the full hook input JSON from stdin (Claude passes it as a JSON object)
 HOOK_INPUT=$(cat)
 
-# Extract command_input from the hook JSON.
-# UserPromptExpansion delivers { "command_name": "<matched command>", "command_input": "<arg text>", ... }
-COMMAND_INPUT=$(printf '%s' "$HOOK_INPUT" | jq -r '.command_input // ""' 2>/dev/null || true)
+# Extract the command args from the hook JSON.
+# UserPromptExpansion (slash_command) payload, VERIFIED 2026-06-21 by raw dump:
+#   { "command_name": "teo:teo", "command_args": "<text after the slash command>",
+#     "prompt": "/teo:teo <args>", "expansion_type": "slash_command", ... }
+# The arg text is `command_args` (NOT command_input — that field does not exist).
+COMMAND_INPUT=$(printf '%s' "$HOOK_INPUT" | jq -r '.command_args // ""' 2>/dev/null || true)
 
 # Build the JSON arg for init-session
 INIT_ARG=$(jq -n --arg ci "$COMMAND_INPUT" '{"command_input": $ci}')

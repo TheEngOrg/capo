@@ -87,6 +87,25 @@ write: .claude/memory/teo-code-review-results.json
 - [ ] External dependencies validated (Firecrawl primary, WebSearch fallback for Tier 2)
 - [ ] Negative results confirmed via multiple sources
 - [ ] Alternative solutions researched
+- [ ] **BLAST RADIUS swept (MANDATORY — see below)**
+
+## Blast-Radius Gate (MANDATORY — no PASS without it)
+
+A change is not reviewed until you have traced EVERYTHING it touches — and everything that touches it — even if that means sweeping the entire codebase. A locally-correct change routinely breaks a DOWNSTREAM artifact that hard-codes the old reality (a gate asserting `Hooks (5)`, a doc listing counts, a test fixture, a manifest, a mirror). The reviewer is the backstop for this.
+
+Before issuing PASS, you MUST:
+
+1. **Enumerate what the change alters** — every count, name, path, signature, schema, enum value, or list the change modifies (e.g. "added a 6th hook", "renamed agent X", "moved file Y", "added CLI command Z").
+2. **Grep the whole repo for each old value** and confirm every occurrence was updated or is intentionally unaffected. Run `Grep` for the prior count/name/path across ALL surfaces — do not assume it only lives where the dev edited.
+3. **Check these surfaces explicitly** for stale references to what changed:
+   - Verification / acceptance scripts and GATES with hard-coded expectations (e.g. `scripts/verify-plugin-install.sh` asserting asset counts) — THIS is the one most commonly missed.
+   - Tests + test fixtures (unit AND the assertions inside gate/acceptance scripts).
+   - Manifests (`plugin.json`, `hooks.json`, `package.json`), docs, READMEs that state counts/lists/paths.
+   - Mirrors (`.claude/` trees) and any duplicated definition.
+   - CI config, build scripts.
+4. **If ANY downstream artifact hard-codes the old value and was not updated, FAIL the review** with the exact file:line. "The code is correct" is not sufficient — the blast radius must be consistent.
+
+Report in the verdict: the list of values that changed, the grep evidence that every occurrence is reconciled, and any downstream artifact you updated or flagged. A PASS asserts the WHOLE blast radius is consistent, not just the touched files.
 
 ## Spike Research Protocol
 

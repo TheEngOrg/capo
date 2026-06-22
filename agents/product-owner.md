@@ -5,13 +5,6 @@ model: sonnet
 tools: [Task(product-manager), Read, Glob, Grep]
 memory: local
 maxTurns: 300
-context_manifest:
-  shared_files:
-    - ".claude/shared/development-workflow.md"
-    - ".claude/shared/verdict-gate-contract.md"
-    - ".claude/shared/memory-protocol.md"
-  agent_scoped_files: []
-  estimated_tokens: 2000
 ---
 
 ```yaml

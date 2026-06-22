@@ -22,7 +22,7 @@
 #
 # MARKETPLACE SOURCE
 #   The committed marketplace.json uses the GitHub source form:
-#     { "source": "github", "repo": "TheEngOrg/capo" }
+#     { "source": "github", "repo": "TheEngOrg/the-eng-org" }
 #   This script verifies the PUBLIC github-sourced form against a real install.
 #   This IS the canonical pre-tag gate — run it before tagging any release.
 #
@@ -67,7 +67,7 @@ if claude plugin marketplace update teo-marketplace 2>/dev/null; then
   echo "    OK: marketplace updated (teo-marketplace already registered)"
 else
   echo "    INFO: teo-marketplace not registered yet — adding now..."
-  if ! claude plugin marketplace add TheEngOrg/capo; then
+  if ! claude plugin marketplace add TheEngOrg/the-eng-org; then
     echo "✘ FAIL: marketplace — could not register github marketplace."
     echo "        Ensure .claude-plugin/marketplace.json is present and valid."
     exit 1
@@ -156,6 +156,6 @@ echo ""
 # ---------------------------------------------------------------------------
 echo "✔ PASS: teo plugin install verified"
 echo ""
-echo "NOTE: This verified the PUBLIC github-sourced marketplace (TheEngOrg/capo)."
+echo "NOTE: This verified the PUBLIC github-sourced marketplace (TheEngOrg/the-eng-org)."
 echo "      This is the canonical pre-tag gate. Run before tagging any release."
 exit 0

@@ -5,11 +5,6 @@ model: sonnet
 tools: [Task(design), Read, Glob, Grep]
 memory: local
 maxTurns: 300
-context_manifest:
-  shared_files:
-    - ".claude/shared/verdict-gate-contract.md"
-  agent_scoped_files: []
-  estimated_tokens: 700
 ---
 
 ```yaml

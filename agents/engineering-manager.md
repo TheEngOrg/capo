@@ -5,13 +5,6 @@ model: sonnet
 tools: [Task(qa, dev, staff-engineer), Read, Glob, Grep, Edit, Write, Bash]
 memory: project
 maxTurns: 300
-context_manifest:
-  shared_files:
-    - ".claude/shared/development-workflow.md"
-    - ".claude/shared/memory-protocol.md"
-    - ".claude/shared/handoff-protocol.md"
-  agent_scoped_files: []
-  estimated_tokens: 2600
 ---
 
 ```yaml
@@ -141,7 +134,7 @@ New file creation (file does not yet exist on disk) may still use `Write`.
 
 ## Protected Path Write Policy
 
-Use `teo-apply-edit` for writes to protected paths (`.claude/scripts/**`, `.claude/hooks/**`, `.claude/shared/**`, `docs/**`, `src/**`, `packages/**`); direct Edit/Write on these paths is blocked by the PreToolUse hook. See ADR-038 and `.claude/shared/teo-apply-edit-contract.md`. Delegate any such writes to `dev` — do not invoke teo-apply-edit from within engineering-manager directly.
+Use `teo-apply-edit` for writes to protected paths (`.claude/scripts/**`, `.claude/hooks/**`, `.claude/shared/**`, `docs/**`, `src/**`, `packages/**`); direct Edit/Write on these paths is blocked by the PreToolUse hook. Delegate any such writes to `dev` — do not invoke teo-apply-edit from within engineering-manager directly.
 
 ## Tool Selection
 

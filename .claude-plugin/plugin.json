@@ -7,7 +7,7 @@
     "name": "TheEngOrg",
     "url": "https://github.com/TheEngOrg"
   },
-  "repository": "https://github.com/TheEngOrg/capo",
+  "repository": "https://github.com/TheEngOrg/the-eng-org",
   "license": "MIT",
   "skills": "./skills/",
   "hooks": "./hooks/hooks.json"

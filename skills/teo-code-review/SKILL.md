@@ -36,6 +36,7 @@ Coordinates comprehensive code review for implementation quality assurance.
 - Edge cases covered
 - Integration tests for critical paths
 - Mock quality and test isolation
+- Tests updated or added for changed behavior, OR justified as not warranted (address-or-justify rule)
 
 ### 3. Maintainability & Readability
 - Clear intent and purpose
@@ -43,6 +44,7 @@ Coordinates comprehensive code review for implementation quality assurance.
 - Consistent patterns throughout
 - No magic numbers or strings
 - Proper abstraction levels
+- Documentation updated for changed behavior, OR justified as not warranted (address-or-justify rule)
 
 ### 4. Performance
 - No N+1 query patterns

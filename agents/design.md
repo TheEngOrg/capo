@@ -5,12 +5,6 @@ model: sonnet
 tools: [Read, Glob, Grep, Edit, Write]
 memory: project
 maxTurns: 300
-context_manifest:
-  shared_files:
-    - ".claude/shared/verdict-gate-contract.md"
-    - ".claude/shared/teo-create-document-contract.md"
-  agent_scoped_files: []
-  estimated_tokens: 1400
 ---
 
 ```yaml

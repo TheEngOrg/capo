@@ -2,18 +2,16 @@
 
 ## Install
 
-CAPO ships as a Claude Code plugin from its own marketplace. In any Claude Code session:
+TEO ships as a Claude Code plugin from its own marketplace. In any Claude Code session:
 
 ```
-/plugin marketplace add TheEngOrg/capo
+/plugin marketplace add TheEngOrg/the-eng-org
 /plugin install teo@teo-marketplace
 ```
 
 That registers the marketplace and installs the plugin into your user scope. The plugin's agents, skills, and hooks load from the plugin cache — nothing is written into your project.
 
 To confirm it loaded, run `/teo` with no arguments. You should see the menu.
-
-> Alpha: the in-session command is `/teo`. It becomes `/capo` post-alpha.
 
 ## First run
 
@@ -43,7 +41,7 @@ Capo routes it to the right specialist and surfaces their answer.
 
 | Command | What it does |
 |---------|--------------|
-| `/teo build <feature>` | Full development cycle — QA -> dev -> review -> commit |
+| `/teo build <feature>` | Full development cycle — QA → dev → review → commit |
 | `/teo fix <bug>` | Reproduce, fix, verify |
 | `/teo review <scope>` | Quality and security review of existing work |
 | `/teo plan <initiative>` | Scope and sequence new work before building |
@@ -58,4 +56,4 @@ Capo routes it to the right specialist and surfaces their answer.
 /plugin marketplace remove teo-marketplace
 ```
 
-Both steps fully remove CAPO. Because the plugin never wrote into your project, there's nothing to clean up in your repo.
+Both steps fully remove TEO. Because the plugin never wrote into your project, there's nothing to clean up in your repo.

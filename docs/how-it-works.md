@@ -1,6 +1,6 @@
 # How It Works
 
-CAPO is a team of agents coordinated by one orchestrator, running inside your Claude Code session. This page explains the moving parts.
+TEO is a team of agents coordinated by one orchestrator, running inside your Claude Code session. This page explains the moving parts.
 
 ## The dispatcher and Capo
 
@@ -17,7 +17,7 @@ You → /teo → Dispatcher → Capo → specialists (qa, dev, staff-engineer, �
 Substantive code changes follow a gated cycle. Capo will not skip these gates.
 
 ```
-qa-spec -> dev -> qa-validate -> staff-engineer review -> commit
+qa-spec → dev → qa-validate → staff-engineer review → commit
 ```
 
 1. **qa-spec** — QA writes failing tests first, covering misuse and boundary cases before the golden path.
@@ -42,13 +42,13 @@ TEO bundles a full roster. You don't invoke these directly — Capo dispatches t
 | `product-manager` | Scope and BDD scenarios |
 | `technical-writer` | Docs |
 
-Plus design, data, devops, API, and coordination roles for non-engineering work. See [Agents](agents.md) for the full roster.
+Plus design, data, devops, API, and coordination roles for non-engineering work.
 
 Because the agents ship with the plugin, they are namespaced (e.g. `teo:capo`, `teo:qa`). They never collide with agents you've defined in your own project.
 
 ## The signed ledger
 
-The ledger and HMAC signer are implemented in the core. Wiring to the plugin runtime is in progress. Independent verification tooling is coming post-alpha.
+Each run writes an append-only JSONL ledger, and every step result is signed with HMAC. This gives you a verifiable record of what the team did — which gates ran, in what order, and with what outcome. The acceptance harness checks that the ledger was written and that the signatures verify.
 
 ## What runs where
 

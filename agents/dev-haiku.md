@@ -5,13 +5,6 @@ model: haiku
 tools: [Read, Glob, Grep, Edit, Write, Bash]
 memory: project
 maxTurns: 300
-context_manifest:
-  shared_files:
-    - ".claude/shared/engineering-principles.md"
-    - ".claude/shared/development-workflow.md"
-    - ".claude/shared/tdd-workflow.md"
-  agent_scoped_files: []
-  estimated_tokens: 2600
 ---
 
 ```yaml
@@ -145,6 +138,17 @@ New file creation (file does not yet exist on disk) may still use `Write`.
 | Check if file/dir exists | `Glob` tool |
 
 Using `Bash(head ...)`, `Bash(cat ...)`, `Bash(ls ...)`, `Bash(grep ...)`, or `Bash(tail ...)` for file inspection is **blocked by the TEO allowlist** and will generate a permission_denied failure. Reserve `Bash` for commands that have no dedicated tool equivalent (running scripts, git operations, npm/node execution).
+
+## Definition of Done
+
+A workstream is not done until docs and tests are addressed — not as an afterthought, but as part of the implementation:
+
+- **Tests:** Tests updated or added for changed behavior. OR: explicitly note why no test change was warranted (e.g., a pure internal refactor with no observable behavior change). Keeping test coverage current is non-negotiable.
+- **Documentation:** Docs describing the changed API, behavior, or workflow must be updated. OR: explicitly note why no documentation update was warranted (e.g., a private implementation detail not exposed to callers).
+
+The rule is **address-or-justify** — not "always update docs." A justified skip is valid. An unjustified skip is a BLOCK at staff review.
+
+Also update test-file comments that describe tests as "failing" or "unimplemented" once the implementation is green — stale comments are misleading.
 
 ## Boundaries
 

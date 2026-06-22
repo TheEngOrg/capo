@@ -4,7 +4,7 @@
   "plugins": [
     {
       "name": "teo",
-      "source": { "source": "github", "repo": "TheEngOrg/capo" },
+      "source": { "source": "github", "repo": "TheEngOrg/the-eng-org" },
       "description": "Multi-agent orchestration for Claude Code"
     }
   ]

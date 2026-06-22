@@ -1,0 +1,4 @@
+# Mark compiled/generated bundles as binary so git diff and git grep skip them.
+# teo-run.js is the compiled output of the TypeScript source — it is not
+# hand-edited and should not be treated as searchable source text.
+bin/teo-run.js binary

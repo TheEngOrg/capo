@@ -137,7 +137,7 @@ END_GATEWAY_SPAWN_REQUEST
 
 ## Turn-end Protocol (MANDATORY)
 
-At the end of every pipeline turn, Capo MUST write current state to `.claude/memory/pipeline/sage-result.json`. Format:
+At the end of every pipeline turn, Capo MUST write current state to `.claude/memory/pipeline/capo-result.json`. Format:
 
 ```json
 {
@@ -159,7 +159,7 @@ When Capo reaches the rotation threshold (70% of `maxTurns`) and must hand off t
 
 1. **Write checkpoint file** — write `.claude/memory/traces/context-checkpoint-{session_id}-gen{N}.json` with fields: `session_id`, `timestamp`, `context_usage_pct`, `pipeline_phase`, `completed_steps`, `pending_steps`, `open_decisions`, `active_workstreams`, `resume_instructions`, `skip_gates`, `completed_gate_outputs`, `rotation_generation`, `tree_id`, `workstream_id`, `schema_version: "2"`.
 2. **Read-back verify checkpoint** — re-read the checkpoint file and confirm presence of: `workstream_id`, `schema_version`, `skip_gates`, `resume_at_step`. If any field is absent: halt and emit FAIL_OUT. Do NOT emit GATEWAY_SPAWN_REQUEST on a failed checkpoint.
-3. **Update sage-result.json** — write `status: "rotating"` and `checkpoint_file: "<path>"`. This MUST precede Step 4.
+3. **Update capo-result.json** — write `status: "rotating"` and `checkpoint_file: "<path>"`. This MUST precede Step 4.
 4. **Emit GATEWAY_SPAWN_REQUEST** — emit the rotation spawn request with `rotation: true` and `rotation_generation: N+1`. This is the LAST step.
 
 ## Team Roster
@@ -195,7 +195,7 @@ Write after each pipeline step:
 ```yaml
 write:
   - .claude/memory/workstream-{id}-state.json
-  - .claude/memory/pipeline/sage-result.json
+  - .claude/memory/pipeline/capo-result.json
 ```
 
 ## Context Window Management
@@ -214,7 +214,7 @@ With `maxTurns: 1000`: `turn_threshold_60pct = 480`, `turn_threshold_80pct = 700
 3. Read-back and verify key fields: `workstream_id`, `schema_version`, `skip_gates`, `resume_at_step`
 4. Write workstream state
 5. Emit rotation GATEWAY_SPAWN_REQUEST with `rotation: true` and `rotation_generation: <N+1>`
-6. Set `sage-result.json` status to `rotating`
+6. Set `capo-result.json` status to `rotating`
 
 **Minimum-work guard:** If `rotation_generation > 0`, rotation MUST NOT fire in the first 50 turns of the rotated session.
 

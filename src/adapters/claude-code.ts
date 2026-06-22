@@ -1,7 +1,7 @@
 // =============================================================================
 // claude-code.ts — ClaudeCodeAdapter: LLM-backed TEOAdapter (WS-P1-03c + WS-P1-05)
 //
-// ClaudeCodeAdapter is the primary LLM call site for Sage planning. It exposes
+// ClaudeCodeAdapter is the primary LLM call site for Capo planning. It exposes
 // PlanBuilder operations as three tools (start_plan, add_task, finalize_plan)
 // to an injectable AgentRunner and drives the resulting AsyncGenerator protocol
 // until the runner emits a successful finalize_plan or the round cap is hit.
@@ -78,7 +78,7 @@ export interface AgentRunnerOpts {
 
 export interface AgentRunner {
   /**
-   * Run the Sage planning loop.
+   * Run the Capo planning loop.
    * Receives the full tool definitions + system prompt.
    * Yields ToolCall objects one at a time; the adapter executes each tool,
    * feeds the result back via the returned iterator, and loops until the
@@ -230,7 +230,7 @@ export class ClaudeCodeAdapter implements TEOAdapter {
     /* c8 ignore stop */
 
     const systemPrompt =
-      `You are Sage, the TEO planning agent. Your task is to produce a valid execution plan.\n` +
+      `You are Capo, the TEO planning agent. Your task is to produce a valid execution plan.\n` +
       `\n` +
       `Project: ${request.project_id}\n` +
       (request.directive !== undefined ? `Directive: ${request.directive}\n` : "") +

@@ -9,7 +9,7 @@ import { validatePlan } from "./validate.js";
 // plan-builder.test.ts — acceptance spec for src/core/plan-builder.ts (WS-P1-03a)
 //
 // Covers the implemented PlanBuilder: incremental plan construction with
-// immediate per-task rejection (Sage self-corrects mid-build) and full-plan
+// immediate per-task rejection (Capo self-corrects mid-build) and full-plan
 // validation at finalize.
 //
 // Ordering: misuse → boundary → golden path (ADR-064 critical-path policy)
@@ -35,7 +35,7 @@ import { validatePlan } from "./validate.js";
 //         cross-task errors — that is finalizePlan()'s job).
 //       - Returns { accepted: true } on success.
 //       - Returns { accepted: false; reason: string } on validation failure.
-//       - NEVER throws on validation failure (Sage self-corrects on rejection).
+//       - NEVER throws on validation failure (Capo self-corrects on rejection).
 //       - Throws (does NOT return) if called before startPlan().
 //
 //     finalizePlan(): FinalizeResult
@@ -131,7 +131,7 @@ describe("PlanBuilder — misuse: calling addTask() before startPlan()", () => {
   it("throws (does NOT return AddTaskResult) when addTask() is called before startPlan()", () => {
     // Pre-condition: the builder is constructed but startPlan() has not been called.
     // addTask() must throw, not return { accepted: false }. The distinction matters:
-    // Sage treats { accepted: false } as a self-correctable rejection; a throw
+    // Capo treats { accepted: false } as a self-correctable rejection; a throw
     // signals a programming error (wrong call order) that requires a different response.
     const builder = new PlanBuilder({ agentsDir: tempDir });
     expect(() => builder.addTask({ id: "task-1", type: "SCRIPT", command: "echo hi" })).toThrow();
@@ -169,7 +169,7 @@ describe("PlanBuilder — misuse: calling finalizePlan() before startPlan()", ()
 
 describe("PlanBuilder — misuse: calling startPlan() twice without reset", () => {
   it("throws on the second startPlan() call if the first was not reset", () => {
-    // Sage drives the builder in a single startPlan→addTask*→finalizePlan cycle.
+    // Capo drives the builder in a single startPlan→addTask*→finalizePlan cycle.
     // A double startPlan() without reset is a programming error — must fail loudly,
     // not silently re-initialise (which would discard in-flight accepted tasks).
     writeAgentFixture("software-engineer");
@@ -211,7 +211,7 @@ describe("PlanBuilder — misuse: AGENT task missing required fields", () => {
     }
   });
 
-  it("does NOT throw when AGENT task is missing 'prompt' — returns AddTaskResult (Sage self-corrects)", () => {
+  it("does NOT throw when AGENT task is missing 'prompt' — returns AddTaskResult (Capo self-corrects)", () => {
     writeAgentFixture("software-engineer");
     const builder = new PlanBuilder({ agentsDir: tempDir });
     builder.startPlan({});
@@ -281,7 +281,7 @@ describe("PlanBuilder — misuse: duplicate task id", () => {
     const second = builder.addTask({ id: "dup-id", type: "SCRIPT", command: "echo second" });
     expect(second.accepted).toBe(false);
     if (!second.accepted) {
-      // The rejection reason must contain the offending id so Sage can self-correct
+      // The rejection reason must contain the offending id so Capo can self-correct
       expect(second.reason).toMatch(/dup-id/);
     }
   });
@@ -309,7 +309,7 @@ describe("PlanBuilder — misuse: unresolved needs[] reference", () => {
 
     expect(result.accepted).toBe(false);
     if (!result.accepted) {
-      // Reason must identify the unresolved id so Sage knows what to add first
+      // Reason must identify the unresolved id so Capo knows what to add first
       expect(result.reason.toLowerCase()).toMatch(/task-a|unresolved|unknown/i);
     }
   });

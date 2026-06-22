@@ -21,13 +21,13 @@ Start with the menu:
 /teo
 ```
 
-Then hand Sage a piece of work. For a bounded change:
+Then hand Capo a piece of work. For a bounded change:
 
 ```
 /teo build add a --dry-run flag to the export command
 ```
 
-Sage classifies the request, scopes it, and runs the pipeline: QA writes failing tests, dev implements to green, a staff engineer reviews, and Sage commits once the gates pass. You're asked for input only when there's a real decision — an architectural fork, an unresolved trade-off, or a risk worth surfacing.
+Capo classifies the request, scopes it, and runs the pipeline: QA writes failing tests, dev implements to green, a staff engineer reviews, and Capo commits once the gates pass. You're asked for input only when there's a real decision — an architectural fork, an unresolved trade-off, or a risk worth surfacing.
 
 For an open question instead of a task:
 
@@ -35,7 +35,7 @@ For an open question instead of a task:
 /teo how should we structure the plan schema for parallel workstreams?
 ```
 
-Sage routes it to the right specialist and surfaces their answer.
+Capo routes it to the right specialist and surfaces their answer.
 
 ## The menu
 
@@ -47,7 +47,7 @@ Sage routes it to the right specialist and surfaces their answer.
 | `/teo plan <initiative>` | Scope and sequence new work before building |
 | `/teo improve <scope>` | Refactor with characterization tests |
 | `/teo ship <deliverable>` | Docs, copy, design assets |
-| `/teo <anything>` | Ask Sage to orchestrate whatever you describe |
+| `/teo <anything>` | Ask Capo to orchestrate whatever you describe |
 
 ## Uninstall
 

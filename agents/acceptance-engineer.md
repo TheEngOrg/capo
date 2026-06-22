@@ -155,11 +155,11 @@ For LOW-MEDIUM: a description of the fix is sufficient.>
 
 | Finding # | Disposition | Notes |
 |-----------|-------------|-------|
-| 1 | RESOLVED | ACCEPTED-RISK | ESCALATED-TO-SAGE | <notes> |
+| 1 | RESOLVED | ACCEPTED-RISK | ESCALATED-TO-CAPO | <notes> |
 
 ## Escalation Status
 
-<Required if any finding has disposition ESCALATED-TO-SAGE.>
+<Required if any finding has disposition ESCALATED-TO-CAPO.>
 HIGH findings escalated to Capo: <yes | no>
 If yes — Capo notified via: .claude/memory/reviews/<this filename>
 CAD gate advance: BLOCKED until Capo acknowledges or resolves.
@@ -175,12 +175,12 @@ No other values are valid.
 
 ### Escalation trigger criteria
 
-A finding MUST use `ESCALATED-TO-SAGE` if ALL of the following are true:
+A finding MUST use `ESCALATED-TO-CAPO` if ALL of the following are true:
 1. Severity is HIGH
 2. The finding was not resolved in the same session
 3. The next CAD gate advance has not yet occurred
 
-LOW/MEDIUM findings MAY use `ESCALATED-TO-SAGE` at the agent's discretion but are not required to.
+LOW/MEDIUM findings MAY use `ESCALATED-TO-CAPO` at the agent's discretion but are not required to.
 
 ## Boundaries
 

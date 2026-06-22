@@ -2,7 +2,7 @@
 
 Multi-agent orchestration for Claude Code, packaged as a plugin.
 
-TEO brings a structured engineering team into your Claude Code session. A single orchestrator (**Sage**) takes a request, breaks it into work, and dispatches it to specialist agents — QA, dev, staff-engineer, security, design, and more — through a gated development cycle. Every substantive code change runs QA-first: tests are written before implementation, reviewed by a staff engineer, and recorded in an HMAC-signed audit ledger.
+TEO brings a structured engineering team into your Claude Code session. A single orchestrator (**Capo**) takes a request, breaks it into work, and dispatches it to specialist agents — QA, dev, staff-engineer, security, design, and more — through a gated development cycle. Every substantive code change runs QA-first: tests are written before implementation, reviewed by a staff engineer, and recorded in an HMAC-signed audit ledger.
 
 It installs as a Claude Code plugin. It does not modify your project, copy files into your repo, or require an API key — the agents run in your own session.
 
@@ -23,10 +23,10 @@ Then start any workflow with `/teo`.
 /teo fix <bug>           # reproduce → fix → verify
 /teo review <scope>      # quality + security review
 /teo plan <initiative>   # scope and sequence new work
-/teo <anything>          # ask Sage to orchestrate it
+/teo <anything>          # ask Capo to orchestrate it
 ```
 
-`/teo` is the gateway. It routes your request to Sage, who plans the work and delegates to the right specialists. You stay in the loop for decisions; the team produces the artifacts.
+`/teo` is the gateway. It routes your request to Capo, who plans the work and delegates to the right specialists. You stay in the loop for decisions; the team produces the artifacts.
 
 ## What it does
 
@@ -45,7 +45,7 @@ Then start any workflow with `/teo`.
 ## Documentation
 
 - [Getting Started](docs/getting-started.md) — install, first run, and the `/teo` menu.
-- [How It Works](docs/how-it-works.md) — Sage, the dispatcher, the CAD pipeline, and the ledger.
+- [How It Works](docs/how-it-works.md) — Capo, the dispatcher, the CAD pipeline, and the ledger.
 
 ## License
 

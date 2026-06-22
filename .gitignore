@@ -8,6 +8,9 @@ dist/
 .env.local
 coverage/
 .vitest/
+.claude
+.firecrawl
+.workflows
 
 # Bun output
 # bun.lockb is committed — required for bun install --frozen-lockfile in CI

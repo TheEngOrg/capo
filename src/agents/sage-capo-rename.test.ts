@@ -46,6 +46,17 @@ function readFile(relPath: string): string {
   return fs.readFileSync(root(relPath), "utf8");
 }
 
+/**
+ * Like readFile, but returns null when the file does not exist.
+ * Used for optional artifact files that may have been removed from the repo.
+ * If the file is absent, all "must not contain X" assertions trivially PASS.
+ */
+function readFileOrNull(relPath: string): string | null {
+  const fullPath = root(relPath);
+  if (!fs.existsSync(fullPath)) return null;
+  return fs.readFileSync(fullPath, "utf8");
+}
+
 // ---------------------------------------------------------------------------
 // Regression guard helpers
 //
@@ -498,31 +509,41 @@ describe("misuse: docs/gemini-independent-review.md must not reference sage-pipe
 });
 
 describe("misuse: .claude/memory/go-signals/ws-sandbox-e2e-qa-spec.json must not reference old artifacts", () => {
+  // This file is an optional runtime artifact. If it has been deleted from the
+  // repo (as it was in WS-RENAME-T2-FIX commit 81fe973), these tests PASS
+  // trivially — no stale refs can exist in a file that isn't there.
+  const QA_SPEC_PATH = ".claude/memory/go-signals/ws-sandbox-e2e-qa-spec.json";
+
   it("ws-sandbox-e2e-qa-spec.json does not reference sage-result.json", () => {
     // MISUSE: the go-signal spec file had 16+ lines with sage-result.json.
-    const content = readFile(".claude/memory/go-signals/ws-sandbox-e2e-qa-spec.json");
+    const content = readFileOrNull(QA_SPEC_PATH);
+    if (content === null) return; // file absent — trivially no stale refs
     expect(content).not.toContain("sage-result.json");
   });
 
   it("ws-sandbox-e2e-qa-spec.json prose does not say 'routes to Sage immediately'", () => {
     // MISUSE: line 114 note text still named Sage.
-    const content = readFile(".claude/memory/go-signals/ws-sandbox-e2e-qa-spec.json");
+    const content = readFileOrNull(QA_SPEC_PATH);
+    if (content === null) return;
     expect(content.toLowerCase()).not.toContain("routes to sage");
   });
 
   it("ws-sandbox-e2e-qa-spec.json prose does not say 'Sage did NOT attempt'", () => {
     // MISUSE: line 66 pass criterion named Sage as the actor.
-    const content = readFile(".claude/memory/go-signals/ws-sandbox-e2e-qa-spec.json");
+    const content = readFileOrNull(QA_SPEC_PATH);
+    if (content === null) return;
     expect(content).not.toContain("Sage did NOT attempt");
   });
 
   it('ws-sandbox-e2e-qa-spec.json prose does not say "Sage\'s plan output"', () => {
-    const content = readFile(".claude/memory/go-signals/ws-sandbox-e2e-qa-spec.json");
+    const content = readFileOrNull(QA_SPEC_PATH);
+    if (content === null) return;
     expect(content.toLowerCase()).not.toContain("sage's plan output");
   });
 
   it("ws-sandbox-e2e-qa-spec.json prose does not say 'Sage may legitimately write'", () => {
-    const content = readFile(".claude/memory/go-signals/ws-sandbox-e2e-qa-spec.json");
+    const content = readFileOrNull(QA_SPEC_PATH);
+    if (content === null) return;
     expect(content.toLowerCase()).not.toContain("sage may legitimately");
   });
 });

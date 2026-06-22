@@ -5,16 +5,6 @@ model: sonnet
 tools: [Task(dev), Read, Glob, Grep, Edit, Write, Bash]
 memory: project
 maxTurns: 300
-context_manifest:
-  shared_files:
-    - ".claude/shared/engineering-principles.md"
-    - ".claude/shared/development-workflow.md"
-    - ".claude/shared/verdict-gate-contract.md"
-    - ".claude/shared/gate-classification-protocol.md"
-    - ".claude/shared/gate-evaluator-protocol.md"
-    - ".claude/shared/tdd-workflow.md"
-  agent_scoped_files: []
-  estimated_tokens: 4400
 ---
 
 ```yaml
@@ -175,7 +165,7 @@ For `.claude/memory/**` files, use mechanical tools — never full-file Write/Ed
 Full-file `Write`/`Edit` on **existing** `.claude/memory/` files is **FORBIDDEN**.
 New file creation (file does not yet exist on disk) may still use `Write`.
 
-Use `teo-create-document --kind review-memo` to create new review memo documents. See ADR-038 and `.claude/shared/teo-create-document-contract.md`.
+Use `teo-create-document --kind review-memo` to create new review memo documents.
 
 ## Tool Selection
 

@@ -156,8 +156,8 @@ scenes:
 
 ## Process References
 
-- **Visual output standards**: `.claude/shared/visual-formatting.md`
-- **Agent coordination**: `.claude/shared/handoff-protocol.md`
+- **Visual output standards**: `.claude/shared/visual-formatting.md` (if present)
+- **Agent coordination**: `.claude/shared/handoff-protocol.md` (if present)
 
 ## Boundaries
 

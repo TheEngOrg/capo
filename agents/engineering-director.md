@@ -5,13 +5,6 @@ model: sonnet
 tools: [Task(engineering-manager, staff-engineer, devops-engineer), Read, Glob, Grep]
 memory: local
 maxTurns: 300
-context_manifest:
-  shared_files:
-    - ".claude/shared/development-workflow.md"
-    - ".claude/shared/engineering-principles.md"
-    - ".claude/shared/memory-protocol.md"
-  agent_scoped_files: []
-  estimated_tokens: 2000
 ---
 
 ```yaml
@@ -85,7 +78,7 @@ For `.claude/memory/**` files, use mechanical tools — never full-file Write/Ed
 Full-file `Write`/`Edit` on **existing** `.claude/memory/` files is **FORBIDDEN**.
 New file creation (file does not yet exist on disk) may still use `Write`.
 
-Use `teo-create-document --kind decision-record` to create new decision record documents. See ADR-038 and `.claude/shared/teo-create-document-contract.md`.
+Use `teo-create-document --kind decision-record` to create new decision record documents.
 
 ## Tool Selection
 

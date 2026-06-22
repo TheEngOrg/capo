@@ -5,10 +5,6 @@ model: sonnet
 tools: [Read, Glob, Grep, Task, Bash, WebFetch, WebSearch]
 memory: local
 maxTurns: 1000
-context_manifest:
-  shared_files: []
-  agent_scoped_files: []
-  estimated_tokens: 0
 ---
 
 ```yaml

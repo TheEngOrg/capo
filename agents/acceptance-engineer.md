@@ -5,14 +5,6 @@ model: sonnet
 tools: [Bash, Read, Edit, Write, Glob, Grep]
 memory: local
 maxTurns: 300
-context_manifest:
-  shared_files:
-    - ".claude/shared/tdd-workflow.md"
-    - ".claude/shared/verdict-gate-contract.md"
-    - ".claude/shared/verification-gate-protocol.md"
-    - ".claude/shared/engineering-principles.md"
-  agent_scoped_files: []
-  estimated_tokens: 3400
 ---
 
 > Inherits: [agent-base](../_base/agent-base.md)

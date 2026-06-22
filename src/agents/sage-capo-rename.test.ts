@@ -4,19 +4,19 @@ import * as path from "node:path";
 import { execSync } from "node:child_process";
 
 // =============================================================================
-// capo-capo-rename.test.ts — RED specs for WS-RENAME-T2-FIX
+// sage-capo-rename.test.ts — regression guard for WS-RENAME-T2-FIX
 //
-// These tests are RED before the fix and GREEN after.
+// These tests are GREEN after the Sage→Capo rename is complete.
 //
 // Root cause being fixed: WS-RENAME-T2 (PR #35) grepped only quoted lowercase
-// "capo" in agents/+hooks/, missing:
+// "sage" in agents/+hooks/, missing:
 //   - ESCALATED-TO-SAGE (unquoted uppercase)
 //   - Prose in README/docs
-//   - Artifact filenames capo-result.json / capo-pipeline-log.json
+//   - Artifact filenames sage-result.json / sage-pipeline-log.json
 //   - Comments in src/ test files
 //
-// Decision: Zero remaining Capo persona references anywhere in the repo.
-// The artifact filename carveout (capo-result.json for alpha) is REVOKED.
+// Decision: Zero remaining Sage persona references anywhere in the repo.
+// The artifact filename carveout (sage-result.json for alpha) is REVOKED.
 //
 // PROTECTED patterns — these are stable API contracts, NOT persona references:
 //   sagePlan()           — TypeScript method name
@@ -49,8 +49,8 @@ function readFile(relPath: string): string {
 // ---------------------------------------------------------------------------
 // Regression guard helpers
 //
-// git grep -in capo returns ALL case-insensitive hits. We diff the raw results
-// against a known-allowlist to detect any un-triaged "capo" occurrences.
+// git grep -in sage returns ALL case-insensitive hits. We diff the raw results
+// against a known-allowlist to detect any un-triaged "sage" occurrences.
 //
 // The allowlist is expressed as exact substring patterns. A grep hit is
 // "triaged" if it matches at least one allowlist entry.
@@ -76,6 +76,9 @@ function readFile(relPath: string): string {
  * agent_id=capo / agent_id: "capo" / "task-capo-bad" / "capo" non-executor —
  *   Attack-payload strings in prompt-injection test (claude-code.test.ts).
  *   The literal "capo" is the VALUE BEING REJECTED, not a persona reference.
+ *   NOTE: these were renamed from "sage" to "capo" by the wholesale rename —
+ *   they now live in the capo namespace but remain attack-payload strings, not
+ *   Sage persona references.
  *
  * TEOSageGlyph — external font filename in hooks/session-start.sh. The filename
  *   itself is not ours to rename; only internal variables would be fixed.
@@ -83,11 +86,11 @@ function readFile(relPath: string): string {
  * capo-like-agent — fixture name in spawn-agent.test.ts, not persona ref.
  *
  * message / messages / errorMessage / defaultError — JS/TS variable names.
- *   "mes**capo**" contains the substring "capo" at positions 3-6, so git grep
- *   -in capo DOES match lines with the word "message". These are false positives.
+ *   "mes**sage**" contains the substring "sage" at positions 3-6, so git grep
+ *   -in sage DOES match lines with the word "message". These are false positives.
  *
  * Usage / USAGE / usages — shell/markdown section headings in skill/script
- *   files. "u**capo**" also contains the substring "capo" at positions 1-4.
+ *   files. "u**sage**" also contains the substring "sage" at positions 1-4.
  *   Same false-positive situation.
  */
 const ALLOWLIST: readonly string[] = [
@@ -96,6 +99,8 @@ const ALLOWLIST: readonly string[] = [
   // PROTECTED: error code
   "PQ_03_SAGE_AS_EXECUTOR",
   // PROTECTED: attack-payload test strings (claude-code.test.ts)
+  // These were renamed sage→capo by the wholesale rename; they are
+  // the VALUE BEING REJECTED, not Sage persona references.
   "agent_id=capo",
   'agent_id: "capo"',
   "task-capo-bad",
@@ -105,24 +110,24 @@ const ALLOWLIST: readonly string[] = [
   "TEOSageGlyph",
   // FALSE POSITIVE: fixture name in spawn-agent.test.ts
   "capo-like-agent",
-  // FALSE POSITIVE: "message" contains "capo" as a substring (mes+capo).
+  // FALSE POSITIVE: "message" contains "sage" as a substring (mes+sage).
   // Appears in error message variables throughout src/**, scripts/, bin/.
   // The isAllowlisted() check is case-insensitive so one entry covers
   // "message", "Message", "MESSAGE", "messages", etc.
   "message",
-  // FALSE POSITIVE: "usage" contains "capo" as a substring (u+capo).
+  // FALSE POSITIVE: "usage" contains "sage" as a substring (u+sage).
   // Appears in shell/markdown section headings and skill files.
   // Case-insensitive check covers "usage", "Usage", "USAGE".
   "usage",
-  // FALSE POSITIVE: this test file's own name "capo-capo-rename.test.ts"
+  // FALSE POSITIVE: this test file's own name "sage-capo-rename.test.ts"
   // appears as a file path string in go-signal JSON artifacts.
-  "capo-capo-rename",
+  "sage-capo-rename",
 ];
 
 /**
  * Parse raw git grep output into an array of (file:line:content) hit objects.
- * git grep -in capo emits lines like:
- *   path/to/file.ts:42:  // Capo plans the work
+ * git grep -in sage emits lines like:
+ *   path/to/file.ts:42:  // Sage plans the work
  */
 interface GrepHit {
   file: string;
@@ -177,41 +182,41 @@ function runGrepOrEmpty(cmd: string): string | null {
 }
 
 // =============================================================================
-// MISUSE — assertions that fire when stale Capo persona references are PRESENT
+// MISUSE — assertions that fire when stale Sage persona references are PRESENT
 //
-// These tests describe what SHOULD be true after dev applies the fix.
-// They are RED before the fix. A green suite proves the misuse no longer applies.
+// These tests describe what SHOULD be true after the rename is complete.
+// A green suite proves the stale Sage persona references no longer exist.
 // =============================================================================
 
-describe("misuse: artifact filenames — capo-result.json must not appear in any tracked file", () => {
-  it("no tracked file references capo-result.json as an artifact filename", () => {
-    // MISUSE: the artifact filename capo-result.json was the primary miss in
+describe("misuse: artifact filenames — sage-result.json must not appear in any tracked file", () => {
+  it("no tracked file references sage-result.json as an artifact filename", () => {
+    // MISUSE: the artifact filename sage-result.json was the primary miss in
     // PR #35. Any remaining reference means code is still writing/reading the
     // old filename. This test fails before the rename and passes after.
     //
-    // Note: the physical file .claude/memory/pipeline/capo-result.json may
+    // Note: the physical file .claude/memory/pipeline/sage-result.json may
     // still exist on disk (runtime artifact from a prior run) but must NOT
     // be referenced by any tracked source file.
-    const raw = runGrepOrEmpty('git grep -rn "capo-result\\.json"');
+    const raw = runGrepOrEmpty('git grep -rn "sage-result\\.json"');
     if (raw === null) return; // no hits = PASS
     // Exclude this test file itself (it mentions the old name in comments/descriptions)
-    const hits = parseGrepOutput(raw).filter((h) => !h.file.endsWith("capo-capo-rename.test.ts"));
+    const hits = parseGrepOutput(raw).filter((h) => !h.file.endsWith("sage-capo-rename.test.ts"));
     expect(
       hits,
-      `Found capo-result.json references in tracked files:\n${hits.map((h) => h.raw).join("\n")}`
+      `Found sage-result.json references in tracked files:\n${hits.map((h) => h.raw).join("\n")}`
     ).toHaveLength(0);
   });
 
-  it("no tracked file references capo-pipeline-log.json as an artifact filename", () => {
-    // MISUSE: same pattern as capo-result.json — this artifact filename must
+  it("no tracked file references sage-pipeline-log.json as an artifact filename", () => {
+    // MISUSE: same pattern as sage-result.json — this artifact filename must
     // be renamed to capo-pipeline-log.json everywhere.
-    const raw = runGrepOrEmpty('git grep -rn "capo-pipeline-log\\.json"');
+    const raw = runGrepOrEmpty('git grep -rn "sage-pipeline-log\\.json"');
     if (raw === null) return; // no hits = PASS
     // Exclude this test file itself (it mentions the old name in comments/descriptions)
-    const hits = parseGrepOutput(raw).filter((h) => !h.file.endsWith("capo-capo-rename.test.ts"));
+    const hits = parseGrepOutput(raw).filter((h) => !h.file.endsWith("sage-capo-rename.test.ts"));
     expect(
       hits,
-      `Found capo-pipeline-log.json references in tracked files:\n${hits.map((h) => h.raw).join("\n")}`
+      `Found sage-pipeline-log.json references in tracked files:\n${hits.map((h) => h.raw).join("\n")}`
     ).toHaveLength(0);
   });
 });
@@ -232,205 +237,205 @@ describe("misuse: ESCALATED-TO-SAGE must not appear in acceptance-engineer.md", 
   });
 });
 
-describe("misuse: capo.md must not reference capo-result.json", () => {
-  it("agents/capo.md contains zero capo-result.json references", () => {
+describe("misuse: capo.md must not reference sage-result.json", () => {
+  it("agents/capo.md contains zero sage-result.json references", () => {
     // MISUSE: capo.md's Turn-end Protocol and Memory Protocol sections both
     // named the old artifact path. Capo must now write capo-result.json.
     const content = readFile("agents/capo.md");
-    expect(content).not.toContain("capo-result.json");
+    expect(content).not.toContain("sage-result.json");
   });
 
-  it(".claude/agents/capo.md contains zero capo-result.json references", () => {
+  it(".claude/agents/capo.md contains zero sage-result.json references", () => {
     const content = readFile(".claude/agents/capo.md");
-    expect(content).not.toContain("capo-result.json");
+    expect(content).not.toContain("sage-result.json");
   });
 });
 
-describe("misuse: README.md must not refer to Capo as the orchestrator persona", () => {
-  it('README.md does not contain "ask Capo to orchestrate"', () => {
-    // MISUSE: the /teo command table and narrative prose still named Capo.
+describe("misuse: README.md must not refer to Sage as the orchestrator persona", () => {
+  it('README.md does not contain "ask Sage to orchestrate"', () => {
+    // MISUSE: the /teo command table and narrative prose still named Sage.
     // The replacement is "ask Capo to orchestrate".
     const content = readFile("README.md");
-    expect(content.toLowerCase()).not.toContain("ask capo");
+    expect(content.toLowerCase()).not.toContain("ask sage");
   });
 
-  it('README.md does not contain "routes your request to Capo"', () => {
+  it('README.md does not contain "routes your request to Sage"', () => {
     const content = readFile("README.md");
-    expect(content.toLowerCase()).not.toContain("routes your request to capo");
+    expect(content.toLowerCase()).not.toContain("routes your request to sage");
   });
 
-  it('README.md does not contain "A single orchestrator (**Capo**)"', () => {
-    // MISUSE: introductory paragraph named Capo explicitly.
+  it('README.md does not contain "A single orchestrator (**Sage**)"', () => {
+    // MISUSE: introductory paragraph named Sage explicitly.
     const content = readFile("README.md");
-    expect(content).not.toContain("(**Capo**)");
+    expect(content).not.toContain("(**Sage**)");
   });
 
-  it('README.md does not contain "Capo, the dispatcher" (docs link description)', () => {
+  it('README.md does not contain "Sage, the dispatcher" (docs link description)', () => {
     const content = readFile("README.md");
-    expect(content).not.toContain("Capo, the dispatcher");
+    expect(content).not.toContain("Sage, the dispatcher");
   });
 });
 
-describe("misuse: docs/getting-started.md must not refer to Capo as the orchestrator", () => {
-  it('getting-started.md does not contain "hand Capo a piece of work"', () => {
+describe("misuse: docs/getting-started.md must not refer to Sage as the orchestrator", () => {
+  it('getting-started.md does not contain "hand Sage a piece of work"', () => {
     const content = readFile("docs/getting-started.md");
-    expect(content.toLowerCase()).not.toContain("hand capo");
+    expect(content.toLowerCase()).not.toContain("hand sage");
   });
 
-  it('getting-started.md does not contain "Capo classifies the request"', () => {
+  it('getting-started.md does not contain "Sage classifies the request"', () => {
     const content = readFile("docs/getting-started.md");
-    expect(content.toLowerCase()).not.toContain("capo classifies");
+    expect(content.toLowerCase()).not.toContain("sage classifies");
   });
 
-  it('getting-started.md does not contain "Capo routes it"', () => {
+  it('getting-started.md does not contain "Sage routes it"', () => {
     const content = readFile("docs/getting-started.md");
-    expect(content.toLowerCase()).not.toContain("capo routes");
+    expect(content.toLowerCase()).not.toContain("sage routes");
   });
 
-  it('getting-started.md does not contain "Ask Capo to orchestrate"', () => {
+  it('getting-started.md does not contain "Ask Sage to orchestrate"', () => {
     const content = readFile("docs/getting-started.md");
-    expect(content.toLowerCase()).not.toContain("ask capo");
+    expect(content.toLowerCase()).not.toContain("ask sage");
   });
 });
 
-describe("misuse: hooks/teo-post-spawn-citation-check.sh must not refer to Capo", () => {
-  it('citation-check hook does not contain "before Capo reads it"', () => {
-    // MISUSE: the BLOCK reason string in the hook named "Capo" as the consumer
+describe("misuse: hooks/teo-post-spawn-citation-check.sh must not refer to Sage", () => {
+  it('citation-check hook does not contain "before Sage reads it"', () => {
+    // MISUSE: the BLOCK reason string in the hook named "Sage" as the consumer
     // of research files. Must now say "Capo".
     const content = readFile("hooks/teo-post-spawn-citation-check.sh");
-    expect(content.toLowerCase()).not.toContain("before capo reads it");
+    expect(content.toLowerCase()).not.toContain("before sage reads it");
   });
 });
 
-describe("misuse: sandbox/scripts/verify-traces.sh must not reference capo-result.json", () => {
-  it("verify-traces.sh path variable does not point to capo-result.json", () => {
+describe("misuse: sandbox/scripts/verify-traces.sh must not reference sage-result.json", () => {
+  it("verify-traces.sh path variable does not point to sage-result.json", () => {
     // MISUSE: the CAPO_RESULT variable was correctly named but still pointed
-    // to the old capo-result.json path.
+    // to the old sage-result.json path.
     const content = readFile("sandbox/scripts/verify-traces.sh");
-    expect(content).not.toContain("capo-result.json");
+    expect(content).not.toContain("sage-result.json");
   });
 });
 
-describe("misuse: sandbox/README.md must not reference capo-result.json", () => {
-  it("sandbox/README.md contains zero capo-result.json references", () => {
+describe("misuse: sandbox/README.md must not reference sage-result.json", () => {
+  it("sandbox/README.md contains zero sage-result.json references", () => {
     // MISUSE: 11+ occurrences across STEP-3A/3B/4 documentation.
     const content = readFile("sandbox/README.md");
-    expect(content).not.toContain("capo-result.json");
+    expect(content).not.toContain("sage-result.json");
   });
 });
 
-describe("misuse: .claude/shared/gate-evaluator-protocol.md must not reference old Capo artifacts", () => {
-  it("gate-evaluator-protocol.md does not reference capo-pipeline-log.json", () => {
+describe("misuse: .claude/shared/gate-evaluator-protocol.md must not reference old Sage artifacts", () => {
+  it("gate-evaluator-protocol.md does not reference sage-pipeline-log.json", () => {
     const content = readFile(".claude/shared/gate-evaluator-protocol.md");
-    expect(content).not.toContain("capo-pipeline-log.json");
+    expect(content).not.toContain("sage-pipeline-log.json");
   });
 
-  it('gate-evaluator-protocol.md does not contain "session_id": "capo-', () => {
-    // MISUSE: sample JSON used "capo-2026-03-25-001" as the session_id format.
+  it('gate-evaluator-protocol.md does not contain "session_id": "sage-', () => {
+    // MISUSE: sample JSON used "sage-2026-03-25-001" as the session_id format.
     const content = readFile(".claude/shared/gate-evaluator-protocol.md");
-    expect(content).not.toContain('"capo-2026-');
+    expect(content).not.toContain('"sage-2026-');
   });
 
-  it('gate-evaluator-protocol.md does not contain prose "the Capo" as persona', () => {
-    // MISUSE: "the Capo presents the gate", "the Capo reads gate definitions",
-    // "Capo pipeline execution", "Capo-managed work".
+  it('gate-evaluator-protocol.md does not contain prose "the Sage" as persona', () => {
+    // MISUSE: "the Sage presents the gate", "the Sage reads gate definitions",
+    // "Sage pipeline execution", "Sage-managed work".
     const content = readFile(".claude/shared/gate-evaluator-protocol.md");
-    expect(content.toLowerCase()).not.toContain("the capo ");
-    expect(content.toLowerCase()).not.toContain("capo pipeline execution");
-    expect(content.toLowerCase()).not.toContain("capo-managed work");
+    expect(content.toLowerCase()).not.toContain("the sage ");
+    expect(content.toLowerCase()).not.toContain("sage pipeline execution");
+    expect(content.toLowerCase()).not.toContain("sage-managed work");
   });
 });
 
-describe("misuse: .claude/shared/error-recovery.md must not reference capo-pipeline-log.json", () => {
-  it("error-recovery.md does not reference capo-pipeline-log.json", () => {
+describe("misuse: .claude/shared/error-recovery.md must not reference sage-pipeline-log.json", () => {
+  it("error-recovery.md does not reference sage-pipeline-log.json", () => {
     // MISUSE: four occurrences in error taxonomy / recovery action descriptions.
     const content = readFile(".claude/shared/error-recovery.md");
-    expect(content).not.toContain("capo-pipeline-log.json");
+    expect(content).not.toContain("sage-pipeline-log.json");
   });
 });
 
-describe("misuse: .claude/shared/process-matcher-protocol.md must not reference old Capo artifacts", () => {
-  it("process-matcher-protocol.md does not reference capo-pipeline-log.json", () => {
+describe("misuse: .claude/shared/process-matcher-protocol.md must not reference old Sage artifacts", () => {
+  it("process-matcher-protocol.md does not reference sage-pipeline-log.json", () => {
     const content = readFile(".claude/shared/process-matcher-protocol.md");
-    expect(content).not.toContain("capo-pipeline-log.json");
+    expect(content).not.toContain("sage-pipeline-log.json");
   });
 
-  it('process-matcher-protocol.md does not contain session_id format "capo-{date}"', () => {
+  it('process-matcher-protocol.md does not contain session_id format "sage-{date}"', () => {
     const content = readFile(".claude/shared/process-matcher-protocol.md");
-    expect(content).not.toContain('"capo-{date}');
+    expect(content).not.toContain('"sage-{date}');
   });
 });
 
-describe("misuse: src/agents/coordinator.md must not refer to Capo as the plan author", () => {
-  it('coordinator.md does not contain "Receives a Plan from Capo"', () => {
-    // MISUSE: the What coordinator does section named Capo as the plan source.
+describe("misuse: src/agents/coordinator.md must not refer to Sage as the plan author", () => {
+  it('coordinator.md does not contain "Receives a Plan from Sage"', () => {
+    // MISUSE: the What coordinator does section named Sage as the plan source.
     const content = readFile("src/agents/coordinator.md");
-    expect(content.toLowerCase()).not.toContain("receives a plan from capo");
+    expect(content.toLowerCase()).not.toContain("receives a plan from sage");
   });
 
-  it('coordinator.md does not contain "max 3 Capo rotations"', () => {
+  it('coordinator.md does not contain "max 3 Sage rotations"', () => {
     const content = readFile("src/agents/coordinator.md");
-    expect(content.toLowerCase()).not.toContain("capo rotations");
+    expect(content.toLowerCase()).not.toContain("sage rotations");
   });
 });
 
-describe("misuse: src/adapters/claude-code.ts must not refer to Capo in prose comments or prompts", () => {
-  it("claude-code.ts system prompt does not say 'You are Capo'", () => {
-    // MISUSE: the LLM prompt literal told the planning agent it was "Capo".
+describe("misuse: src/adapters/claude-code.ts must not refer to Sage in prose comments or prompts", () => {
+  it("claude-code.ts system prompt does not say 'You are Sage'", () => {
+    // MISUSE: the LLM prompt literal told the planning agent it was "Sage".
     // This is a live system prompt, not a comment — must say "Capo".
     const content = readFile("src/adapters/claude-code.ts");
-    expect(content).not.toContain("You are Capo");
+    expect(content).not.toContain("You are Sage");
   });
 
-  it("claude-code.ts file header comment does not say 'LLM call site for Capo planning'", () => {
+  it("claude-code.ts file header comment does not say 'LLM call site for Sage planning'", () => {
     const content = readFile("src/adapters/claude-code.ts");
-    expect(content.toLowerCase()).not.toContain("llm call site for capo");
+    expect(content.toLowerCase()).not.toContain("llm call site for sage");
   });
 
-  it("claude-code.ts AgentRunner JSDoc does not say 'Run the Capo planning loop'", () => {
+  it("claude-code.ts AgentRunner JSDoc does not say 'Run the Sage planning loop'", () => {
     const content = readFile("src/adapters/claude-code.ts");
-    // The JSDoc "Run the Capo planning loop" is in the AgentRunner interface.
+    // The JSDoc "Run the Sage planning loop" is in the AgentRunner interface.
     // The method name sagePlan is protected; this check targets the prose only.
     const hasSagePlanningProse =
-      content.includes("Run the Capo planning loop") || content.includes("the Capo planning");
+      content.includes("Run the Sage planning loop") || content.includes("the Sage planning");
     expect(hasSagePlanningProse).toBe(false);
   });
 });
 
-describe("misuse: src/core/plan-builder.test.ts must not refer to Capo in prose comments", () => {
-  it("plan-builder.test.ts does not contain 'Capo treats' in comments", () => {
-    // MISUSE: line 134 had "Capo treats { accepted: false } as a self-correctable
+describe("misuse: src/core/plan-builder.test.ts must not refer to Sage in prose comments", () => {
+  it("plan-builder.test.ts does not contain 'Sage treats' in comments", () => {
+    // MISUSE: line 134 had "Sage treats { accepted: false } as a self-correctable
     // rejection" — persona prose in a test comment.
     const content = readFile("src/core/plan-builder.test.ts");
-    expect(content).not.toContain("Capo treats");
+    expect(content).not.toContain("Sage treats");
   });
 
-  it("plan-builder.test.ts does not contain 'Capo drives the builder' in comments", () => {
+  it("plan-builder.test.ts does not contain 'Sage drives the builder' in comments", () => {
     const content = readFile("src/core/plan-builder.test.ts");
-    expect(content).not.toContain("Capo drives the builder");
+    expect(content).not.toContain("Sage drives the builder");
   });
 
-  it("plan-builder.test.ts it() description does not say 'Capo self-corrects'", () => {
-    // MISUSE: line 214 had "returns AddTaskResult (Capo self-corrects)" in the
+  it("plan-builder.test.ts it() description does not say 'Sage self-corrects'", () => {
+    // MISUSE: line 214 had "returns AddTaskResult (Sage self-corrects)" in the
     // it() description string. Should say "Capo self-corrects".
     const content = readFile("src/core/plan-builder.test.ts");
-    expect(content).not.toContain("Capo self-corrects");
+    expect(content).not.toContain("Sage self-corrects");
   });
 
-  it("plan-builder.test.ts comment does not say 'so Capo can self-correct'", () => {
+  it("plan-builder.test.ts comment does not say 'so Sage can self-correct'", () => {
     const content = readFile("src/core/plan-builder.test.ts");
-    expect(content).not.toContain("so Capo can self-correct");
+    expect(content).not.toContain("so Sage can self-correct");
   });
 
-  it("plan-builder.test.ts comment does not say 'so Capo knows what to add'", () => {
+  it("plan-builder.test.ts comment does not say 'so Sage knows what to add'", () => {
     const content = readFile("src/core/plan-builder.test.ts");
-    expect(content).not.toContain("so Capo knows");
+    expect(content).not.toContain("so Sage knows");
   });
 
-  it("plan-builder.test.ts file header does not say 'Capo self-corrects on rejection'", () => {
-    // MISUSE: line 38 in the file header used "Capo self-corrects on rejection".
+  it("plan-builder.test.ts file header does not say 'Sage self-corrects on rejection'", () => {
+    // MISUSE: line 38 in the file header used "Sage self-corrects on rejection".
     const content = readFile("src/core/plan-builder.test.ts");
-    expect(content).not.toContain("Capo self-corrects on rejection");
+    expect(content).not.toContain("Sage self-corrects on rejection");
   });
 });
 
@@ -444,27 +449,27 @@ describe("misuse: src/agents/load.test.ts must not use SAGE_BLOCKED_TOOLS identi
 });
 
 describe("misuse: src/core/sign.test.ts must use capo as actor_id in pipeline test fixture", () => {
-  it("sign.test.ts full-pipeline fixture does not use actor_id 'capo'", () => {
-    // MISUSE: line 649 set actor_id: "capo" in the full-pipeline round-trip
+  it("sign.test.ts full-pipeline fixture does not use actor_id 'sage'", () => {
+    // MISUSE: line 649 set actor_id: "sage" in the full-pipeline round-trip
     // fixture. This is test data for Capo's signing, not an attack payload.
     // The attack payload is in claude-code.test.ts (which stays as-is).
     const content = readFile("src/core/sign.test.ts");
     // We look for the specific fixture context (full pipeline test) to avoid
     // false-positive matching on the PQ_03_SAGE_AS_EXECUTOR error code tests.
-    // The full-pipeline fixture is the only place where actor_id: "capo" appears.
-    expect(content).not.toContain('actor_id: "capo"');
+    // The full-pipeline fixture is the only place where actor_id: "sage" appears.
+    expect(content).not.toContain('actor_id: "sage"');
   });
 });
 
-describe("misuse: vitest.config.ts must not refer to Capo in comments", () => {
-  it("vitest.config.ts coverage comment does not say 'LLM call site #1, the Capo'", () => {
-    // MISUSE: line 134 comment "LLM call site #1, the Capo".
+describe("misuse: vitest.config.ts must not refer to Sage in comments", () => {
+  it("vitest.config.ts coverage comment does not say 'LLM call site #1, the Sage'", () => {
+    // MISUSE: line 134 comment "LLM call site #1, the Sage".
     const content = readFile("vitest.config.ts");
-    expect(content.toLowerCase()).not.toContain("the capo");
+    expect(content.toLowerCase()).not.toContain("the sage");
   });
 });
 
-describe("misuse: .claude/shared/visual-formatting.md must not refer to Capo as orchestrator", () => {
+describe("misuse: .claude/shared/visual-formatting.md must not refer to Sage as orchestrator", () => {
   it("visual-formatting.md INDIGO color comment does not say 'SAGE — orchestrator'", () => {
     // MISUSE: line 27 named the INDIGO color "SAGE — orchestrator (TEO-only)".
     // Should now say "CAPO — orchestrator (TEO-only)".
@@ -472,10 +477,10 @@ describe("misuse: .claude/shared/visual-formatting.md must not refer to Capo as 
     expect(content).not.toContain("SAGE — orchestrator");
   });
 
-  it("visual-formatting.md pipeline progress section does not say 'Displayed by the Capo'", () => {
-    // MISUSE: line 138 "Displayed by the Capo after each pipeline step completes."
+  it("visual-formatting.md pipeline progress section does not say 'Displayed by the Sage'", () => {
+    // MISUSE: line 138 "Displayed by the Sage after each pipeline step completes."
     const content = readFile(".claude/shared/visual-formatting.md");
-    expect(content.toLowerCase()).not.toContain("displayed by the capo");
+    expect(content.toLowerCase()).not.toContain("displayed by the sage");
   });
 
   it("visual-formatting.md pipeline badge example does not say '[SAGE]'", () => {
@@ -485,40 +490,40 @@ describe("misuse: .claude/shared/visual-formatting.md must not refer to Capo as 
   });
 });
 
-describe("misuse: docs/gemini-independent-review.md must not reference capo-pipeline-log.json", () => {
-  it("gemini-independent-review.md does not reference capo-pipeline-log.json", () => {
+describe("misuse: docs/gemini-independent-review.md must not reference sage-pipeline-log.json", () => {
+  it("gemini-independent-review.md does not reference sage-pipeline-log.json", () => {
     const content = readFile("docs/gemini-independent-review.md");
-    expect(content).not.toContain("capo-pipeline-log.json");
+    expect(content).not.toContain("sage-pipeline-log.json");
   });
 });
 
 describe("misuse: .claude/memory/go-signals/ws-sandbox-e2e-qa-spec.json must not reference old artifacts", () => {
-  it("ws-sandbox-e2e-qa-spec.json does not reference capo-result.json", () => {
-    // MISUSE: the go-signal spec file had 16+ lines with capo-result.json.
+  it("ws-sandbox-e2e-qa-spec.json does not reference sage-result.json", () => {
+    // MISUSE: the go-signal spec file had 16+ lines with sage-result.json.
     const content = readFile(".claude/memory/go-signals/ws-sandbox-e2e-qa-spec.json");
-    expect(content).not.toContain("capo-result.json");
+    expect(content).not.toContain("sage-result.json");
   });
 
-  it("ws-sandbox-e2e-qa-spec.json prose does not say 'routes to Capo immediately'", () => {
-    // MISUSE: line 114 note text still named Capo.
+  it("ws-sandbox-e2e-qa-spec.json prose does not say 'routes to Sage immediately'", () => {
+    // MISUSE: line 114 note text still named Sage.
     const content = readFile(".claude/memory/go-signals/ws-sandbox-e2e-qa-spec.json");
-    expect(content.toLowerCase()).not.toContain("routes to capo");
+    expect(content.toLowerCase()).not.toContain("routes to sage");
   });
 
-  it("ws-sandbox-e2e-qa-spec.json prose does not say 'Capo did NOT attempt'", () => {
-    // MISUSE: line 66 pass criterion named Capo as the actor.
+  it("ws-sandbox-e2e-qa-spec.json prose does not say 'Sage did NOT attempt'", () => {
+    // MISUSE: line 66 pass criterion named Sage as the actor.
     const content = readFile(".claude/memory/go-signals/ws-sandbox-e2e-qa-spec.json");
-    expect(content).not.toContain("Capo did NOT attempt");
+    expect(content).not.toContain("Sage did NOT attempt");
   });
 
-  it('ws-sandbox-e2e-qa-spec.json prose does not say "Capo\'s plan output"', () => {
+  it('ws-sandbox-e2e-qa-spec.json prose does not say "Sage\'s plan output"', () => {
     const content = readFile(".claude/memory/go-signals/ws-sandbox-e2e-qa-spec.json");
-    expect(content.toLowerCase()).not.toContain("capo's plan output");
+    expect(content.toLowerCase()).not.toContain("sage's plan output");
   });
 
-  it("ws-sandbox-e2e-qa-spec.json prose does not say 'Capo may legitimately write'", () => {
+  it("ws-sandbox-e2e-qa-spec.json prose does not say 'Sage may legitimately write'", () => {
     const content = readFile(".claude/memory/go-signals/ws-sandbox-e2e-qa-spec.json");
-    expect(content.toLowerCase()).not.toContain("capo may legitimately");
+    expect(content.toLowerCase()).not.toContain("sage may legitimately");
   });
 });
 
@@ -541,7 +546,7 @@ describe("boundary: mirror sync — acceptance-engineer.md canonical vs mirror",
 
 describe("boundary: mirror sync — capo.md canonical vs mirror", () => {
   it("agents/capo.md and .claude/agents/capo.md are byte-identical", () => {
-    // BOUNDARY: capo.md had multiple capo-result.json references. Both copies
+    // BOUNDARY: capo.md had multiple sage-result.json references. Both copies
     // must be fixed identically.
     const canonical = readFile("agents/capo.md");
     const mirror = readFile(".claude/agents/capo.md");
@@ -572,19 +577,19 @@ describe("boundary: capo.md uses capo-result.json consistently in all references
   it("agents/capo.md Turn-end Protocol names capo-result.json as the output file", () => {
     // BOUNDARY: the Turn-end Protocol was the canonical statement of what file
     // Capo writes. If it says capo-result.json but the Memory Protocol still
-    // says capo-result.json, agents will get conflicting instructions.
+    // says sage-result.json, agents will get conflicting instructions.
     const content = readFile("agents/capo.md");
     expect(content).toContain("capo-result.json");
   });
 });
 
 describe("boundary: capo.md does not mix old and new artifact names", () => {
-  it("agents/capo.md has zero capo-result.json AND has capo-result.json", () => {
+  it("agents/capo.md has zero sage-result.json AND has capo-result.json", () => {
     // BOUNDARY: partial rename (some lines changed, some not) is worse than
     // either extreme — it creates non-deterministic behavior. Assert both
     // the absence of the old name and presence of the new name in one test.
     const content = readFile("agents/capo.md");
-    expect(content).not.toContain("capo-result.json");
+    expect(content).not.toContain("sage-result.json");
     expect(content).toContain("capo-result.json");
   });
 });
@@ -599,7 +604,7 @@ describe("boundary: vitest.config.ts coverage comment still identifies claude-co
       content.indexOf("src/adapters/claude-code.ts"),
       content.indexOf("src/adapters/claude-code.ts") + 300
     );
-    // The comment should mention Capo (not Capo) in the coverage block
+    // The comment should mention Capo (not Sage) in the coverage block
     expect(claudeCodeSection.toLowerCase()).toContain("capo");
   });
 });
@@ -620,34 +625,34 @@ describe("boundary: coordinator.md uses Capo as the plan source throughout", () 
 // =============================================================================
 // GOLDEN PATH — regression guard (the core non-recurrence test)
 //
-// Runs git grep -in capo repo-wide and asserts every remaining hit is covered
+// Runs git grep -in sage repo-wide and asserts every remaining hit is covered
 // by the allowlist. This test FAILS before the fix (stale hits exist outside
 // the allowlist) and PASSES after (only protected/false-positive hits remain).
 // =============================================================================
 
-describe("golden: full repo git grep — zero un-triaged Capo persona references", () => {
-  it("every 'capo' hit in git grep is either PROTECTED or a FALSE POSITIVE", () => {
+describe("golden: full repo git grep — zero un-triaged Sage persona references", () => {
+  it("every 'sage' hit in git grep is either PROTECTED or a FALSE POSITIVE", () => {
     // GOLDEN: this is the regression guard. It must run git grep repo-wide,
     // parse every hit, and assert all are covered by the allowlist.
     //
-    // A future rename or new file that introduces "capo" as a persona reference
+    // A future rename or new file that introduces "sage" as a persona reference
     // will FAIL this test, forcing an explicit triage decision.
     //
     // Why not just grep for count=0? Because some hits are legitimate (sagePlan,
     // PQ_03_SAGE_AS_EXECUTOR, attack-payload tests) and must remain. The
     // allowlist is the explicit triage record.
 
-    const raw = runGrepOrEmpty("git grep -in capo");
+    const raw = runGrepOrEmpty("git grep -in sage");
     if (raw === null) {
       // No hits at all — better than expected, still a PASS.
       return;
     }
 
     const hits = parseGrepOutput(raw).filter(
-      // Exclude this test file itself — it mentions "capo" in comments and
+      // Exclude this test file itself — it mentions "sage" in comments and
       // test descriptions that document what WAS changed. These are not
       // persona references; they're the test's own documentation.
-      (h) => !h.file.endsWith("capo-capo-rename.test.ts")
+      (h) => !h.file.endsWith("sage-capo-rename.test.ts")
     );
     const untriaged = hits.filter((h) => !isAllowlisted(h));
 
@@ -669,9 +674,9 @@ describe("golden: capo-result.json is the canonical artifact name", () => {
   it("README.md now refers to capo-result.json (or omits artifact names entirely)", () => {
     // GOLDEN: README is the entry point — readers should see capo-result.json
     // if the artifact is mentioned. If README doesn't mention it, that's fine too.
-    // What's not fine is README mentioning capo-result.json.
+    // What's not fine is README mentioning sage-result.json.
     const content = readFile("README.md");
-    expect(content).not.toContain("capo-result.json");
+    expect(content).not.toContain("sage-result.json");
   });
 
   it("sandbox/scripts/verify-traces.sh CAPO_RESULT variable points to capo-result.json", () => {
@@ -713,9 +718,10 @@ describe("golden: protected patterns are still present (no over-correction)", ()
   });
 
   it("attack-payload string 'agent_id: capo' still appears in claude-code.test.ts", () => {
-    // GOLDEN: the prompt-injection test must continue to test rejection of
-    // "capo" as an invalid agent_id. This string is the value being rejected,
-    // not a persona reference. Removing it would remove the security test.
+    // GOLDEN: the prompt-injection test must continue to test rejection of an
+    // invalid agent_id. After the wholesale rename this payload uses "capo"
+    // (the value being REJECTED, not a Sage persona reference). Removing it
+    // would remove the security test.
     const content = readFile("src/adapters/claude-code.test.ts");
     // The attack payload appears in comments and as a string value
     expect(content.toLowerCase()).toContain('agent_id: "capo"');

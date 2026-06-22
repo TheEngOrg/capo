@@ -12,7 +12,7 @@ metadata:
 
 Gateway for TEO. Routes utility keywords directly to `teo-*` skills and delegates substantive work to the Sage orchestrator.
 
-This is the `/teo` gateway. The main session is a **Dispatcher** — its only job is routing. Sage runs as a spawned subagent (ADR-037). Read `.claude/agents/sage/agent.md` to confirm Sage is available before routing substantive work.
+This is the `/teo` gateway. The main session is a **Dispatcher** — its only job is routing. Sage runs as a spawned subagent (ADR-037), registered as the `teo:sage` plugin agent. Invoke it directly via the Task tool.
 
 ## Constitution
 
@@ -59,10 +59,6 @@ When invoked as `/teo` with no arguments, display:
 
 ---
 
-## Dynamic Skill Discovery
-
-Before routing, scan `.claude/skills/teo-*/SKILL.md`. Skills without `invocation` metadata are utility skills (direct route). Skills with `invocation` metadata are Sage-composable. New skills are auto-discovered without editing this file.
-
 ## Delegation
 
 ### Path 1: Utility Keywords → Direct Route
@@ -77,7 +73,7 @@ Before routing, scan `.claude/skills/teo-*/SKILL.md`. Skills without `invocation
 
 ### Path 2: Everything Else → Sage
 
-Route to Sage. For substantive requests — planning, building, fixing, reviewing, improving, shipping — spawn Sage as a general-purpose subagent with the user's request verbatim. Sage applies its full orchestration constitution from `.claude/agents/sage/agent.md`.
+Route to Sage. For substantive requests — planning, building, fixing, reviewing, improving, shipping — invoke Sage directly via the Task tool with `subagent_type: "teo:sage"` and pass the user's verbatim request as the prompt. Claude resolves the registered plugin agent — no file existence check needed.
 
 Pass the user's request into Sage's pipeline. Do NOT pre-classify intent beyond what the explicit entry point keywords provide.
 
@@ -93,9 +89,7 @@ Pass the user's request into Sage's pipeline. Do NOT pre-classify intent beyond 
 | `/teo ship <X>` | SHIP |
 | `/teo <natural language>` | **OMIT** |
 
-**Note:** For natural language requests, do NOT infer an intent hint. Apply Sage's classification protocol from `sage/agent.md`.
-
-Before proceeding on any substantive request, confirm `.claude/agents/sage/agent.md` exists.
+**Note:** For natural language requests, do NOT infer an intent hint. Sage applies its own classification protocol.
 
 ### Natural Language Routing
 
@@ -113,19 +107,16 @@ Before proceeding on any substantive request, confirm `.claude/agents/sage/agent
 | `/teo` with no args | Display menu. Never return an error. |
 | Input matches no keywords | Attempt interpretation. Substantive → Sage. Operational → suggest utility skill. |
 | `/teo validate` | Route to `/teo-validate` |
-| Sage not available | "Orchestration requires the Sage agent definition. Run `teo-smoke-install` to restore it." |
 
 ## Memory Protocol
 
 ```yaml
-read:
-  - .claude/agents/sage/agent.md           # confirm Sage is available
-  - .claude/skills/teo-*/SKILL.md          # dynamic skill discovery
+read: none
 write: none
 ```
 
 ## Boundaries
 
-**CAN:** Route to teo-* utility skills, apply Sage orchestration for substantive work, show menu, match keywords, verify Sage availability
+**CAN:** Route to teo-* utility skills, invoke teo:sage via Task for substantive work, show menu, match keywords
 **CANNOT:** Replicate Sage logic, make strategic decisions unilaterally, verify or synthesize team work, confirm specialist outputs
-**ESCALATES TO:** Sage (all substantive work), user (if Sage agent definition is not available)
+**ESCALATES TO:** Sage (all substantive work)

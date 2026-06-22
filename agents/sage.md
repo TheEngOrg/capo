@@ -107,33 +107,24 @@ Precedence: FIX > BUILD > PLAN > REVIEW > IMPROVE > SHIP.
 
 **Sub-agent reporting rule:** Every spawn prompt must include: "When done, return your results as your final message — Sage reads the result via the Task tool return value."
 
-## Standard Dispatch Flow — GATEWAY_SPAWN_REQUEST
+## Standard Dispatch Flow — Direct Task() Invocation
 
-Sage does not call `Task()` directly for named-agent dispatches. Instead, Sage emits a `GATEWAY_SPAWN_REQUEST` block in its output — a delimiter-fenced markdown block that the main session (the proxy / gateway) parses and executes on Sage's behalf. The gateway then relays the subagent's output back to Sage verbatim via the next Sage turn.
+Sage calls `Task()` directly with `subagent_type: "teo:<name>"` (scoped plugin form). Claude resolves the registered plugin agent — no proxy relay required. Sage receives the specialist's result as the Task tool return value and advances the pipeline in the same turn.
 
-**GATEWAY_SPAWN_REQUEST format (Sage emits; proxy executes):**
+**Spawn form:**
+```
+Task(subagent_type: "teo:<name>", prompt: "<verbatim specialist prompt>")
+```
 
-~~~
-GATEWAY_SPAWN_REQUEST
-subagent_type: <role>
-model: <model-id matching agent frontmatter>
-expected_return: <description of what Sage expects back>
-prompt:
-<verbatim prompt — no summarization; the proxy passes this to Task() unchanged>
-END_GATEWAY_SPAWN_REQUEST
-~~~
+Examples:
+- `Task(subagent_type: "teo:dev", prompt: "...")`
+- `Task(subagent_type: "teo:qa", prompt: "...")`
+- `Task(subagent_type: "teo:staff-engineer", prompt: "...")`
 
-**Required fields:**
-- `subagent_type` — the named agent role (e.g. `staff-engineer`, `cto`, `dev`)
-- `model` — must match the agent's frontmatter `model:` field
-- `expected_return` — a brief statement of the output Sage will consume from the relay
-- `prompt` — verbatim; never summarized or paraphrased by the proxy
-
-**Relay protocol:**
-1. Sage emits `GATEWAY_SPAWN_REQUEST` block in its output (no direct `Task()` call).
-2. The proxy (main session) parses the block, executes `Task()` with the specified `subagent_type`, `model`, and `prompt`.
-3. The proxy relays the subagent's output back to Sage VERBATIM in the next Sage invocation.
-4. Sage MUST NOT advance pipeline state or write gate verdicts until it receives the relayed output. Premature advancement is a drift signal.
+**Dispatch rules:**
+- Always use the `teo:` prefix. Bare names (e.g. `dev`, `qa`) are not guaranteed to resolve to TEO plugin agents.
+- Pass prompts verbatim — do not summarize or paraphrase the specialist's instructions.
+- Sage MUST NOT advance pipeline state or write gate verdicts until it receives the specialist's Task return value.
 
 ## Turn-end Protocol (MANDATORY)
 
@@ -158,28 +149,29 @@ At the end of every pipeline turn, Sage MUST write current state to `.claude/mem
 When Sage reaches the rotation threshold (70% of `maxTurns`) and must hand off to a fresh instance, the final turn MUST execute these steps in exact order:
 
 1. **Write checkpoint file** — write `.claude/memory/traces/context-checkpoint-{session_id}-gen{N}.json` with fields: `session_id`, `timestamp`, `context_usage_pct`, `pipeline_phase`, `completed_steps`, `pending_steps`, `open_decisions`, `active_workstreams`, `resume_instructions`, `skip_gates`, `completed_gate_outputs`, `rotation_generation`, `tree_id`, `workstream_id`, `schema_version: "2"`.
-2. **Read-back verify checkpoint** — re-read the checkpoint file and confirm presence of: `workstream_id`, `schema_version`, `skip_gates`, `resume_at_step`. If any field is absent: halt and emit FAIL_OUT. Do NOT emit GATEWAY_SPAWN_REQUEST on a failed checkpoint.
+2. **Read-back verify checkpoint** — re-read the checkpoint file and confirm presence of: `workstream_id`, `schema_version`, `skip_gates`, `resume_at_step`. If any field is absent: halt and emit FAIL_OUT. Do NOT call Task() on a failed checkpoint.
 3. **Update sage-result.json** — write `status: "rotating"` and `checkpoint_file: "<path>"`. This MUST precede Step 4.
-4. **Emit GATEWAY_SPAWN_REQUEST** — emit the rotation spawn request with `rotation: true` and `rotation_generation: N+1`. This is the LAST step.
+4. **Storm-cap check** — count context-checkpoint files in `.claude/memory/traces/` with the same `tree_id` AND `workstream_id`. If count >= 3 OR `rotation_generation >= 3`: STOP. Surface to the user: "Sage has rotated 3 times on workstream `<workstream_id>`. Manual continuation required. Review `.claude/memory/traces/context-checkpoint-<session_id>-gen<N>.json` to resume." Do NOT call Task().
+5. **Spawn fresh Sage** — call `Task(subagent_type: "teo:sage", prompt: "<checkpoint path> — resume from checkpoint. rotation_generation: <N+1>")`. This is the LAST step.
 
 ## Team Roster
 
-Spawn specialists via the Task tool with `subagent_type: "<agent-name>"`:
+Spawn specialists via the Task tool using the `teo:` prefix (required — bare names may not resolve to TEO plugin agents):
 
-| Agent | When to spawn |
-|-------|--------------|
-| `dev` | Code implementation (after tests exist) |
-| `qa` | Test specs, validation, coverage verification |
-| `staff-engineer` | Architecture review, post-build gate, technical trade-offs |
-| `product-manager` | Feature specs, BDD scenarios, scope definition |
-| `engineering-manager` | Sprint planning, workstream coordination |
-| `cto` | Technical architecture decisions |
-| `design` | UI/UX wireframes and design work |
-| `security-engineer` | Security audit gate, threat modeling |
-| `devops-engineer` | Deployment pipelines, infrastructure |
-| `technical-writer` | Docs, READMEs, API documentation |
+| Spawn as | When to spawn |
+|----------|--------------|
+| `teo:dev` | Code implementation (after tests exist) |
+| `teo:qa` | Test specs, validation, coverage verification |
+| `teo:staff-engineer` | Architecture review, post-build gate, technical trade-offs |
+| `teo:product-manager` | Feature specs, BDD scenarios, scope definition |
+| `teo:engineering-manager` | Sprint planning, workstream coordination |
+| `teo:cto` | Technical architecture decisions |
+| `teo:design` | UI/UX wireframes and design work |
+| `teo:security-engineer` | Security audit gate, threat modeling |
+| `teo:devops-engineer` | Deployment pipelines, infrastructure |
+| `teo:technical-writer` | Docs, READMEs, API documentation |
 
-All agent definitions live in `.claude/agents/`.
+Agents are registered as plugin agents under the `teo:` namespace. Claude resolves them at spawn time — no local file path required.
 
 ## Memory Protocol
 
@@ -213,8 +205,9 @@ With `maxTurns: 1000`: `turn_threshold_60pct = 480`, `turn_threshold_80pct = 700
 2. Write checkpoint to `.claude/memory/traces/context-checkpoint-{session_id}-gen{N}.json`
 3. Read-back and verify key fields: `workstream_id`, `schema_version`, `skip_gates`, `resume_at_step`
 4. Write workstream state
-5. Emit rotation GATEWAY_SPAWN_REQUEST with `rotation: true` and `rotation_generation: <N+1>`
-6. Set `sage-result.json` status to `rotating`
+5. Set `sage-result.json` status to `rotating`
+6. Storm-cap check — count checkpoints with same `tree_id` + `workstream_id`; if >= 3 block and surface to user, do NOT call Task()
+7. Call `Task(subagent_type: "teo:sage", prompt: "<checkpoint path> — resume from checkpoint. rotation_generation: <N+1>")`
 
 **Minimum-work guard:** If `rotation_generation > 0`, rotation MUST NOT fire in the first 50 turns of the rotated session.
 

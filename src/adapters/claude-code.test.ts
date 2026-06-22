@@ -2,7 +2,7 @@
 // claude-code.test.ts — Contract spec for ClaudeCodeAdapter sagePlan (WS-P1-03c)
 //
 // This file covers ClaudeCodeAdapter.sagePlan() — the LLM-backed plan generation
-// path that exposes PlanBuilder operations as tools to a Sage agent and resolves
+// path that exposes PlanBuilder operations as tools to a Capo agent and resolves
 // with a validated Plan. All 22 tests pass (19 original + 3 added for vitest 4
 // coverage gaps: round-cap/none, empty project_id, trailing-no-finalize/none).
 //
@@ -26,7 +26,7 @@
 //
 //   interface AgentRunner {
 //     /**
-//      * Run the Sage planning loop.
+//      * Run the Capo planning loop.
 //      * Receives the full tool definitions + system prompt.
 //      * Yields ToolCall objects one at a time; the adapter executes each tool,
 //      * feeds the result back via the returned iterator, and loops until the
@@ -484,7 +484,7 @@ describe("ClaudeCodeAdapter — misuse", () => {
 describe("ClaudeCodeAdapter — boundary: rejection recovery", () => {
   // -------------------------------------------------------------------------
   // Rejection recovery: runner's first add_task uses a non-executor agent_id
-  // ("sage" — unknown in roster). Builder rejects it. The adapter returns the rejection reason as
+  // (agent_id: "sage" — non-executor, unknown in roster). Builder rejects it. The adapter returns the rejection reason as
   // the ToolResult. Runner sees it and retries with a valid executor agent_id.
   //
   // Assert:
@@ -505,7 +505,7 @@ describe("ClaudeCodeAdapter — boundary: rejection recovery", () => {
           let result = yield { name: "start_plan" as const, input: { directive: "BUILD" } };
           receivedResults.push(result);
 
-          // Round 2: add_task with non-executor "sage" (unknown in roster) → builder rejects
+          // Round 2: add_task with agent_id: "sage" (non-executor, unknown in roster) → builder rejects
           result = yield {
             name: "add_task" as const,
             input: {
@@ -543,7 +543,7 @@ describe("ClaudeCodeAdapter — boundary: rejection recovery", () => {
       const plan = await adapter.sagePlan(VALID_PLANNING_CONTEXT, {});
 
       // (a) The rejection result for the bad add_task must indicate failure
-      // Round index 1 = result after the sage add_task
+      // Round index 1 = result after the rejected add_task (task-sage-bad)
       const rejectionResult = receivedResults[1];
       expect(rejectionResult).toBeDefined();
       expect(rejectionResult!.ok).toBe(false);

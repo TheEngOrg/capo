@@ -57,7 +57,7 @@ Below is the multi-angle adversarial teardown and action plan required for v1.0.
 *Focus: Error Recovery, Resilience, and Auditability*
 
 ### What is Done Right
-* **HMAC-Signed Ledgers:** Signing the ledger prevents unauthorized local tampering. If a developer or a rogue agent attempts to alter the audit trail in `sage-pipeline-log.json`, the cryptographic verification fails.
+* **HMAC-Signed Ledgers:** Signing the ledger prevents unauthorized local tampering. If a developer or a rogue agent attempts to alter the audit trail in `capo-pipeline-log.json`, the cryptographic verification fails.
 * **Defensive Error Taxonomy:** Categorizing errors into `TRANSIENT`, `RESOURCE`, `LOGIC`, `PERMISSION`, and `FATAL` ensures that actions match failure modes (e.g., never retrying permissions; halting immediately on fatals).
 * **Defensive Gate Enforcement:** Setting gates to `on_fail: block` forces a hard stop on failures, demanding a highly visible and logged manual `--force-proceed` override.
 

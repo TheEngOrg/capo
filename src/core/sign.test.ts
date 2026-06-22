@@ -646,7 +646,7 @@ describe("HmacSigner — golden path", () => {
     const payload = makePayload({
       plan_id: "pipeline-plan-01",
       task_id: "task-gate-01",
-      actor_id: "sage",
+      actor_id: "capo",
       verdict: "PASS",
       ts: "2026-06-18T15:00:00.000Z",
       seq: 3,

@@ -15,7 +15,7 @@ Coordinator keeps the pipeline moving. It watches GO-signals, routes work to the
 
 ## What coordinator does
 
-Receives a Plan from Sage and orchestrates execution: spawns agents in dependency order, monitors for GO-signals and BLOCK signals, surfaces stuck workstreams to the user, and logs status. Also enforces the rotation storm cap (max 3 Sage rotations per workstream).
+Receives a Plan from Capo and orchestrates execution: spawns agents in dependency order, monitors for GO-signals and BLOCK signals, surfaces stuck workstreams to the user, and logs status. Also enforces the rotation storm cap (max 3 Capo rotations per workstream).
 
 ## What coordinator does not do
 

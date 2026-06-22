@@ -2,7 +2,7 @@
   "hooks": {
     "UserPromptExpansion": [
       {
-        "matcher": "teo",
+        "matcher": "^teo:.*$",
         "hooks": [
           {
             "type": "command",

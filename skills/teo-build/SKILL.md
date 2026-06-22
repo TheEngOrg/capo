@@ -157,9 +157,21 @@ Pass → report complete. No leadership review required.
 Step 1: QA writes tests (can overlap with Dev start)
 Step 2: Dev implements against QA tests
 Step 2.5: Dual-specialist review (if code blocks in deliverable)
+Step 2.8: VALIDATION GATE — verify-plugin-install.sh PASS (HARD GATE, blocks L6)
 Step 3: Staff Engineer internal review
 Step 4: /deployment-engineer merge
 ```
+
+### Step 2.8: Validation Gate (HARD GATE — must pass BEFORE L6 review)
+
+**THIS PROJECT (the TEO plugin):** the real-install validation script is a HARD GATE that must pass BEFORE the work goes to Staff Engineer (L6) review. The reviewer must NOT receive work that fails install/asset-count validation — the gate catches blast-radius breakage (stale hard-coded counts, manifest drift, nested-vs-flat paths) that should never reach L6.
+
+Run: `bash scripts/verify-plugin-install.sh`
+
+- **PASS** (`✔ PASS: teo plugin install verified`, all asset counts confirmed) → proceed to Step 3 (Staff Engineer review).
+- **FAIL** → route back to Dev with the exact failure. Do NOT advance to L6. A FAIL here usually means the change altered an asset count/path but a downstream artifact (the gate's own assertions, plugin.json, a manifest) was not updated in the same change — fix the whole blast radius, re-run the gate.
+
+NOTE: agents cannot run the real `claude plugin install` — this gate is executed by the user/proxy. Surface it as a required pre-L6 step; the workstream is GATE_BLOCKED until the user reports the script PASS.
 
 ### Step 1: QA Test Specification
 

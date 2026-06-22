@@ -75,8 +75,13 @@ write: .claude/memory/teo-code-review-results.json
   architectural_concerns: [<if any>]
 ```
 
+## Precondition — Validation Gate Must Have Passed (THIS PROJECT)
+
+Before you begin an L6 review of any change to the TEO plugin, confirm the real-install **Validation Gate** (`scripts/verify-plugin-install.sh`) has PASSED on the current change (✔ PASS, all asset counts confirmed). This gate runs BEFORE L6 (teo-build Step 2.8). If there is no evidence the validation gate passed, do NOT review — return the workstream as GATE_BLOCKED with "validation gate (verify-plugin-install.sh) must pass before L6 review." The reviewer never evaluates work that fails install/asset-count validation.
+
 ## Review Checklist
 
+- [ ] Validation gate (verify-plugin-install.sh) PASSED before this review
 - [ ] Tests exist and pass
 - [ ] Coverage >= 99%
 - [ ] DRY - no duplication

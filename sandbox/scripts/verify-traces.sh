@@ -9,7 +9,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
-SAGE_RESULT="${REPO_ROOT}/.claude/memory/pipeline/sage-result.json"
+CAPO_RESULT="${REPO_ROOT}/.claude/memory/pipeline/sage-result.json"
 FIXTURE="${REPO_ROOT}/sandbox/fixtures/broken-readme.md"
 FIXTURE_ORIG="${REPO_ROOT}/sandbox/fixtures/broken-readme.md.original"
 MEMORY_DIR="${REPO_ROOT}/.claude/memory"
@@ -28,7 +28,7 @@ fail() {
 
 # --- Check 1: sage-result.json exists ---
 
-if [ ! -f "${SAGE_RESULT}" ]; then
+if [ ! -f "${CAPO_RESULT}" ]; then
   echo "FAIL: sage-result.json missing — run STEP-3A first"
   exit 1
 fi
@@ -36,7 +36,7 @@ pass "sage-result.json exists"
 
 # --- Check 2: sage-result.json is valid JSON ---
 
-if ! jq . "${SAGE_RESULT}" &>/dev/null; then
+if ! jq . "${CAPO_RESULT}" &>/dev/null; then
   echo "FAIL: sage-result.json is not valid JSON"
   exit 1
 fi
@@ -44,7 +44,7 @@ pass "sage-result.json is valid JSON"
 
 # --- Check 3: status field present ---
 
-if ! jq -e '.status' "${SAGE_RESULT}" &>/dev/null; then
+if ! jq -e '.status' "${CAPO_RESULT}" &>/dev/null; then
   echo "FAIL: sage-result.json missing 'status' field"
   exit 1
 fi
@@ -52,7 +52,7 @@ pass "sage-result.json has 'status' field"
 
 # --- Check 4: completed_steps is a non-empty array ---
 
-if ! jq -e '.completed_steps | length > 0' "${SAGE_RESULT}" &>/dev/null; then
+if ! jq -e '.completed_steps | length > 0' "${CAPO_RESULT}" &>/dev/null; then
   echo "FAIL: completed_steps is empty or missing"
   exit 1
 fi

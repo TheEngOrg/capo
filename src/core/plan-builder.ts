@@ -48,7 +48,7 @@ export type FinalizeResult = { ok: true; plan: Plan } | { ok: false; errors: Val
 // of whether they appear in the roster on disk.
 // ---------------------------------------------------------------------------
 
-const NON_EXECUTOR_IDS = new Set(["sage", "coordinator"]);
+const NON_EXECUTOR_IDS = new Set(["capo", "coordinator"]);
 
 // ---------------------------------------------------------------------------
 // PlanBuilder
@@ -157,7 +157,7 @@ export class PlanBuilder {
     if (input.type === "AGENT" && !this.executorSet.has(input.agent_id!)) {
       return {
         accepted: false,
-        reason: `agent_id "${input.agent_id}" is not in the executor set. Sage, coordinator, and unknown agents are not valid executors.`,
+        reason: `agent_id "${input.agent_id}" is not in the executor set. Capo, coordinator, and unknown agents are not valid executors.`,
       };
     }
 

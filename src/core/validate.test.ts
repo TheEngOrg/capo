@@ -128,13 +128,13 @@ describe("validatePlan — misuse: structural errors", () => {
     expect(cycleError?.message).toContain("solo");
   });
 
-  it("PQ-03: returns an error (not just a warning) when agent_id is 'sage'", () => {
-    const plan = minimalValidPlan([makeAgentTask("task-sage", "sage")]);
+  it("PQ-03: returns an error (not just a warning) when agent_id is 'capo'", () => {
+    const plan = minimalValidPlan([makeAgentTask("task-capo", "capo")]);
     const result = validatePlan(plan);
     expect(result.valid).toBe(false);
     const pq03Error = result.errors.find((e) => e.code === "PQ_03_SAGE_AS_EXECUTOR");
     expect(pq03Error).toBeDefined();
-    expect(pq03Error?.message).toContain("sage");
+    expect(pq03Error?.message).toContain("capo");
   });
 });
 
@@ -301,8 +301,8 @@ describe("validatePlan — golden path", () => {
 // ---------------------------------------------------------------------------
 
 describe("validatePlan — PQ-04: ARCHITECTURAL directive misuse (WS-P1-01)", () => {
-  it("PQ-04 misuse: directive:'ARCHITECTURAL' + sage task → BOTH PQ_03_SAGE_AS_EXECUTOR error AND PQ_04_ARCHITECTURAL_SCOPE warning", () => {
-    // Sage-as-executor is always an ERROR (PQ-03). When the plan is also
+  it("PQ-04 misuse: directive:'ARCHITECTURAL' + capo task → BOTH PQ_03_SAGE_AS_EXECUTOR error AND PQ_04_ARCHITECTURAL_SCOPE warning", () => {
+    // Capo-as-executor is always an ERROR (PQ-03). When the plan is also
     // ARCHITECTURAL, PQ-04 must fire as a WARNING on top of that — the
     // two rules are independent and must both accumulate.
     //
@@ -313,7 +313,7 @@ describe("validatePlan — PQ-04: ARCHITECTURAL directive misuse (WS-P1-01)", ()
     //     but it does NOT check for the qa/staff-engineer gate condition, so the
     //     new implementation must change the guard's semantics. See validate.ts TODO.
     const plan = {
-      ...minimalValidPlan([makeAgentTask("sage-task", "sage")]),
+      ...minimalValidPlan([makeAgentTask("capo-task", "capo")]),
       directive: "ARCHITECTURAL",
     } as unknown as Plan;
 
@@ -323,7 +323,7 @@ describe("validatePlan — PQ-04: ARCHITECTURAL directive misuse (WS-P1-01)", ()
     expect(result.valid).toBe(false);
     const pq03 = result.errors.find((e) => e.code === "PQ_03_SAGE_AS_EXECUTOR");
     expect(pq03).toBeDefined();
-    expect(pq03?.message).toContain("sage");
+    expect(pq03?.message).toContain("capo");
 
     // PQ-04 must ALSO be present as a WARNING (no qa/staff-engineer task)
     const pq04 = result.warnings.find((w) => w.code === "PQ_04_ARCHITECTURAL_SCOPE");

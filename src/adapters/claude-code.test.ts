@@ -484,7 +484,7 @@ describe("ClaudeCodeAdapter — misuse", () => {
 describe("ClaudeCodeAdapter — boundary: rejection recovery", () => {
   // -------------------------------------------------------------------------
   // Rejection recovery: runner's first add_task uses a non-executor agent_id
-  // ("sage"). Builder rejects it. The adapter returns the rejection reason as
+  // ("sage" — unknown in roster). Builder rejects it. The adapter returns the rejection reason as
   // the ToolResult. Runner sees it and retries with a valid executor agent_id.
   //
   // Assert:
@@ -505,7 +505,7 @@ describe("ClaudeCodeAdapter — boundary: rejection recovery", () => {
           let result = yield { name: "start_plan" as const, input: { directive: "BUILD" } };
           receivedResults.push(result);
 
-          // Round 2: add_task with non-executor "sage" → builder rejects
+          // Round 2: add_task with non-executor "sage" (unknown in roster) → builder rejects
           result = yield {
             name: "add_task" as const,
             input: {

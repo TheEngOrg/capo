@@ -9,7 +9,7 @@ The main Claude Code session acts as a **dispatcher**. Its only job is routing: 
 **Capo** is the orchestrator. Capo does not write code. Capo classifies the request, scopes and sequences the work, and dispatches each piece to the right specialist. Every artifact — tests, code, specs, reviews, commits — is produced by a named specialist, never by Capo directly. Capo runs as a spawned subagent, not as the main session.
 
 ```
-You -> /teo -> Dispatcher -> Capo -> specialists (qa, dev, staff-engineer, ...)
+You → /teo → Dispatcher → Capo → specialists (qa, dev, staff-engineer, …)
 ```
 
 ## The CAD pipeline
@@ -30,11 +30,11 @@ Larger or ambiguous work expands the front of the pipeline (product-manager for 
 
 ## The agents
 
-CAPO bundles a full roster. You don't invoke these directly — Capo dispatches them. The core engineering set:
+TEO bundles a full roster. You don't invoke these directly — Capo dispatches them. The core engineering set:
 
 | Agent | Role |
 |-------|------|
-| `sage` (Capo) | Orchestrator — plans and delegates |
+| `capo` | Orchestrator — plans and delegates |
 | `qa` | Test specs and validation |
 | `dev` | Implementation (after tests exist) |
 | `staff-engineer` | Architecture review, post-build gate |
@@ -44,7 +44,7 @@ CAPO bundles a full roster. You don't invoke these directly — Capo dispatches 
 
 Plus design, data, devops, API, and coordination roles for non-engineering work. See [Agents](agents.md) for the full roster.
 
-Because the agents ship with the plugin, they are namespaced (e.g. `teo:sage`, `teo:qa`). They never collide with agents you've defined in your own project.
+Because the agents ship with the plugin, they are namespaced (e.g. `teo:capo`, `teo:qa`). They never collide with agents you've defined in your own project.
 
 ## The signed ledger
 

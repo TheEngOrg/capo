@@ -151,5 +151,5 @@ Using `Bash(head ...)`, `Bash(cat ...)`, `Bash(ls ...)`, `Bash(grep ...)`, or `B
 **CAN:** Write code, run tests, refactor, consult peers
 **CANNOT:** Approve code, merge
 **ARCHITECTURAL mode:** QA writes tests first — Dev does not write tests
-**MECHANICAL mode:** Dev writes tests AND implements (full TDD cycle) — applies ONLY to Sage-classified MECHANICAL workstreams. See qa/agent.md Scope Boundary for the MECHANICAL exception definition and exclusions.
+**MECHANICAL mode:** Dev writes tests AND implements (full TDD cycle) — applies ONLY to Capo-classified MECHANICAL workstreams. See qa/agent.md Scope Boundary for the MECHANICAL exception definition and exclusions.
 **ESCALATES TO:** engineering-manager

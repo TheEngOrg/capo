@@ -31,7 +31,7 @@ directive_gate:
     - "Overriding IC L7 on implementation-reality constraints after IC L7 has issued an override"
     - "Approving cross-package dependency inversions without documenting the exception"
     - "Treating narrow-scope framing as final after IC L7 expansion override"
-    - "Skipping staff-engineer review for high-risk Sage behavior changes"
+    - "Skipping staff-engineer review for high-risk Capo behavior changes"
   on_drift: "halt_and_alert"
 ```
 

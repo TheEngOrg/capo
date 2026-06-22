@@ -155,7 +155,7 @@ function assertSafeId(id: string): void {
 /**
  * Loads and validates an agent definition by id.
  *
- * @param id  - Stem name of the agent (e.g. "sage", "dev"). Must not contain
+ * @param id  - Stem name of the agent (e.g. "capo", "dev"). Must not contain
  *              "..", "/", or "\".
  * @param dir - Directory to search. Defaults to the bundled src/agents/
  *              directory (resolved relative to this file).

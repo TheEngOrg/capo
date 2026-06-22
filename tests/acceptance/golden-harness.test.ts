@@ -42,7 +42,7 @@ import {
   DEMO_08_GATE_BLOCKED,
   DEMO_09_CYCLE_REJECTION,
   DEMO_10_PQ_WARNING,
-  DEMO_11_PQ03_SAGE_REJECTION,
+  DEMO_11_PQ03_CAPO_REJECTION,
   DEMO_12_WORKTREE_NONE,
 } from "./fixtures/plans.js";
 
@@ -538,14 +538,14 @@ describe("Demo 10 — PQ-01 warning for single-task plan", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Demo 11: PQ-03 hard fail — sage as executor
+// Demo 11: PQ-03 hard fail — capo as executor
 // ---------------------------------------------------------------------------
 
-describe("Demo 11 — PQ-03 sage-as-executor → VALIDATION_REJECTED", () => {
-  it("plan with agent_id='sage' is rejected by validatePlan", async () => {
+describe("Demo 11 — PQ-03 capo-as-executor → VALIDATION_REJECTED", () => {
+  it("plan with agent_id='capo' is rejected by validatePlan", async () => {
     const result = await runDemo({
-      scenarioId: "demo-11-pq03-sage-rejection",
-      plan: DEMO_11_PQ03_SAGE_REJECTION,
+      scenarioId: "demo-11-pq03-capo-rejection",
+      plan: DEMO_11_PQ03_CAPO_REJECTION,
       commandStubs: {},
     });
 
@@ -558,7 +558,7 @@ describe("Demo 11 — PQ-03 sage-as-executor → VALIDATION_REJECTED", () => {
     expect(result.signedVerdicts).toHaveLength(0);
 
     const golden = {
-      scenarioId: "demo-11-pq03-sage-rejection",
+      scenarioId: "demo-11-pq03-capo-rejection",
       planId: result.planId,
       overallStatus: result.overallStatus,
       validationErrors: result.validationResult.errors.map((e) => e.code),
@@ -567,9 +567,9 @@ describe("Demo 11 — PQ-03 sage-as-executor → VALIDATION_REJECTED", () => {
       signatures: [],
     };
 
-    const updated = compareOrUpdateGolden("demo-11-pq03-sage-rejection", golden);
+    const updated = compareOrUpdateGolden("demo-11-pq03-capo-rejection", golden);
     if (!updated) {
-      const committed = readGolden("demo-11-pq03-sage-rejection");
+      const committed = readGolden("demo-11-pq03-capo-rejection");
       expect(golden).toEqual(committed);
     }
   });

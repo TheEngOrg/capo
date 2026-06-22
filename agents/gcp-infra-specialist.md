@@ -44,7 +44,7 @@ write: .claude/memory/gcp-infra-decisions.json
 
 ## When to Spawn Me
 
-Sage should spawn this agent when the task involves:
+Capo should spawn this agent when the task involves:
 
 - Writing or reviewing Terraform modules for any GCP resource (Cloud Run, GKE cluster, Pub/Sub topic/subscription, Firestore rules, IAM bindings, VPC/firewall rules, Cloud Armor policies)
 - Sizing or reconfiguring a GKE cluster (node pools, autoscaling, workload identity, admission controllers)
@@ -139,7 +139,7 @@ Using `Bash(head ...)`, `Bash(cat ...)`, `Bash(ls ...)`, `Bash(grep ...)`, or `B
 
 ## Spawn Pattern Example
 
-Sage passes a prompt like:
+Capo passes a prompt like:
 
 ```
 You are the gcp-infra-specialist.

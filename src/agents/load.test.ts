@@ -38,13 +38,13 @@ import * as os from "node:os";
 //     - dir defaults to same bundled src/agents/ directory as loadAgentDefinition.
 //     - Returns a plain string array (order not contractual).
 //
-// --- SAGE EXECUTOR-BLOCK CONTRACT -------------------------------------------
+// --- CAPO EXECUTOR-BLOCK CONTRACT -------------------------------------------
 //
-//   sage.md frontmatter disallowedTools_default MUST include ALL of the
+//   capo.md frontmatter disallowedTools_default MUST include ALL of the
 //   following tool name strings (exact match, case-sensitive):
 //     "Write", "Edit", "Bash"
 //
-//   Rationale: Sage is the planner; it must never act as a task executor.
+//   Rationale: Capo is the planner; it must never act as a task executor.
 //   These three tools cover the key file-write, file-edit, and code-execution
 //   surfaces. Belt-and-suspenders with PQ-03 (validate.ts).
 //
@@ -80,7 +80,7 @@ const EXPECTED_AGENT_IDS: readonly string[] = [
   "frontend-engineer",
   "data-engineer",
   "devops-engineer",
-  "sage",
+  "capo",
   "qa",
   "staff-engineer",
   "security-engineer",
@@ -89,8 +89,8 @@ const EXPECTED_AGENT_IDS: readonly string[] = [
 ] as const;
 
 /**
- * Exact tool name strings that sage.md's disallowedTools_default MUST include.
- * Dev must put these exact strings in the sage.md frontmatter list.
+ * Exact tool name strings that capo.md's disallowedTools_default MUST include.
+ * Dev must put these exact strings in the capo.md frontmatter list.
  * Case-sensitive.
  */
 const SAGE_BLOCKED_TOOLS: readonly string[] = ["Write", "Edit", "Bash"] as const;
@@ -275,38 +275,38 @@ describe("loadAgentDefinition — misuse: agent_id frontmatter mismatch", () => 
 // BOUNDARY — edge cases and structural invariants
 // =============================================================================
 
-describe("loadAgentDefinition — boundary: sage executor-blocking tools", () => {
-  it("sage's disallowedTools_default includes 'Write' (file-write surface)", () => {
-    // Sage is the planner — it must never be able to write files.
+describe("loadAgentDefinition — boundary: capo executor-blocking tools", () => {
+  it("capo's disallowedTools_default includes 'Write' (file-write surface)", () => {
+    // Capo is the planner — it must never be able to write files.
     // 'Write' is the Claude Code tool that writes file contents.
-    const sage = loadAgentDefinition("sage");
-    expect(sage.disallowedTools_default).toContain("Write");
+    const capo = loadAgentDefinition("capo");
+    expect(capo.disallowedTools_default).toContain("Write");
   });
 
-  it("sage's disallowedTools_default includes 'Edit' (file-edit surface)", () => {
+  it("capo's disallowedTools_default includes 'Edit' (file-edit surface)", () => {
     // 'Edit' is the Claude Code tool that performs string replacements in files.
-    const sage = loadAgentDefinition("sage");
-    expect(sage.disallowedTools_default).toContain("Edit");
+    const capo = loadAgentDefinition("capo");
+    expect(capo.disallowedTools_default).toContain("Edit");
   });
 
-  it("sage's disallowedTools_default includes 'Bash' (code-execution surface)", () => {
+  it("capo's disallowedTools_default includes 'Bash' (code-execution surface)", () => {
     // 'Bash' is the Claude Code tool that executes shell commands.
-    const sage = loadAgentDefinition("sage");
-    expect(sage.disallowedTools_default).toContain("Bash");
+    const capo = loadAgentDefinition("capo");
+    expect(capo.disallowedTools_default).toContain("Bash");
   });
 
-  it("sage's disallowedTools_default contains all three required executor-blocking tools at once", () => {
+  it("capo's disallowedTools_default contains all three required executor-blocking tools at once", () => {
     // Belt-and-suspenders: single assertion covering all three required entries
-    const sage = loadAgentDefinition("sage");
+    const capo = loadAgentDefinition("capo");
     for (const tool of SAGE_BLOCKED_TOOLS) {
-      expect(sage.disallowedTools_default).toContain(tool);
+      expect(capo.disallowedTools_default).toContain(tool);
     }
   });
 
-  it("sage's disallowedTools_default is a non-empty array", () => {
-    const sage = loadAgentDefinition("sage");
-    expect(Array.isArray(sage.disallowedTools_default)).toBe(true);
-    expect(sage.disallowedTools_default.length).toBeGreaterThan(0);
+  it("capo's disallowedTools_default is a non-empty array", () => {
+    const capo = loadAgentDefinition("capo");
+    expect(Array.isArray(capo.disallowedTools_default)).toBe(true);
+    expect(capo.disallowedTools_default.length).toBeGreaterThan(0);
   });
 });
 

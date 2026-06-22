@@ -224,15 +224,15 @@ export function validatePlan(plan: Plan): ValidationResult {
   }
 
   // -------------------------------------------------------------------------
-  // 6. PQ-03: Sage must never be a task executor (ERROR — hard fail)
-  //    Sage is the planner; it does not run as a task agent.
+  // 6. PQ-03: Capo must never be a task executor (ERROR — hard fail)
+  //    Capo is the planner; it does not run as a task agent.
   // -------------------------------------------------------------------------
 
   for (const task of plan.tasks) {
-    if (task.type === "AGENT" && task.agent_id === "sage") {
+    if (task.type === "AGENT" && task.agent_id === "capo") {
       errors.push({
         code: "PQ_03_SAGE_AS_EXECUTOR",
-        message: `Task "${task.id}" specifies agent_id "sage". Sage is the planner and must never appear as a task executor. Use a specialist agent (e.g. "eng", "qa").`,
+        message: `Task "${task.id}" specifies agent_id "capo". Capo is the planner and must never appear as a task executor. Use a specialist agent (e.g. "eng", "qa").`,
         taskId: task.id,
       });
     }

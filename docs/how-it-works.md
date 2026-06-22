@@ -2,19 +2,19 @@
 
 TEO is a team of agents coordinated by one orchestrator, running inside your Claude Code session. This page explains the moving parts.
 
-## The dispatcher and Sage
+## The dispatcher and Capo
 
-The main Claude Code session acts as a **dispatcher**. Its only job is routing: it matches your `/teo` request and either handles a utility command directly or hands the work to Sage.
+The main Claude Code session acts as a **dispatcher**. Its only job is routing: it matches your `/teo` request and either handles a utility command directly or hands the work to Capo.
 
-**Sage** is the orchestrator. Sage does not write code. Sage classifies the request, scopes and sequences the work, and dispatches each piece to the right specialist. Every artifact — tests, code, specs, reviews, commits — is produced by a named specialist, never by Sage directly. Sage runs as a spawned subagent, not as the main session.
+**Capo** is the orchestrator. Capo does not write code. Capo classifies the request, scopes and sequences the work, and dispatches each piece to the right specialist. Every artifact — tests, code, specs, reviews, commits — is produced by a named specialist, never by Capo directly. Capo runs as a spawned subagent, not as the main session.
 
 ```
-You → /teo → Dispatcher → Sage → specialists (qa, dev, staff-engineer, …)
+You → /teo → Dispatcher → Capo → specialists (qa, dev, staff-engineer, …)
 ```
 
 ## The CAD pipeline
 
-Substantive code changes follow a gated cycle. Sage will not skip these gates.
+Substantive code changes follow a gated cycle. Capo will not skip these gates.
 
 ```
 qa-spec → dev → qa-validate → staff-engineer review → commit
@@ -24,17 +24,17 @@ qa-spec → dev → qa-validate → staff-engineer review → commit
 2. **dev** — Implements to green against those tests.
 3. **qa-validate** — Verifies the implementation and coverage.
 4. **staff-engineer** — Reviews architecture and quality.
-5. **commit** — Sage commits only after every gate passes.
+5. **commit** — Capo commits only after every gate passes.
 
 Larger or ambiguous work expands the front of the pipeline (product-manager for scope, cto for architecture decisions) but the gate order holds.
 
 ## The agents
 
-TEO bundles a full roster. You don't invoke these directly — Sage dispatches them. The core engineering set:
+TEO bundles a full roster. You don't invoke these directly — Capo dispatches them. The core engineering set:
 
 | Agent | Role |
 |-------|------|
-| `sage` | Orchestrator — plans and delegates |
+| `capo` | Orchestrator — plans and delegates |
 | `qa` | Test specs and validation |
 | `dev` | Implementation (after tests exist) |
 | `staff-engineer` | Architecture review, post-build gate |
@@ -44,7 +44,7 @@ TEO bundles a full roster. You don't invoke these directly — Sage dispatches t
 
 Plus design, data, devops, API, and coordination roles for non-engineering work.
 
-Because the agents ship with the plugin, they are namespaced (e.g. `teo:sage`, `teo:qa`). They never collide with agents you've defined in your own project.
+Because the agents ship with the plugin, they are namespaced (e.g. `teo:capo`, `teo:qa`). They never collide with agents you've defined in your own project.
 
 ## The signed ledger
 
@@ -52,4 +52,4 @@ Each run writes an append-only JSONL ledger, and every step result is signed wit
 
 ## What runs where
 
-Everything runs in your session. There is no daemon, no server, no separate process, and no API key. Sage's planning and the specialist spawns use Claude Code's own subagent mechanism. The plugin loads its agents, skills, and hooks from the plugin cache — your project directory is never touched.
+Everything runs in your session. There is no daemon, no server, no separate process, and no API key. Capo's planning and the specialist spawns use Claude Code's own subagent mechanism. The plugin loads its agents, skills, and hooks from the plugin cache — your project directory is never touched.

@@ -3,7 +3,7 @@
 # TEO Partner Edition — SessionStart Hook
 # ============================================================================
 # Runs when Claude Code starts a new session. Outputs version info and
-# checks Sage availability.
+# checks Capo availability.
 #
 # Output goes to Claude's context as additional information.
 # ============================================================================
@@ -31,12 +31,12 @@ fi
 # Session status derived from edition field (defaults to "unknown" if absent)
 SESSION_STATUS="${EDITION:-unknown}"
 
-# Check Sage availability (sage-availability status: active when agent.md present)
-SAGE_STATUS="pending (loads on first message)"
-if [[ -f "$CLAUDE_DIR/agents/sage/agent.md" ]]; then
-    SAGE_STATUS="pending (loads on first message)"
+# Check Capo availability (capo-availability status: active when agent.md present)
+CAPO_STATUS="pending (loads on first message)"
+if [[ -f "$CLAUDE_DIR/agents/capo.md" ]]; then
+    CAPO_STATUS="pending (loads on first message)"
 else
-    SAGE_STATUS="missing"
+    CAPO_STATUS="missing"
 fi
 
 # Check font installation (TEOSageGlyph)
@@ -51,7 +51,7 @@ case "$(uname -s)" in
 esac
 
 # Output version banner (goes to Claude's context)
-echo "TEO v${TEO_VERSION} | Session: ${SESSION_STATUS} | Sage: ${SAGE_STATUS}"
+echo "TEO v${TEO_VERSION} | Session: ${SESSION_STATUS} | Capo: ${CAPO_STATUS}"
 if [[ "$FONT_STATUS" == "not installed" ]]; then
     echo "Note: TEOSageGlyph font not installed — glyph rendering may fall back to plain text."
 fi

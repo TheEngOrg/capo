@@ -171,19 +171,19 @@ export const DEMO_10_PQ_WARNING: Plan = {
 };
 
 // ---------------------------------------------------------------------------
-// Demo 11: PQ-03 hard fail — agent_id "sage" as executor (VALIDATION_REJECTED)
+// Demo 11: PQ-03 hard fail — agent_id "capo" as executor (VALIDATION_REJECTED)
 // validatePlan returns errors for this plan; pipeline never runs.
 // ---------------------------------------------------------------------------
-export const DEMO_11_PQ03_SAGE_REJECTION: unknown = {
-  plan_id: "demo-11-pq03-sage",
+export const DEMO_11_PQ03_CAPO_REJECTION: unknown = {
+  plan_id: "demo-11-pq03-capo",
   project_id: "golden-harness",
   created_at: "2026-06-18T00:00:00.000Z",
   version: "1",
   tasks: [
     {
-      id: "sage-task",
+      id: "capo-task",
       type: "AGENT",
-      agent_id: "sage",
+      agent_id: "capo",
       prompt: "do something",
       needs: [],
       gates: [],

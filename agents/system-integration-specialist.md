@@ -45,7 +45,7 @@ write: .claude/memory/integration-decisions.json
 
 ## When to Spawn Me
 
-Sage should spawn this agent when the task involves:
+Capo should spawn this agent when the task involves:
 
 - Designing or reviewing the contract between two or more services (REST, gRPC, GraphQL, Pub/Sub, WebSocket)
 - Integrating a third-party platform or SDK (Stripe, Twilio, Auth0, SendGrid, GitHub, etc.) into the application
@@ -107,7 +107,7 @@ Before marking any integration design complete:
 
 ## Spawn Pattern Example
 
-Sage passes a prompt like:
+Capo passes a prompt like:
 
 ```
 You are the system-integration-specialist.

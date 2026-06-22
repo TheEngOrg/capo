@@ -496,7 +496,7 @@ describe("StubAdapter — builder coupling", () => {
   let rosterDir: string;
 
   // Create a minimal roster: only "software-engineer" is an executor.
-  // "sage" and "coordinator" are intentionally omitted because PlanBuilder
+  // "capo" and "coordinator" are intentionally omitted because PlanBuilder
   // filters them out as NON_EXECUTOR_IDS even if present.
   beforeEach(() => {
     rosterDir = makeTempRoster(["software-engineer", "qa"]);

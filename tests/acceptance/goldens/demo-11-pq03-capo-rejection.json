@@ -1,6 +1,6 @@
 {
-  "scenarioId": "demo-11-pq03-sage-rejection",
-  "planId": "demo-11-pq03-sage",
+  "scenarioId": "demo-11-pq03-capo-rejection",
+  "planId": "demo-11-pq03-capo",
   "overallStatus": "VALIDATION_REJECTED",
   "validationErrors": ["PQ_03_SAGE_AS_EXECUTOR"],
   "validationWarnings": ["PQ_01_SINGLE_TASK"],

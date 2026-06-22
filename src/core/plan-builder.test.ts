@@ -65,8 +65,8 @@ import { validatePlan } from "./validate.js";
 //   3. Unresolved needs[] — references a task id NOT yet accepted in this session
 //      (forward refs rejected; tasks must be added in dependency order).
 //      Reason mentions the unknown/unresolved id.
-//   4. Non-executor agent_id — not in the executor set (roster minus {sage, coordinator}).
-//      "sage", "coordinator", and unknown ids are all rejected.
+//   4. Non-executor agent_id — not in the executor set (roster minus {capo, coordinator}).
+//      "capo", "coordinator", and unknown ids are all rejected.
 //
 // --- CYCLE DETECTION PLACEMENT -----------------------------------------------
 //
@@ -77,7 +77,7 @@ import { validatePlan } from "./validate.js";
 //
 // --- ROSTER RESOLUTION -------------------------------------------------------
 //
-//   Executor set = listAgentIds(agentsDir) minus { "sage", "coordinator" }.
+//   Executor set = listAgentIds(agentsDir) minus { "capo", "coordinator" }.
 //   Tests inject agentsDir to control the roster in isolation.
 //
 // =============================================================================
@@ -360,17 +360,17 @@ describe("PlanBuilder — misuse: unresolved needs[] reference", () => {
 });
 
 describe("PlanBuilder — misuse: non-executor agent_id values", () => {
-  it("returns accepted:false for agent_id 'sage' (sage is the planner, not an executor)", () => {
-    // sage is explicitly excluded from the executor set by the roster-minus rule.
+  it("returns accepted:false for agent_id 'capo' (capo is the planner, not an executor)", () => {
+    // capo is explicitly excluded from the executor set by the roster-minus rule.
     // This mirrors PQ-03 in validatePlan() but fires earlier, at addTask() time.
-    writeAgentFixture("sage");
+    writeAgentFixture("capo");
     const builder = new PlanBuilder({ agentsDir: tempDir });
     builder.startPlan({});
 
     const result = builder.addTask({
-      id: "sage-task",
+      id: "capo-task",
       type: "AGENT",
-      agent_id: "sage",
+      agent_id: "capo",
       prompt: "plan something",
     });
 
@@ -526,20 +526,20 @@ describe("PlanBuilder — boundary: cycle detected in finalizePlan(), not addTas
 });
 
 describe("PlanBuilder — boundary: injected-roster controls executor set", () => {
-  it("rejects agent_id 'sage' even when sage.md exists in the injected roster", () => {
-    // The executor set = listAgentIds(agentsDir) minus {sage, coordinator}.
-    // Even if sage.md is present on disk, sage must be excluded.
+  it("rejects agent_id 'capo' even when capo.md exists in the injected roster", () => {
+    // The executor set = listAgentIds(agentsDir) minus {capo, coordinator}.
+    // Even if capo.md is present on disk, capo must be excluded.
     writeAgentFixture("alpha");
     writeAgentFixture("beta");
-    writeAgentFixture("sage");
+    writeAgentFixture("capo");
 
     const builder = new PlanBuilder({ agentsDir: tempDir });
     builder.startPlan({});
 
     const result = builder.addTask({
-      id: "sage-task",
+      id: "capo-task",
       type: "AGENT",
-      agent_id: "sage",
+      agent_id: "capo",
       prompt: "plan something",
     });
 
@@ -549,7 +549,7 @@ describe("PlanBuilder — boundary: injected-roster controls executor set", () =
   it("accepts agent_id 'alpha' when alpha.md exists in the injected roster", () => {
     writeAgentFixture("alpha");
     writeAgentFixture("beta");
-    writeAgentFixture("sage");
+    writeAgentFixture("capo");
 
     const builder = new PlanBuilder({ agentsDir: tempDir });
     builder.startPlan({});
@@ -565,10 +565,10 @@ describe("PlanBuilder — boundary: injected-roster controls executor set", () =
   });
 
   it("rejects agent_id 'gamma' when gamma.md does NOT exist in the injected roster", () => {
-    // Only alpha, beta, sage are in the temp dir — gamma is unknown
+    // Only alpha, beta, capo are in the temp dir — gamma is unknown
     writeAgentFixture("alpha");
     writeAgentFixture("beta");
-    writeAgentFixture("sage");
+    writeAgentFixture("capo");
 
     const builder = new PlanBuilder({ agentsDir: tempDir });
     builder.startPlan({});

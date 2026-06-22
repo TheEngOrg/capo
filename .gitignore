@@ -22,7 +22,12 @@ coverage/
 .claude/memory/traces/
 .claude/memory/pipeline/
 .claude/memory/deployments/
+.claude/memory/handoffs/
 .claude/agent-memory/
+
+# Session handoff scratch — lives under .claude/memory/handoffs/, never committed
+HANDOFF.md
+HANDOFF-*.md
 
 # Spike sandbox compiled artifacts (derivable, large)
 docs/spikes/SPIKE-002/sandbox/dist/

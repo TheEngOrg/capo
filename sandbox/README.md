@@ -1,6 +1,6 @@
 # TEO E2E Sandbox — Pre-v0.1.0-alpha Validation
 
-This sandbox is the manual + semi-automated E2E validation gate before the first public TEO release. It verifies that a locally installed TEO plugin correctly routes prompts through the Sage pipeline, writes pipeline state, and modifies files as directed.
+This sandbox is the manual + semi-automated E2E validation gate before the first public TEO release. It verifies that a locally installed TEO plugin correctly routes prompts through the Capo pipeline, writes pipeline state, and modifies files as directed.
 
 Run these steps **in order**. Each step's expected output is listed so you know it passed without ambiguity.
 
@@ -64,7 +64,7 @@ PASS: all checks passed
 /teo fix the typo in sandbox/fixtures/broken-readme.md
 ```
 
-**Expected pass output:** Sage pipeline fires. The Dispatcher routes on the Tier-1 `/teo *` trigger. A MECHANICAL workstream is classified and dev agent edits `sandbox/fixtures/broken-readme.md`, replacing "teh" with "the". After the task completes:
+**Expected pass output:** Capo pipeline fires. The Dispatcher routes on the Tier-1 `/teo *` trigger. A MECHANICAL workstream is classified and dev agent edits `sandbox/fixtures/broken-readme.md`, replacing "teh" with "the". After the task completes:
 
 - `.claude/memory/pipeline/sage-result.json` exists
 - `sandbox/fixtures/broken-readme.md` no longer contains the string "teh "
@@ -82,13 +82,13 @@ PASS: all checks passed
 teo plan add a health-check endpoint to the sandbox
 ```
 
-**Expected pass output:** Sage pipeline fires on the Tier-1 `teo plan *` trigger. Sage routes this as an ARCHITECTURAL workstream (plan-only, no code written). After the task completes:
+**Expected pass output:** Capo pipeline fires on the Tier-1 `teo plan *` trigger. Capo routes this as an ARCHITECTURAL workstream (plan-only, no code written). After the task completes:
 
 - `.claude/memory/pipeline/sage-result.json` is updated
 - Either `.claude/memory/plans/` contains at least one file, OR `sage-result.json` has a `pipeline_phase` field containing the substring `plan`
 - `sage-result.json.completed_steps` contains at least one entry referencing a planning activity
 
-**On failure:** If pipeline does not fire, confirm the message starts with `teo plan` (Tier-1 table match is case-insensitive). If pipeline fires but no plan artifact appears, check `.claude/memory/traces/` for Sage output.
+**On failure:** If pipeline does not fire, confirm the message starts with `teo plan` (Tier-1 table match is case-insensitive). If pipeline fires but no plan artifact appears, check `.claude/memory/traces/` for Capo output.
 
 > **Note:** STEP-3A and STEP-3B overwrite the same `sage-result.json`. Run STEP-4 between them if you want to capture STEP-3A state separately.
 
@@ -126,10 +126,10 @@ PASS: all E2E trace checks complete
 
 **STEP-3A and STEP-3B overwrite the same `sage-result.json`.** If you need to validate both states independently, run STEP-4 after STEP-3A before running STEP-3B.
 
-**STEP-3B pass criteria use OR conditions** (`plans/` directory OR `pipeline_phase` field). Sage's plan output path is not fully deterministic — either evidence form is acceptable.
+**STEP-3B pass criteria use OR conditions** (`plans/` directory OR `pipeline_phase` field). Capo's plan output path is not fully deterministic — either evidence form is acceptable.
 
 **`validate-plugin.sh` requires the `claude` CLI binary on PATH.** If the CLI is not found, the script exits 1 with `FAIL: claude CLI not found`.
 
-**STEP-4 Check 7 (workstream state file) is a WARN not a FAIL.** Sage may legitimately write only to `pipeline/` for short tasks.
+**STEP-4 Check 7 (workstream state file) is a WARN not a FAIL.** Capo may legitimately write only to `pipeline/` for short tasks.
 
 **These tests verify the v0.1.0-alpha install path** (`marketplace.json` source: `{ "source": "github", "repo": "TheEngOrg/the-eng-org" }`). WS-GO-07-swap is complete — the GitHub source is the committed form. Run `scripts/verify-plugin-install.sh` and get a PASS before tagging any release.

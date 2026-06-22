@@ -1,6 +1,6 @@
 ---
 name: teo-add-context
-description: "Registers external projects as read-only context references for MG agents. Invoke to reference code, architecture, and patterns from other projects."
+description: "Registers external projects as read-only context references for TEO agents. Invoke to reference code, architecture, and patterns from other projects."
 model: sonnet
 allowed-tools: Read, Glob, Grep, Edit, Write, Bash
 compatibility: "Requires Claude Code"
@@ -11,7 +11,7 @@ metadata:
 
 # Add Project Context
 
-Registers external projects as read-only context references for miniature-guacamole agents.
+Registers external projects as read-only context references for teo agents.
 
 ## Constitution
 
@@ -23,7 +23,7 @@ Registers external projects as read-only context references for miniature-guacam
 
 ## Purpose
 
-Allow MG agents to reference code, architecture, and patterns from other projects without sharing memory. This enables:
+Allow TEO agents to reference code, architecture, and patterns from other projects without sharing memory. This enables:
 
 - Learning from existing implementations in other projects
 - Maintaining consistency across multiple projects
@@ -37,8 +37,8 @@ Allow MG agents to reference code, architecture, and patterns from other project
 ### Add a Local Project
 
 ```bash
-/mg-add-context ~/work/other-project
-/mg-add-context --add ~/work/backend-api --alias api
+/teo-add-context ~/work/other-project
+/teo-add-context --add ~/work/backend-api --alias api
 ```
 
 Registers a local directory as a context reference. The skill will:
@@ -51,8 +51,8 @@ Registers a local directory as a context reference. The skill will:
 ### Add a GitHub Repository
 
 ```bash
-/mg-add-context https://github.com/user/repo
-/mg-add-context --add https://github.com/user/repo --alias external-lib
+/teo-add-context https://github.com/user/repo
+/teo-add-context --add https://github.com/user/repo --alias external-lib
 ```
 
 Registers a GitHub repository as a context reference. The skill will:
@@ -66,7 +66,7 @@ Registers a GitHub repository as a context reference. The skill will:
 ### List Project Contexts
 
 ```bash
-/mg-add-context --list
+/teo-add-context --list
 ```
 
 Shows all registered project contexts with:
@@ -79,7 +79,7 @@ Shows all registered project contexts with:
 ### Inspect a Context
 
 ```bash
-/mg-add-context --inspect api
+/teo-add-context --inspect api
 ```
 
 Shows detailed information about a specific context:
@@ -92,7 +92,7 @@ Shows detailed information about a specific context:
 ### Remove a Context
 
 ```bash
-/mg-add-context --remove api
+/teo-add-context --remove api
 ```
 
 Unregisters a project context. For GitHub clones, optionally removes cached files.

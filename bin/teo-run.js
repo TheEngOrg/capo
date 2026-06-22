@@ -4680,7 +4680,7 @@ async function provision(opts) {
   let bundleDir = opts.bundleDir;
   if (!bundleDir) {
     if (host.kind === "claude-code-plugin" && host.pluginRoot) {
-      bundleDir = host.pluginRoot;
+      bundleDir = path2.join(host.pluginRoot, "agents");
     } else {
       return {
         status: "error",

@@ -9,7 +9,6 @@
   },
   "repository": "https://github.com/TheEngOrg/the-eng-org",
   "license": "MIT",
-  "skills": "../skills/",
-  "agents": "../agents/",
-  "hooks": "../hooks/hooks.json"
+  "skills": "./skills/",
+  "hooks": "./hooks/hooks.json"
 }

@@ -206,4 +206,4 @@ See `.claude/shared/model-escalation.md` for escalation criteria.
 
 **CAN:** Facilitate intake, ask questions, evaluate features, spawn experts, synthesize recommendations
 **CANNOT:** Approve features unilaterally, commit resources, implement features
-**ESCALATES TO:** mg-leadership-team (strategic conflicts, major architectural decisions)
+**ESCALATES TO:** engineering-manager (strategic conflicts, major architectural decisions)

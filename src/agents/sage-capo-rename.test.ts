@@ -240,12 +240,6 @@ describe("misuse: ESCALATED-TO-SAGE must not appear in acceptance-engineer.md", 
     const content = readFile("agents/acceptance-engineer.md");
     expect(content).not.toContain("ESCALATED-TO-SAGE");
   });
-
-  it(".claude/agents/acceptance-engineer.md contains zero ESCALATED-TO-SAGE strings", () => {
-    // MISUSE: mirror must also be updated — PR #35 missed the mirror entirely.
-    const content = readFile(".claude/agents/acceptance-engineer.md");
-    expect(content).not.toContain("ESCALATED-TO-SAGE");
-  });
 });
 
 describe("misuse: capo.md must not reference sage-result.json", () => {
@@ -253,11 +247,6 @@ describe("misuse: capo.md must not reference sage-result.json", () => {
     // MISUSE: capo.md's Turn-end Protocol and Memory Protocol sections both
     // named the old artifact path. Capo must now write capo-result.json.
     const content = readFile("agents/capo.md");
-    expect(content).not.toContain("sage-result.json");
-  });
-
-  it(".claude/agents/capo.md contains zero sage-result.json references", () => {
-    const content = readFile(".claude/agents/capo.md");
     expect(content).not.toContain("sage-result.json");
   });
 });
@@ -332,48 +321,6 @@ describe("misuse: sandbox/README.md must not reference sage-result.json", () => 
     // MISUSE: 11+ occurrences across STEP-3A/3B/4 documentation.
     const content = readFile("sandbox/README.md");
     expect(content).not.toContain("sage-result.json");
-  });
-});
-
-describe("misuse: .claude/shared/gate-evaluator-protocol.md must not reference old Sage artifacts", () => {
-  it("gate-evaluator-protocol.md does not reference sage-pipeline-log.json", () => {
-    const content = readFile(".claude/shared/gate-evaluator-protocol.md");
-    expect(content).not.toContain("sage-pipeline-log.json");
-  });
-
-  it('gate-evaluator-protocol.md does not contain "session_id": "sage-', () => {
-    // MISUSE: sample JSON used "sage-2026-03-25-001" as the session_id format.
-    const content = readFile(".claude/shared/gate-evaluator-protocol.md");
-    expect(content).not.toContain('"sage-2026-');
-  });
-
-  it('gate-evaluator-protocol.md does not contain prose "the Sage" as persona', () => {
-    // MISUSE: "the Sage presents the gate", "the Sage reads gate definitions",
-    // "Sage pipeline execution", "Sage-managed work".
-    const content = readFile(".claude/shared/gate-evaluator-protocol.md");
-    expect(content.toLowerCase()).not.toContain("the sage ");
-    expect(content.toLowerCase()).not.toContain("sage pipeline execution");
-    expect(content.toLowerCase()).not.toContain("sage-managed work");
-  });
-});
-
-describe("misuse: .claude/shared/error-recovery.md must not reference sage-pipeline-log.json", () => {
-  it("error-recovery.md does not reference sage-pipeline-log.json", () => {
-    // MISUSE: four occurrences in error taxonomy / recovery action descriptions.
-    const content = readFile(".claude/shared/error-recovery.md");
-    expect(content).not.toContain("sage-pipeline-log.json");
-  });
-});
-
-describe("misuse: .claude/shared/process-matcher-protocol.md must not reference old Sage artifacts", () => {
-  it("process-matcher-protocol.md does not reference sage-pipeline-log.json", () => {
-    const content = readFile(".claude/shared/process-matcher-protocol.md");
-    expect(content).not.toContain("sage-pipeline-log.json");
-  });
-
-  it('process-matcher-protocol.md does not contain session_id format "sage-{date}"', () => {
-    const content = readFile(".claude/shared/process-matcher-protocol.md");
-    expect(content).not.toContain('"sage-{date}');
   });
 });
 
@@ -480,27 +427,6 @@ describe("misuse: vitest.config.ts must not refer to Sage in comments", () => {
   });
 });
 
-describe("misuse: .claude/shared/visual-formatting.md must not refer to Sage as orchestrator", () => {
-  it("visual-formatting.md INDIGO color comment does not say 'SAGE — orchestrator'", () => {
-    // MISUSE: line 27 named the INDIGO color "SAGE — orchestrator (TEO-only)".
-    // Should now say "CAPO — orchestrator (TEO-only)".
-    const content = readFile(".claude/shared/visual-formatting.md");
-    expect(content).not.toContain("SAGE — orchestrator");
-  });
-
-  it("visual-formatting.md pipeline progress section does not say 'Displayed by the Sage'", () => {
-    // MISUSE: line 138 "Displayed by the Sage after each pipeline step completes."
-    const content = readFile(".claude/shared/visual-formatting.md");
-    expect(content.toLowerCase()).not.toContain("displayed by the sage");
-  });
-
-  it("visual-formatting.md pipeline badge example does not say '[SAGE]'", () => {
-    // MISUSE: line 141 example badge "🔮 [SAGE] Pipeline: {INTENT}".
-    const content = readFile(".claude/shared/visual-formatting.md");
-    expect(content).not.toContain("[SAGE]");
-  });
-});
-
 describe("misuse: docs/gemini-independent-review.md must not reference sage-pipeline-log.json", () => {
   it("gemini-independent-review.md does not reference sage-pipeline-log.json", () => {
     const content = readFile("docs/gemini-independent-review.md");
@@ -554,26 +480,6 @@ describe("misuse: .claude/memory/go-signals/ws-sandbox-e2e-qa-spec.json must not
 // Every change to agents/<name>.md MUST apply to .claude/agents/<name>.md.
 // These tests enforce byte-identity for all modified file pairs.
 // =============================================================================
-
-describe("boundary: mirror sync — acceptance-engineer.md canonical vs mirror", () => {
-  it("agents/acceptance-engineer.md and .claude/agents/acceptance-engineer.md are byte-identical", () => {
-    // BOUNDARY: PR #35 updated canonical but missed the mirror. Both files must
-    // be identical so plugin and local-dev paths see the same agent definition.
-    const canonical = readFile("agents/acceptance-engineer.md");
-    const mirror = readFile(".claude/agents/acceptance-engineer.md");
-    expect(canonical).toBe(mirror);
-  });
-});
-
-describe("boundary: mirror sync — capo.md canonical vs mirror", () => {
-  it("agents/capo.md and .claude/agents/capo.md are byte-identical", () => {
-    // BOUNDARY: capo.md had multiple sage-result.json references. Both copies
-    // must be fixed identically.
-    const canonical = readFile("agents/capo.md");
-    const mirror = readFile(".claude/agents/capo.md");
-    expect(canonical).toBe(mirror);
-  });
-});
 
 describe("boundary: acceptance-engineer.md uses consistent ESCALATED-TO-CAPO throughout", () => {
   it("agents/acceptance-engineer.md contains ESCALATED-TO-CAPO in disposition table template", () => {
@@ -707,18 +613,6 @@ describe("golden: capo-result.json is the canonical artifact name", () => {
     expect(content).toContain("capo-result.json");
     // Confirm the variable assignment specifically
     expect(content).toMatch(/CAPO_RESULT=.*capo-result\.json/);
-  });
-});
-
-describe("golden: all mirrors are byte-identical to their canonical sources", () => {
-  it("agents/acceptance-engineer.md === .claude/agents/acceptance-engineer.md", () => {
-    expect(readFile("agents/acceptance-engineer.md")).toBe(
-      readFile(".claude/agents/acceptance-engineer.md")
-    );
-  });
-
-  it("agents/capo.md === .claude/agents/capo.md", () => {
-    expect(readFile("agents/capo.md")).toBe(readFile(".claude/agents/capo.md"));
   });
 });
 

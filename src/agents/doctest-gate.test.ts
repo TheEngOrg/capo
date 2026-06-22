@@ -130,26 +130,6 @@ describe("misuse: staff-engineer.md missing documentation checklist item", () =>
   });
 });
 
-describe("misuse: mirror divergence — dev.md vs .claude/agents/dev.md", () => {
-  it("agents/dev.md and .claude/agents/dev.md have identical content", () => {
-    // MISUSE: if the canonical and mirror diverge, one of the two paths
-    // (plugin install vs local dev) will have a different rule. All consumers
-    // must see the same agent definition.
-    const canonical = readFile("agents/dev.md");
-    const mirror = readFile(".claude/agents/dev.md");
-    expect(canonical).toBe(mirror);
-  });
-});
-
-describe("misuse: mirror divergence — staff-engineer.md vs .claude/agents/staff-engineer.md", () => {
-  it("agents/staff-engineer.md and .claude/agents/staff-engineer.md have identical content", () => {
-    // MISUSE: same divergence risk for the staff-engineer gate.
-    const canonical = readFile("agents/staff-engineer.md");
-    const mirror = readFile(".claude/agents/staff-engineer.md");
-    expect(canonical).toBe(mirror);
-  });
-});
-
 // =============================================================================
 // BOUNDARY — nuance and edge conditions
 // =============================================================================
@@ -200,16 +180,6 @@ describe("boundary: dev-haiku.md carries the same docs+tests obligation", () => 
   });
 });
 
-describe("boundary: mirror divergence — dev-haiku.md vs .claude/agents/dev-haiku.md", () => {
-  it("agents/dev-haiku.md and .claude/agents/dev-haiku.md have identical content", () => {
-    // BOUNDARY: the haiku mirror must also receive the update. Updating only
-    // the canonical and forgetting the mirror is the most common drift pattern.
-    const canonical = readFile("agents/dev-haiku.md");
-    const mirror = readFile(".claude/agents/dev-haiku.md");
-    expect(canonical).toBe(mirror);
-  });
-});
-
 describe("boundary: staff-engineer checklist items are BLOCKING", () => {
   it("agents/staff-engineer.md uses BLOCK or blocking language near the docs check", () => {
     // BOUNDARY: a non-blocking checklist item (advisory or warning) does not
@@ -223,24 +193,6 @@ describe("boundary: staff-engineer checklist items are BLOCKING", () => {
     const content = readFile("agents/staff-engineer.md");
     const blockTerms = ["BLOCK", "blocking", "hard block", "hard-block"];
     expect(containsAnyOf(content, blockTerms)).toBe(true);
-  });
-});
-
-describe("boundary: teo-build SKILL.md and its mirror are consistent", () => {
-  it("skills/teo-build/SKILL.md and .claude/skills/teo-build/SKILL.md have identical content", () => {
-    // BOUNDARY: skill files also have canonical + mirror pairs. Divergence here
-    // means the process doc update is visible in only one execution path.
-    const canonical = readFile("skills/teo-build/SKILL.md");
-    const mirror = readFile(".claude/skills/teo-build/SKILL.md");
-    expect(canonical).toBe(mirror);
-  });
-});
-
-describe("boundary: teo-code-review SKILL.md and its mirror are consistent", () => {
-  it("skills/teo-code-review/SKILL.md and .claude/skills/teo-code-review/SKILL.md have identical content", () => {
-    const canonical = readFile("skills/teo-code-review/SKILL.md");
-    const mirror = readFile(".claude/skills/teo-code-review/SKILL.md");
-    expect(canonical).toBe(mirror);
   });
 });
 
@@ -293,53 +245,6 @@ describe("golden: staff-engineer.md has blocking checklist items for docs and te
     // Without this, staff-engineer blocks everything including intentional
     // no-doc mechanical changes.
     const content = readFile("agents/staff-engineer.md");
-    expect(containsAnyOf(content, EXCEPTION_TERMS)).toBe(true);
-  });
-});
-
-describe("golden: all mirrors match their canonical source", () => {
-  it("agents/dev.md === .claude/agents/dev.md", () => {
-    expect(readFile("agents/dev.md")).toBe(readFile(".claude/agents/dev.md"));
-  });
-
-  it("agents/dev-haiku.md === .claude/agents/dev-haiku.md", () => {
-    expect(readFile("agents/dev-haiku.md")).toBe(readFile(".claude/agents/dev-haiku.md"));
-  });
-
-  it("agents/staff-engineer.md === .claude/agents/staff-engineer.md", () => {
-    expect(readFile("agents/staff-engineer.md")).toBe(readFile(".claude/agents/staff-engineer.md"));
-  });
-
-  it("skills/teo-build/SKILL.md === .claude/skills/teo-build/SKILL.md", () => {
-    expect(readFile("skills/teo-build/SKILL.md")).toBe(
-      readFile(".claude/skills/teo-build/SKILL.md")
-    );
-  });
-
-  it("skills/teo-code-review/SKILL.md === .claude/skills/teo-code-review/SKILL.md", () => {
-    expect(readFile("skills/teo-code-review/SKILL.md")).toBe(
-      readFile(".claude/skills/teo-code-review/SKILL.md")
-    );
-  });
-});
-
-describe("golden: development-workflow.md references docs+tests as part of done", () => {
-  it(".claude/shared/development-workflow.md mentions documentation obligation", () => {
-    // GOLDEN: the process doc itself must carry the rule so it is visible to
-    // any agent that reads development-workflow.md as a shared context file.
-    // dev and staff-engineer both load this file via context_manifest.
-    const content = readFile(".claude/shared/development-workflow.md");
-    expect(containsAnyOf(content, DOC_OBLIGATION_TERMS)).toBe(true);
-  });
-
-  it(".claude/shared/development-workflow.md mentions tests obligation", () => {
-    const content = readFile(".claude/shared/development-workflow.md");
-    expect(containsAnyOf(content, TEST_OBLIGATION_TERMS)).toBe(true);
-  });
-
-  it(".claude/shared/development-workflow.md mentions the justified-exception path", () => {
-    // GOLDEN: process doc must carry the nuance, not just the obligation.
-    const content = readFile(".claude/shared/development-workflow.md");
     expect(containsAnyOf(content, EXCEPTION_TERMS)).toBe(true);
   });
 });

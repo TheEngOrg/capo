@@ -265,7 +265,7 @@ export async function provision(opts: ProvisionOptions): Promise<ProvisionResult
     };
   }
 
-  // Capture any warning from the revocation result (e.g. "unsigned-plugin-context").
+  // Capture any warning from the revocation result.
   const revocationWarning = revResult.warning;
 
   // -------------------------------------------------------------------------

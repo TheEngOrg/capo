@@ -6,9 +6,9 @@ var __export = (target, all) => {
 };
 
 // src/bootstrap/provision.ts
-import * as fs2 from "node:fs";
+import * as fs3 from "node:fs";
 import * as os from "node:os";
-import * as path2 from "node:path";
+import * as path3 from "node:path";
 
 // node_modules/@noble/ed25519/index.js
 var ed25519_CURVE = Object.freeze({
@@ -482,6 +482,91 @@ var wNAF = (n) => {
   return { p, f };
 };
 
+// src/bootstrap/install-sig.ts
+import * as fs from "node:fs";
+import * as path from "node:path";
+var INSTALL_SIG_FILENAME = ".teo-install-sig";
+function readInstallSig(pluginRootPath) {
+  const sigFilePath = path.join(pluginRootPath, INSTALL_SIG_FILENAME);
+  let raw;
+  try {
+    raw = fs.readFileSync(sigFilePath, "utf8");
+  } catch (err2) {
+    const message = err2 instanceof Error ? err2.message : String(err2);
+    return {
+      ok: false,
+      reason: `Install signature file not found or unreadable at "${sigFilePath}": ${message}`
+    };
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return {
+      ok: false,
+      reason: `Install signature file at "${sigFilePath}" contains invalid JSON.`
+    };
+  }
+  if (!isInstallSigFile(parsed)) {
+    return {
+      ok: false,
+      reason: `Install signature file at "${sigFilePath}" has invalid shape: expected { key_id: string, signature: string }.`
+    };
+  }
+  return { ok: true, file: parsed };
+}
+async function verifyInstallSig(pluginRootPath, sigFile, publicKey) {
+  let canonicalPath;
+  try {
+    canonicalPath = fs.realpathSync(pluginRootPath);
+  } catch (err2) {
+    const message = err2 instanceof Error ? err2.message : String(err2);
+    return {
+      ok: false,
+      reason: `Cannot resolve real path of plugin root "${pluginRootPath}": ${message}`
+    };
+  }
+  const payloadBytes = new Uint8Array(Buffer.from(canonicalPath, "utf8"));
+  let sigBytes;
+  try {
+    sigBytes = Buffer.from(sigFile.signature, "base64");
+  } catch {
+    return { ok: false, reason: "Install signature is not valid base64." };
+  }
+  if (sigBytes.length !== 64) {
+    return {
+      ok: false,
+      reason: `Install signature has wrong length: expected 64 bytes, got ${sigBytes.length} bytes. ed25519 signatures are always exactly 64 bytes.`
+    };
+  }
+  const pubKeyBytes = Buffer.from(publicKey);
+  let valid;
+  try {
+    valid = await verifyAsync(
+      new Uint8Array(sigBytes),
+      payloadBytes,
+      new Uint8Array(pubKeyBytes)
+    );
+  } catch (err2) {
+    const message = err2 instanceof Error ? err2.message : String(err2);
+    return { ok: false, reason: `Install signature verification error: ${message}` };
+  }
+  if (!valid) {
+    return {
+      ok: false,
+      reason: `Install signature verification failed: the signature does not match the plugin root path "${canonicalPath}" with the provided public key.`
+    };
+  }
+  return { ok: true };
+}
+function isInstallSigFile(value) {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+  const obj = value;
+  return typeof obj["key_id"] === "string" && typeof obj["signature"] === "string";
+}
+
 // src/bootstrap/revocation.ts
 function blocked(reason) {
   return { verdict: "BLOCKED", reason };
@@ -493,11 +578,54 @@ function isRevocationList(value) {
   const obj = value;
   return Array.isArray(obj["revoked_keys"]);
 }
+async function checkRevocationListOnly(keyId, revocationList, revocationListFetcher) {
+  if (revocationList === void 0 && revocationListFetcher === void 0) {
+    return blocked(
+      "No revocation list source provided. Provide either revocationList or revocationListFetcher to verify the key."
+    );
+  }
+  let resolvedList;
+  if (revocationList !== void 0) {
+    resolvedList = revocationList;
+  } else {
+    let fetched;
+    try {
+      fetched = await revocationListFetcher();
+    } catch (err2) {
+      const message = err2 instanceof Error ? err2.message : String(err2);
+      return blocked(`Revocation list fetch failed: ${message}`);
+    }
+    if (!isRevocationList(fetched)) {
+      const fetchedType = typeof fetched;
+      const fetchedDesc = fetchedType === "object" && fetched !== null ? `object with keys: [${Object.keys(fetched).join(", ")}]` : String(fetched);
+      return blocked(
+        `Revocation list has invalid shape: expected { revoked_keys: Array }, got ${fetchedDesc}.`
+      );
+    }
+    resolvedList = fetched;
+  }
+  const revokedEntry = resolvedList.revoked_keys.find((entry) => entry.key_id === keyId);
+  if (revokedEntry !== void 0) {
+    const detail = revokedEntry.reason ? `: ${revokedEntry.reason}` : "";
+    return blocked(`Key "${keyId}" has been revoked${detail}.`);
+  }
+  return { verdict: "PASS" };
+}
 async function checkRevocation(opts) {
   const { data, signature, publicKey, keyId, revocationList, revocationListFetcher } = opts;
-  const isPluginContext = typeof process.env["CLAUDE_PLUGIN_ROOT"] === "string" && process.env["CLAUDE_PLUGIN_ROOT"].length > 0;
+  const pluginRoot = process.env["CLAUDE_PLUGIN_ROOT"];
+  const isPluginContext = typeof pluginRoot === "string" && pluginRoot.length > 0;
   if ((signature === void 0 || signature === null) && isPluginContext) {
-    return { verdict: "PASS", warning: "unsigned-plugin-context" };
+    const readResult = readInstallSig(pluginRoot);
+    if (!readResult.ok) {
+      return blocked(readResult.reason);
+    }
+    const verifyResult = await verifyInstallSig(pluginRoot, readResult.file, publicKey);
+    if (!verifyResult.ok) {
+      return blocked(verifyResult.reason);
+    }
+    const installKeyId = readResult.file.key_id;
+    return checkRevocationListOnly(installKeyId, revocationList, revocationListFetcher);
   }
   if (signature === void 0 || signature === null) {
     return blocked("Signature is missing (undefined or null). Cannot verify without a signature.");
@@ -576,8 +704,8 @@ function detectHost() {
 }
 
 // src/agents/load.ts
-import * as fs from "node:fs";
-import * as path from "node:path";
+import * as fs2 from "node:fs";
+import * as path2 from "node:path";
 import { fileURLToPath } from "node:url";
 
 // node_modules/zod/v3/external.js
@@ -1058,8 +1186,8 @@ function getErrorMap() {
 
 // node_modules/zod/v3/helpers/parseUtil.js
 var makeIssue = (params) => {
-  const { data, path: path5, errorMaps, issueData } = params;
-  const fullPath = [...path5, ...issueData.path || []];
+  const { data, path: path6, errorMaps, issueData } = params;
+  const fullPath = [...path6, ...issueData.path || []];
   const fullIssue = {
     ...issueData,
     path: fullPath
@@ -1175,11 +1303,11 @@ var errorUtil;
 
 // node_modules/zod/v3/types.js
 var ParseInputLazyPath = class {
-  constructor(parent, value, path5, key) {
+  constructor(parent, value, path6, key) {
     this._cachedPath = [];
     this.parent = parent;
     this.data = value;
-    this._path = path5;
+    this._path = path6;
     this._key = key;
   }
   get path() {
@@ -4628,10 +4756,10 @@ var FrontmatterSchema = external_exports.object({
   role: external_exports.string().min(1),
   disallowedTools_default: external_exports.array(external_exports.string())
 });
-var DEFAULT_AGENTS_DIR = path.dirname(fileURLToPath(import.meta.url));
+var DEFAULT_AGENTS_DIR = path2.dirname(fileURLToPath(import.meta.url));
 function listAgentIds(dir) {
   const agentsDir = dir ?? DEFAULT_AGENTS_DIR;
-  const entries = fs.readdirSync(agentsDir);
+  const entries = fs2.readdirSync(agentsDir);
   return entries.filter((f) => f.endsWith(".md")).map((f) => f.slice(0, -".md".length));
 }
 
@@ -4649,7 +4777,7 @@ function readTeoVersion() {
   return process.env["TEO_VERSION"] ?? "unknown";
 }
 function writeManifest(resolvedHome, keyId) {
-  const manifestPath = path2.join(resolvedHome, "manifest.json");
+  const manifestPath = path3.join(resolvedHome, "manifest.json");
   const tmpPath = manifestPath + ".tmp";
   const manifest = {
     schema_version: "1",
@@ -4658,12 +4786,12 @@ function writeManifest(resolvedHome, keyId) {
     bundle_signature_key_id: keyId
   };
   try {
-    fs2.writeFileSync(tmpPath, JSON.stringify(manifest, null, 2), { mode: 420 });
-    fs2.renameSync(tmpPath, manifestPath);
-    fs2.chmodSync(manifestPath, 420);
+    fs3.writeFileSync(tmpPath, JSON.stringify(manifest, null, 2), { mode: 420 });
+    fs3.renameSync(tmpPath, manifestPath);
+    fs3.chmodSync(manifestPath, 420);
   } catch (err2) {
     try {
-      fs2.rmSync(tmpPath, { force: true });
+      fs3.rmSync(tmpPath, { force: true });
     } catch {
     }
     return {
@@ -4675,12 +4803,12 @@ function writeManifest(resolvedHome, keyId) {
   return null;
 }
 async function provision(opts) {
-  const resolvedHome = opts.homeDir ?? process.env["TEO_HOME"] ?? path2.join(os.homedir(), ".teo");
+  const resolvedHome = opts.homeDir ?? process.env["TEO_HOME"] ?? path3.join(os.homedir(), ".teo");
   const host = opts.host ?? detectHost();
   let bundleDir = opts.bundleDir;
   if (!bundleDir) {
     if (host.kind === "claude-code-plugin" && host.pluginRoot) {
-      bundleDir = path2.join(host.pluginRoot, "agents");
+      bundleDir = path3.join(host.pluginRoot, "agents");
     } else {
       return {
         status: "error",
@@ -4690,9 +4818,19 @@ async function provision(opts) {
     }
   }
   if (host.kind === "claude-code-plugin" && host.pluginRoot) {
-    const resolvedBundleDir = path2.resolve(bundleDir);
-    const resolvedPluginRoot = path2.resolve(host.pluginRoot);
-    if (!resolvedBundleDir.startsWith(resolvedPluginRoot + path2.sep) && resolvedBundleDir !== resolvedPluginRoot) {
+    let resolvedBundleDir;
+    let resolvedPluginRoot;
+    try {
+      resolvedBundleDir = fs3.realpathSync(bundleDir);
+      resolvedPluginRoot = fs3.realpathSync(host.pluginRoot);
+    } catch {
+      return {
+        status: "error",
+        kind: "io_error",
+        reason: "pluginRoot containment check failed: bundleDir escapes plugin root"
+      };
+    }
+    if (!resolvedBundleDir.startsWith(resolvedPluginRoot + path3.sep) && resolvedBundleDir !== resolvedPluginRoot) {
       return {
         status: "error",
         kind: "io_error",
@@ -4700,7 +4838,7 @@ async function provision(opts) {
       };
     }
   }
-  if (fs2.existsSync(resolvedHome) && !fs2.statSync(resolvedHome).isDirectory()) {
+  if (fs3.existsSync(resolvedHome) && !fs3.statSync(resolvedHome).isDirectory()) {
     return {
       status: "error",
       kind: "conflict",
@@ -4710,12 +4848,12 @@ async function provision(opts) {
   const bundleIds = listAgentIds(bundleDir).sort();
   const traversalErr = checkIds(bundleIds);
   if (traversalErr) return traversalErr;
-  const ledgerDir = path2.join(resolvedHome, "ledger");
-  const keyringDir = path2.join(resolvedHome, "keyring");
-  if (fs2.existsSync(ledgerDir) && fs2.existsSync(keyringDir)) {
+  const ledgerDir = path3.join(resolvedHome, "ledger");
+  const keyringDir = path3.join(resolvedHome, "keyring");
+  if (fs3.existsSync(ledgerDir) && fs3.existsSync(keyringDir)) {
     return { status: "already_provisioned" };
   }
-  const chunks = bundleIds.map((id) => fs2.readFileSync(path2.join(String(bundleDir), `${id}.md`)));
+  const chunks = bundleIds.map((id) => fs3.readFileSync(path3.join(String(bundleDir), `${id}.md`)));
   const data = Buffer.concat(chunks);
   const revResult = await checkRevocation({ data, ...opts.revocationOpts });
   if (revResult.verdict === "BLOCKED") {
@@ -4729,7 +4867,7 @@ async function provision(opts) {
   }
   const revocationWarning = revResult.warning;
   try {
-    fs2.mkdirSync(resolvedHome, { recursive: true, mode: 448 });
+    fs3.mkdirSync(resolvedHome, { recursive: true, mode: 448 });
   } catch (err2) {
     const e = err2;
     if (e.code === "EACCES") {
@@ -4742,7 +4880,7 @@ async function provision(opts) {
     return { status: "error", kind: "io_error", reason: e.message };
   }
   try {
-    fs2.mkdirSync(ledgerDir, { recursive: true, mode: 448 });
+    fs3.mkdirSync(ledgerDir, { recursive: true, mode: 448 });
   } catch (err2) {
     const e = err2;
     if (e.code === "EACCES") {
@@ -4755,7 +4893,7 @@ async function provision(opts) {
     return { status: "error", kind: "io_error", reason: e.message };
   }
   try {
-    fs2.mkdirSync(keyringDir, { recursive: true, mode: 448 });
+    fs3.mkdirSync(keyringDir, { recursive: true, mode: 448 });
   } catch (err2) {
     const e = err2;
     if (e.code === "EACCES") {
@@ -4767,7 +4905,7 @@ async function provision(opts) {
     }
     return { status: "error", kind: "io_error", reason: e.message };
   }
-  fs2.chmodSync(resolvedHome, 448);
+  fs3.chmodSync(resolvedHome, 448);
   const manifestErr = writeManifest(resolvedHome, opts.revocationOpts.keyId);
   if (manifestErr) return manifestErr;
   return { status: "ok", ...revocationWarning ? { warning: revocationWarning } : {} };
@@ -4792,7 +4930,9 @@ var ScriptTaskSchema = BaseTaskSchema.extend({
 var AgentTaskSchema = BaseTaskSchema.extend({
   type: external_exports.literal("AGENT"),
   agent_id: external_exports.string().min(1),
-  prompt: external_exports.string().min(1)
+  prompt: external_exports.string().min(1),
+  target_dir: external_exports.string().optional()
+  // WS-CRYPTO-01: directory to hash for content_hash
 });
 var TEOTaskSchema = external_exports.discriminatedUnion("type", [
   ScriptTaskSchema.strict(),
@@ -4809,9 +4949,9 @@ var PlanSchema = external_exports.object({
 
 // src/core/sign.ts
 import * as crypto from "node:crypto";
-import * as fs3 from "node:fs";
+import * as fs4 from "node:fs";
 import * as os2 from "node:os";
-import * as path3 from "node:path";
+import * as path4 from "node:path";
 var SignKeyringError = class extends Error {
   constructor(message) {
     super(message);
@@ -4850,9 +4990,9 @@ var HmacSigner = class _HmacSigner {
         `keyring_id "${keyring_id}" contains path separators or traversal sequences. Use a plain identifier with no slashes, backslashes, or dots.`
       );
     }
-    const resolvedBase = options.baseDir ?? path3.join(os2.homedir(), ".teo");
-    const keyringDir = path3.join(resolvedBase, "keyring");
-    const keyPath = path3.join(keyringDir, `${keyring_id}.key`);
+    const resolvedBase = options.baseDir ?? path4.join(os2.homedir(), ".teo");
+    const keyringDir = path4.join(resolvedBase, "keyring");
+    const keyPath = path4.join(keyringDir, `${keyring_id}.key`);
     this.key = _HmacSigner.loadOrGenerateKey(keyringDir, keyPath);
   }
   // ---------------------------------------------------------------------------
@@ -4862,13 +5002,13 @@ var HmacSigner = class _HmacSigner {
    * Sign a payload using HMAC-SHA-256.
    *
    * Builds the canonical length-prefixed pipe-delimited string:
-   *   <len(plan_id)>:<plan_id>|<len(task_id_str)>:<task_id_str>|<len(actor_id)>:<actor_id>|<len(verdict_str)>:<verdict_str>|<len(ts)>:<ts>|<len(seq_str)>:<seq_str>
+   *   <len(plan_id)>:<plan_id>|<len(task_id_str)>:<task_id_str>|<len(actor_id)>:<actor_id>|<len(verdict_str)>:<verdict_str>|<len(ts)>:<ts>|<len(seq_str)>:<seq_str>|<len(content_hash_str)>:<content_hash_str>
    *
-   * where null task_id → "" and null verdict → "".
+   * where null task_id → "", null verdict → "", null/absent content_hash → "".
    *
    * Returns 64 lowercase hex characters.
    *
-   * @param payload - The six fields to sign.
+   * @param payload - The seven fields to sign.
    * @returns Hex-encoded HMAC-SHA-256 (64 chars).
    */
   sign(payload) {
@@ -4914,13 +5054,15 @@ var HmacSigner = class _HmacSigner {
     const task_id_str = payload.task_id ?? "";
     const verdict_str = payload.verdict ?? "";
     const seq_str = String(payload.seq);
+    const content_hash_str = payload.content_hash ?? "";
     const fields = [
       payload.plan_id,
       task_id_str,
       payload.actor_id,
       verdict_str,
       payload.ts,
-      seq_str
+      seq_str,
+      content_hash_str
     ];
     return fields.map((f) => `${f.length}:${f}`).join("|");
   }
@@ -4935,31 +5077,31 @@ var HmacSigner = class _HmacSigner {
    * - Enforces 0600 on the key file and 0700 on the keyring directory after loading.
    */
   static loadOrGenerateKey(keyringDir, keyPath) {
-    if (!fs3.existsSync(keyringDir)) {
-      fs3.mkdirSync(keyringDir, { recursive: true, mode: 448 });
+    if (!fs4.existsSync(keyringDir)) {
+      fs4.mkdirSync(keyringDir, { recursive: true, mode: 448 });
     }
-    if (!fs3.existsSync(keyPath)) {
+    if (!fs4.existsSync(keyPath)) {
       const key = crypto.randomBytes(KEY_BYTES);
-      fs3.writeFileSync(keyPath, key, { mode: 384 });
-      fs3.chmodSync(keyringDir, 448);
+      fs4.writeFileSync(keyPath, key, { mode: 384 });
+      fs4.chmodSync(keyringDir, 448);
       return key;
     }
-    const raw = fs3.readFileSync(keyPath);
+    const raw = fs4.readFileSync(keyPath);
     if (raw.length !== KEY_BYTES) {
       throw new SignKeyError(
         `Key file at "${keyPath}" is ${raw.length} bytes; expected exactly ${KEY_BYTES} bytes. The file may be corrupt or empty. Delete it to regenerate.`
       );
     }
-    fs3.chmodSync(keyPath, 384);
-    fs3.chmodSync(keyringDir, 448);
+    fs4.chmodSync(keyPath, 384);
+    fs4.chmodSync(keyringDir, 448);
     return raw;
   }
 };
 
 // src/core/ledger.ts
-import * as fs4 from "node:fs";
+import * as fs5 from "node:fs";
 import * as os3 from "node:os";
-import * as path4 from "node:path";
+import * as path5 from "node:path";
 import * as crypto2 from "node:crypto";
 var LedgerClosedError = class extends Error {
   constructor(message = "Ledger is closed \u2014 no further events may be appended.") {
@@ -4996,9 +5138,9 @@ var AppendOnlyLedger = class {
       );
     }
     this.session_id = session_id;
-    const resolvedBase = baseDir ?? path4.join(os3.homedir(), ".teo");
-    this.ledgerDir = path4.join(resolvedBase, "ledger");
-    this.filePath = path4.join(this.ledgerDir, `${this.session_id}.jsonl`);
+    const resolvedBase = baseDir ?? path5.join(os3.homedir(), ".teo");
+    this.ledgerDir = path5.join(resolvedBase, "ledger");
+    this.filePath = path5.join(this.ledgerDir, `${this.session_id}.jsonl`);
   }
   /**
    * Append one event to the session JSONL file.
@@ -5036,10 +5178,10 @@ var AppendOnlyLedger = class {
     };
     void detailJson;
     const line = JSON.stringify(event) + "\n";
-    if (!fs4.existsSync(this.ledgerDir)) {
-      fs4.mkdirSync(this.ledgerDir, { recursive: true });
+    if (!fs5.existsSync(this.ledgerDir)) {
+      fs5.mkdirSync(this.ledgerDir, { recursive: true });
     }
-    fs4.appendFileSync(this.filePath, line, "utf8");
+    fs5.appendFileSync(this.filePath, line, "utf8");
     return { seq: this.seq, ts: event.ts };
   }
   /**
@@ -5071,7 +5213,8 @@ var AppendOnlyLedger = class {
         fail: summary.fail,
         skipped: summary.skipped,
         tokens: summary.tokens,
-        cost_usd: summary.cost_usd
+        cost_usd: summary.cost_usd,
+        ...summary.torn === true ? { torn: true } : {}
       }
     });
     this.closed = true;

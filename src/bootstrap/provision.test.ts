@@ -1888,14 +1888,14 @@ describe("provision() — WS-GO-02: HostContext and bundleDir defaults", () => {
 });
 
 describe("provision() — WS-GO-02: warning propagation and manifest schema", () => {
-  // T13: warning propagated → fail-open revocation returns warning → ProvisionResult.warning set
-  // When checkRevocation() returns { verdict: "PASS", warning: "unsigned-plugin-context" },
+  // T13: warning propagated → checkRevocation returns PASS with a warning → ProvisionResult.warning set
+  // When checkRevocation() returns { verdict: "PASS", warning: "test-warning" },
   // the ProvisionResult must carry the same warning on the ok/already_provisioned/repaired arms.
-  it("T13. checkRevocation returns PASS with warning → ProvisionResult.warning = 'unsigned-plugin-context'", async () => {
-    // Override checkRevocation to return a PASS with a warning (simulating plugin context fail-open)
+  it("T13. checkRevocation returns PASS with warning → ProvisionResult.warning = 'test-warning'", async () => {
+    // Override checkRevocation to return a PASS with a generic sentinel warning
     vi.mocked(checkRevocation).mockResolvedValue({
       verdict: "PASS",
-      warning: "unsigned-plugin-context",
+      warning: "test-warning",
     } as import("./revocation.js").RevocationResult & { warning?: string });
 
     const bundleDir = makeFixtureBundle(["alpha"]);
@@ -1908,7 +1908,7 @@ describe("provision() — WS-GO-02: warning propagation and manifest schema", ()
 
     // The warning from checkRevocation must propagate to the ProvisionResult
     const resultWithWarning = result as typeof result & { warning?: string };
-    expect(resultWithWarning.warning).toBe("unsigned-plugin-context");
+    expect(resultWithWarning.warning).toBe("test-warning");
   });
 
   // T14: manifest.json written with new schema (no agents_dir, no files) →

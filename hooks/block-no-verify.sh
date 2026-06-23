@@ -13,6 +13,12 @@ command="$(printf '%s' "$input" | jq -r '.tool_input.command // ""' 2>/dev/null 
 # a commit message passed via -m "..." or -m '...'.
 stripped="$(printf '%s' "$command" | sed "s/\"[^\"]*\"//g; s/'[^']*'//g")"
 
+# Normalize absolute git binary paths → bare "git" to close absolute-path bypass (WS-SEC-04).
+# Handles: /usr/bin/git, /usr/local/bin/git, /opt/homebrew/bin/git, and any other absolute path
+# ending in /git. The sed pattern matches an absolute path (starts with /) ending in /git
+# at a word boundary (followed by space or end of string).
+stripped="$(printf '%s' "$stripped" | sed 's|/[^ ]*/git\([[:space:]]\)|git\1|g; s|/[^ ]*/git$|git|g')"
+
 # Block --no-verify as a bare git flag (must follow "git <subcommand>", outside quotes).
 if printf '%s' "$stripped" | grep -qE '(^|[[:space:]])git[[:space:]].*--no-verify([[:space:]]|$)'; then
     printf 'Blocked: --no-verify bypasses required review gates (commit-msg, pre-commit). Fix the underlying issue instead of skipping hooks.\n' >&2

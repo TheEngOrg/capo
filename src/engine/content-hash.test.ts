@@ -11,13 +11,12 @@
 //
 // Ordering: misuse → boundary → golden path (ADR-064 policy)
 //
-// These tests FAIL until dev implements src/engine/content-hash.ts.
+// Implementation complete. All specs pass.
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
-// This import will fail until dev creates the module.
 import { computeContentHash } from "./content-hash.js";
 
 // ---------------------------------------------------------------------------
@@ -238,5 +237,125 @@ describe("computeContentHash() — golden path: multi-file directories", () => {
     const hashWithoutNested = await computeContentHash(tmpDir);
 
     expect(hashWithSubdir).not.toBe(hashWithoutNested);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// WS-CRYPTO-01: exclusion of large/binary dirs (.git/, node_modules/, etc.)
+// ---------------------------------------------------------------------------
+
+describe("computeContentHash() — WS-CRYPTO-01: exclusion of large/binary dirs", () => {
+  it("EXCL-1: .git/ subdirectory is excluded — hash is identical whether .git/ is present or not", async () => {
+    // Two temp dirs with identical tracked content but one also has a .git/ dir.
+    // .git/ is excluded from traversal so hashes must match.
+    const dirWithoutGit = fs.mkdtempSync(path.join(os.tmpdir(), "teo-hash-nogit-"));
+    const dirWithGit = fs.mkdtempSync(path.join(os.tmpdir(), "teo-hash-git-"));
+
+    try {
+      // Write identical tracked files to both dirs
+      fs.writeFileSync(path.join(dirWithoutGit, "index.ts"), "export const x = 1;");
+      fs.writeFileSync(path.join(dirWithGit, "index.ts"), "export const x = 1;");
+
+      // Add a .git/ dir with some internal files to dirWithGit only
+      const gitDir = path.join(dirWithGit, ".git");
+      fs.mkdirSync(gitDir);
+      fs.writeFileSync(path.join(gitDir, "HEAD"), "ref: refs/heads/main\n");
+      fs.writeFileSync(path.join(gitDir, "config"), "[core]\n\trepositoryformatversion = 0\n");
+
+      const hashWithout = await computeContentHash(dirWithoutGit);
+      const hashWith = await computeContentHash(dirWithGit);
+
+      // .git/ is excluded → same tracked content → identical hashes
+      expect(hashWithout).not.toBeNull();
+      expect(hashWith).not.toBeNull();
+      expect(hashWith).toBe(hashWithout);
+    } finally {
+      fs.rmSync(dirWithoutGit, { recursive: true, force: true });
+      fs.rmSync(dirWithGit, { recursive: true, force: true });
+    }
+  });
+
+  it("EXCL-2: node_modules/ subdirectory is excluded — hash is identical whether node_modules/ is present or not", async () => {
+    // Same approach as EXCL-1 but for node_modules/.
+    const dirWithout = fs.mkdtempSync(path.join(os.tmpdir(), "teo-hash-nomod-"));
+    const dirWith = fs.mkdtempSync(path.join(os.tmpdir(), "teo-hash-mod-"));
+
+    try {
+      // Identical tracked files in both
+      fs.writeFileSync(path.join(dirWithout, "src.ts"), "const a = 42;");
+      fs.writeFileSync(path.join(dirWith, "src.ts"), "const a = 42;");
+
+      // Add node_modules/ with a package to dirWith only
+      const nodeModDir = path.join(dirWith, "node_modules");
+      const pkgDir = path.join(nodeModDir, "some-package");
+      fs.mkdirSync(pkgDir, { recursive: true });
+      fs.writeFileSync(path.join(pkgDir, "index.js"), "module.exports = {};");
+      fs.writeFileSync(
+        path.join(pkgDir, "package.json"),
+        '{"name":"some-package","version":"1.0.0"}'
+      );
+
+      const hashWithout = await computeContentHash(dirWithout);
+      const hashWith = await computeContentHash(dirWith);
+
+      // node_modules/ is excluded → same tracked content → identical hashes
+      expect(hashWithout).not.toBeNull();
+      expect(hashWith).not.toBeNull();
+      expect(hashWith).toBe(hashWithout);
+    } finally {
+      fs.rmSync(dirWithout, { recursive: true, force: true });
+      fs.rmSync(dirWith, { recursive: true, force: true });
+    }
+  });
+
+  it("EXCL-3: hashing a dir with node_modules/ containing many files does NOT error or timeout", async () => {
+    // Performance guard: even with N files in node_modules/, computeContentHash()
+    // must complete without error because it skips the directory entirely.
+    // Using 50 files (representative; real node_modules can be 100k+ files).
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "teo-hash-perf-"));
+
+    try {
+      // One tracked source file
+      fs.writeFileSync(path.join(tmpDir, "main.ts"), "export default 42;");
+
+      // node_modules/ with 50 files spread across nested dirs
+      const nmDir = path.join(tmpDir, "node_modules");
+      fs.mkdirSync(nmDir);
+      for (let i = 0; i < 50; i++) {
+        const pkgDir = path.join(nmDir, `pkg-${i}`);
+        fs.mkdirSync(pkgDir);
+        fs.writeFileSync(path.join(pkgDir, "index.js"), `// package ${i}`);
+      }
+
+      // Must not throw, must not time out (vitest default timeout is 5s)
+      const result = await computeContentHash(tmpDir);
+
+      // Returns a valid hash (not null) — the tracked main.ts file is included
+      expect(result).not.toBeNull();
+      expect(result).toMatch(/^[0-9a-f]{64}$/);
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it("EXCL-4: dir without .git/ or node_modules/ still hashes correctly — backward compatibility", async () => {
+    // Regression guard: the exclusion logic must not break hashing of normal dirs.
+    // A dir with only regular files must still return a valid 64-hex-char hash.
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "teo-hash-compat-"));
+
+    try {
+      fs.writeFileSync(path.join(tmpDir, "a.ts"), "export const a = 1;");
+      fs.writeFileSync(path.join(tmpDir, "b.ts"), "export const b = 2;");
+      const subDir = path.join(tmpDir, "lib");
+      fs.mkdirSync(subDir);
+      fs.writeFileSync(path.join(subDir, "util.ts"), "export const util = true;");
+
+      const result = await computeContentHash(tmpDir);
+
+      expect(result).not.toBeNull();
+      expect(result).toMatch(/^[0-9a-f]{64}$/);
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
   });
 });

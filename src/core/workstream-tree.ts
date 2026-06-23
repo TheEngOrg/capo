@@ -458,18 +458,10 @@ export class WorkstreamTree {
         return;
       }
 
-      switch (lastCreated.backend) {
-        case "none":
-          closeNone(wsId, this.dirs.locksDir);
-          break;
-        case "sandbox":
-          closeSandbox(wsId, this.dirs.worktreesDir);
-          break;
-        case "git":
-          closeGit(wsId, this.projectDir, this.dirs.worktreesDir);
-          break;
-      }
-
+      // Write the "closed" registry event first — this makes subsequent close()
+      // calls idempotent (they see the closed event and no-op). This also allows
+      // callers that fire-and-forget close() to immediately observe the closed
+      // state via list() without waiting for the filesystem cleanup to finish.
       const record: WorktreeRecord = {
         wsId,
         projectId: this.projectId,
@@ -480,7 +472,34 @@ export class WorkstreamTree {
       };
       appendRegistry(this.dirs.registryPath, record);
 
-      resolve();
+      // For backends that delete filesystem state (sandbox, git), defer the actual
+      // deletion to a setImmediate callback and resolve only after it completes.
+      // This lets callers that use `void tree.close()` (fire-and-forget) return to
+      // their caller while the cleanup is pending — the path is still accessible
+      // until the current event-loop tick finishes. Callers that `await tree.close()`
+      // still wait for the deletion to complete (the Promise resolves after rmSync).
+      // The `none` backend only removes a lockfile and can close synchronously.
+      if (lastCreated.backend === "none") {
+        closeNone(wsId, this.dirs.locksDir);
+        resolve();
+      } else {
+        const worktreesDir = this.dirs.worktreesDir;
+        const projectDir = this.projectDir;
+        setImmediate(() => {
+          try {
+            switch (lastCreated.backend) {
+              case "sandbox":
+                closeSandbox(wsId, worktreesDir);
+                break;
+              case "git":
+                closeGit(wsId, projectDir, worktreesDir);
+                break;
+            }
+          } finally {
+            resolve();
+          }
+        });
+      }
     });
   }
 

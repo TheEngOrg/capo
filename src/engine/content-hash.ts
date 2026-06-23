@@ -3,6 +3,9 @@ import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
+/** Directory names to skip at any depth (to prevent OOM on large dirs). */
+const EXCLUDED_DIRS = new Set([".git", "node_modules", ".teo", "dist", ".next", "coverage"]);
+
 export function computeContentHash(dirPath: string): Promise<string | null> {
   try {
     const stat = fs.statSync(dirPath);
@@ -33,6 +36,7 @@ function collectFiles(dir: string): string[] {
   for (const entry of entries) {
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) {
+      if (EXCLUDED_DIRS.has(entry.name)) continue; // WS-CRYPTO-01: skip large/binary dirs
       files.push(...collectFiles(full));
     } else if (entry.isFile()) {
       files.push(full);

@@ -40,6 +40,8 @@ export interface AgentContext {
   projectId: string;
   /** Per-step timeout in milliseconds. Propagated to the spawned agent if applicable. */
   stepTimeoutMs: number;
+  /** Optional working directory for this task, provided by WorkstreamTree. */
+  cwd?: string;
 }
 
 /**

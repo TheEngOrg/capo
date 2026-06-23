@@ -55,6 +55,54 @@ function runHook(command: string): number {
 // MISUSE — commands that MUST be blocked (exit 2)
 // =============================================================================
 
+// WS-SEC-04: absolute git path bypass — implementation complete.
+// The script normalizes absolute git paths to `git` before running flag checks.
+describe("block-no-verify.sh — WS-SEC-04: absolute git path bypass must be blocked", () => {
+  it("blocks: /usr/bin/git commit -n (absolute path short-form bypass)", () => {
+    // Currently exits 0 — the regex sees `/usr/bin/git`, not `git`, so it passes.
+    // After fix: normalize `/usr/bin/git` → `git` before regex; must exit 2.
+    expect(runHook("/usr/bin/git commit -n")).toBe(2);
+  });
+
+  it("blocks: /usr/bin/git commit --no-verify (absolute path long-form bypass)", () => {
+    // Currently exits 0. The `(^|[[:space:]])git[[:space:]]` anchor does not match
+    // a command that starts with `/usr/bin/git`.
+    expect(runHook("/usr/bin/git commit --no-verify")).toBe(2);
+  });
+
+  it("blocks: /usr/bin/git config core.hooksPath /dev/null (absolute path hooksPath bypass)", () => {
+    // Currently exits 0. Routing all hooks to /dev/null via absolute-path git
+    // is a full bypass vector that the current script misses.
+    expect(runHook("/usr/bin/git config core.hooksPath /dev/null")).toBe(2);
+  });
+
+  it("blocks: /usr/local/bin/git commit --no-verify (/usr/local/bin variant)", () => {
+    // Common on systems where git is installed via package manager to /usr/local/bin.
+    expect(runHook("/usr/local/bin/git commit --no-verify")).toBe(2);
+  });
+
+  it("blocks: /opt/homebrew/bin/git commit --no-verify (Homebrew macOS path)", () => {
+    // macOS Homebrew installs git to /opt/homebrew/bin/git — another absolute-path
+    // bypass vector on developer machines.
+    expect(runHook("/opt/homebrew/bin/git commit --no-verify")).toBe(2);
+  });
+
+  // --- Regression guards: these must pass through (exit 0) even after the fix ---
+
+  it("allows: git log -n 5 (the -n flag means 'number of commits', not --no-verify) [must stay 0]", () => {
+    // The -n block is scoped to `git commit` only. `git log -n 5` must never be
+    // blocked. This is a regression guard against over-broad normalization.
+    expect(runHook("git log -n 5")).toBe(0);
+  });
+
+  it("allows: /usr/bin/git log -n 5 (absolute path log with count flag must pass through) [must stay 0]", () => {
+    // After normalization, `/usr/bin/git log -n 5` becomes `git log -n 5`.
+    // The -n commit-block must not fire on log subcommand — same guard as above
+    // but exercising the normalization path explicitly.
+    expect(runHook("/usr/bin/git log -n 5")).toBe(0);
+  });
+});
+
 describe("block-no-verify.sh — misuse: git commit -n must be blocked (WS-SEC-02)", () => {
   it("blocks: git commit -n (bare short form)", () => {
     // FAILS until dev adds -n detection to the script.

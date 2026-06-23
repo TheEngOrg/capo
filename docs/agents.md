@@ -6,7 +6,7 @@ CAPO ships 21 agents. You don't invoke these directly — Capo dispatches them b
 
 | Agent | Description |
 |-------|-------------|
-| `sage` | Orchestrator — identifies, scopes, and delegates work. Does not write code directly. This is Capo's internal agent name; the user-facing persona is "Capo". |
+| `capo` | Orchestrator — identifies, scopes, and delegates work. Does not write code directly. |
 | `dev` | Implements features test-first. Primary implementation agent, after tests exist. |
 | `dev-haiku` | Haiku-tier dev for mechanical workstreams. Faster and lower-cost; cascades to `dev` (Sonnet) after 2 failed attempts. |
 | `qa` | Writes misuse-first test specs and verifies implementations. |
@@ -30,6 +30,5 @@ CAPO ships 21 agents. You don't invoke these directly — Capo dispatches them b
 
 ## Notes
 
-- `sage` is the internal code name for the orchestrator. In all user-facing context it's referred to as "Capo".
 - `dev` and `dev-haiku` are separate agents with different capability tiers. For mechanical (well-defined, low-ambiguity) workstreams, CAPO tries `dev-haiku` first for speed and cost, then escalates to `dev` if two attempts fail.
 - Agents are flat `.md` files in the plugin's `agents/` directory. You can override any of them by placing a file with the same name in your project's `.claude/agents/`. See [Configuration](configuration.md) for details.

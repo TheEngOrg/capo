@@ -9,7 +9,7 @@ Durable decisions live in agent memory (`~/.claude/projects/.../memory/`); this 
 
 - **Phase 1 (engineering core): COMPLETE**, merged to main.
 - **GO roadmap (alpha launch): 3 of 5 done.** GO-01 (ledger), GO-02 (plugin), GO-04 (acceptance harness) merged. GO-03 (integrity hook) + GO-06 (docs) + GO-07 (release tag) remain.
-- **The plugin is genuinely installable** — proven by a real `claude plugin install` (18 skills, 9 hook scripts / 7 active registered hook entries load). A blocker bug was found via dogfooding and fixed (PR #31, awaiting merge).
+- **The plugin is genuinely installable** — proven by a real `claude plugin install` (18 skills, 10 hook scripts / 9 actively registered in hooks.json; `teo-post-spawn-citation-check.sh` present but pending Component C gate before registration). A blocker bug was found via dogfooding and fixed (PR #31, awaiting merge).
 - **Two big initiatives planned but NOT built** (build later): the C-suite roster rename, and the marketing-site rewrite.
 
 ---

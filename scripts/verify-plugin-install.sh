@@ -134,10 +134,10 @@ else
   PASS=false
 fi
 
-if [ "${HOOKS_COUNT}" = "5" ]; then
-  echo "    OK: Hooks (5) confirmed"
+if [ "${HOOKS_COUNT}" = "8" ]; then
+  echo "    OK: Hooks (8) confirmed"
 else
-  echo "✘ FAIL: expected Hooks (5), got '${HOOKS_COUNT}'"
+  echo "✘ FAIL: expected Hooks (8), got '${HOOKS_COUNT}'"
   PASS=false
 fi
 

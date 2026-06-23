@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect } from "vitest";
 import {
   TopologicalRunner,
   type Executor,
@@ -298,12 +298,16 @@ describe("TopologicalRunner — executor throws synchronously (boundary)", () =>
 
 // ---------------------------------------------------------------------------
 // BOUNDARY: Unrelated task continues when another branch fails
+// WS-ARCH-01 UPDATE: now asserts SKIPPED (abort behavior)
 // ---------------------------------------------------------------------------
 
 describe("TopologicalRunner — independent branch isolation (boundary)", () => {
   it("an unrelated task keeps running while a failed branch halts", async () => {
     // Plan: A and C are independent roots.
-    // B depends on A. A will fail. C should still PASS.
+    // B depends on A. A will fail.
+    //
+    // After WS-ARCH-01: abortSignalled=true after A fails, C is SKIPPED (not dispatched).
+    // Before WS-ARCH-01: C would have continued running and returned PASS.
     const failAExecutor: Executor = async (task) => ({
       taskId: task.id,
       status: task.id === "A" ? "FAILED" : "PASS",
@@ -313,8 +317,8 @@ describe("TopologicalRunner — independent branch isolation (boundary)", () => 
 
     const plan = makePlan([
       makeTask("A"), // will fail
-      makeTask("B", ["A"]), // will be skipped
-      makeTask("C"), // independent — should PASS
+      makeTask("B", ["A"]), // will be skipped (upstream dep)
+      makeTask("C"), // independent — SKIPPED by abort after WS-ARCH-01
     ]);
 
     const result = await runner.run(plan);
@@ -325,8 +329,197 @@ describe("TopologicalRunner — independent branch isolation (boundary)", () => 
 
     expect(stepA?.status).toBe("FAILED");
     expect(stepB?.status).toBe("SKIPPED");
-    expect(stepC?.status).toBe("PASS");
+    // WS-ARCH-01: abort-on-first-failure means C is SKIPPED, never dispatched
+    expect(stepC?.status).toBe("SKIPPED");
     expect(result.overallStatus).toBe("FAILED"); // overall fails if any step failed
+  });
+});
+
+// =============================================================================
+// WS-ARCH-01 — passing (post-impl, CAD gate 2)
+//
+// These tests exercise abort-on-first-failure behavior implemented in WS-ARCH-01.
+// The abortSignalled flag is now wired into the drive loop.
+// =============================================================================
+
+describe("TopologicalRunner — abort-on-first-failure (WS-ARCH-01)", () => {
+  // ---------------------------------------------------------------------------
+  // MISUSE: single task / minimal abort cases
+  // ---------------------------------------------------------------------------
+
+  it("MISUSE-1: single task FAILED → overallStatus is FAILED, runner terminates cleanly (no hang)", async () => {
+    // Degenerate case: only one task, it fails. abortSignalled fires but there's
+    // nothing else to dispatch. The runner must still exit without hanging.
+    const runner = new TopologicalRunner({ executor: makeFailExecutorFor("only") });
+    const plan = makePlan([makeTask("only")]);
+
+    const result = await runner.run(plan);
+
+    expect(result.overallStatus).toBe("FAILED");
+    expect(result.steps).toHaveLength(1);
+    const step = result.steps[0];
+    expect(step?.taskId).toBe("only");
+    expect(step?.status).toBe("FAILED");
+  });
+
+  it("MISUSE-2: two independent tasks A and B; A dispatched first and FAILs before B starts — B is SKIPPED (abort blocks dispatch)", async () => {
+    // maxParallel:1 forces serial execution: A runs, fails, then B would be next.
+    // With abort-on-first-failure, B must be SKIPPED, never dispatched.
+    const runner = new TopologicalRunner({
+      executor: makeFailExecutorFor("A"),
+      maxParallel: 1,
+    });
+
+    const plan = makePlan([
+      makeTask("A"), // fails first (serial, dispatched first)
+      makeTask("B"), // independent — abort prevents dispatch
+    ]);
+
+    const result = await runner.run(plan);
+
+    const stepA = result.steps.find((s) => s.taskId === "A");
+    const stepB = result.steps.find((s) => s.taskId === "B");
+
+    expect(stepA?.status).toBe("FAILED");
+    // B was never dispatched — must be SKIPPED due to abort
+    expect(stepB?.status).toBe("SKIPPED");
+    expect(result.overallStatus).toBe("FAILED");
+  });
+
+  // ---------------------------------------------------------------------------
+  // BOUNDARY: in-flight tasks drain; new dispatches blocked
+  // ---------------------------------------------------------------------------
+
+  it("BOUNDARY-1: in-flight task B drains to completion while A (in-flight simultaneously) fails; C (not yet started) is SKIPPED", async () => {
+    // maxParallel:2 — A and B are dispatched simultaneously.
+    // A resolves FAILED quickly; B takes longer (still in-flight when A fails).
+    // B must NOT be cancelled — it drains to PASS.
+    // C (independent, not yet dispatched when abort fires) must be SKIPPED.
+    //
+    // Timing: A resolves in ~5ms (FAILED). B resolves in ~30ms (PASS). C never starts.
+    let bResolve: (() => void) | undefined;
+
+    const executor: Executor = async (task): Promise<StepResult> => {
+      if (task.id === "A") {
+        // Short delay then fail — ensures B is in-flight when A fails
+        await new Promise<void>((r) => setTimeout(r, 5));
+        return { taskId: task.id, status: "FAILED" };
+      }
+      if (task.id === "B") {
+        // Longer delay — drain to completion after A fails
+        await new Promise<void>((r) => {
+          bResolve = r;
+          setTimeout(r, 30);
+        });
+        return { taskId: task.id, status: "PASS" };
+      }
+      // C: should never be dispatched (abort fires before C is reached)
+      return { taskId: task.id, status: "PASS" };
+    };
+
+    const runner = new TopologicalRunner({ executor, maxParallel: 2 });
+
+    // A and B are independent roots; C is also independent (not yet dispatched when A fails)
+    const plan = makePlan([
+      makeTask("A"), // fails quickly
+      makeTask("B"), // in-flight, drains to PASS
+      makeTask("C"), // not yet dispatched — must be SKIPPED
+    ]);
+
+    const result = await runner.run(plan);
+
+    const stepA = result.steps.find((s) => s.taskId === "A");
+    const stepB = result.steps.find((s) => s.taskId === "B");
+    const stepC = result.steps.find((s) => s.taskId === "C");
+
+    expect(stepA?.status).toBe("FAILED");
+    // B was in-flight — must NOT be killed, must drain to completion
+    expect(stepB?.status).toBe("PASS");
+    // C was not yet dispatched when abort fired — must be SKIPPED
+    expect(stepC?.status).toBe("SKIPPED");
+    expect(result.overallStatus).toBe("FAILED");
+
+    void bResolve; // referenced to suppress unused warning
+  });
+
+  it("BOUNDARY-2: A fails; B (dep on A) and C (independent) are both SKIPPED — but for different reasons", async () => {
+    // Plan: A → B (dep), C (independent).
+    // A fails. B gets SKIPPED because of upstream dep failure.
+    // C gets SKIPPED because abort fires.
+    // Both are SKIPPED. The test doesn't distinguish *why* (that's an implementation
+    // detail), but asserts both land as SKIPPED and overall is FAILED.
+    const runner = new TopologicalRunner({ executor: makeFailExecutorFor("A") });
+
+    const plan = makePlan([
+      makeTask("A"), // fails
+      makeTask("B", ["A"]), // SKIPPED: upstream dep failure
+      makeTask("C"), // SKIPPED: abort-on-first-failure
+    ]);
+
+    const result = await runner.run(plan);
+
+    const stepA = result.steps.find((s) => s.taskId === "A");
+    const stepB = result.steps.find((s) => s.taskId === "B");
+    const stepC = result.steps.find((s) => s.taskId === "C");
+
+    expect(stepA?.status).toBe("FAILED");
+    expect(stepB?.status).toBe("SKIPPED");
+    expect(stepC?.status).toBe("SKIPPED");
+    expect(result.overallStatus).toBe("FAILED");
+  });
+
+  // ---------------------------------------------------------------------------
+  // GOLDEN PATH: no abort when all tasks pass
+  // ---------------------------------------------------------------------------
+
+  it("GOLDEN-1: all tasks PASS — abort never triggers, behavior identical to current (PASS for all)", async () => {
+    // Regression guard: abort must be a no-op when nothing fails.
+    const runner = new TopologicalRunner({ executor: makePassExecutor() });
+
+    const plan = makePlan([
+      makeTask("A"),
+      makeTask("B", ["A"]),
+      makeTask("C"), // independent
+      makeTask("D", ["B"]),
+    ]);
+
+    const result = await runner.run(plan);
+
+    expect(result.overallStatus).toBe("PASS");
+    expect(result.steps).toHaveLength(4);
+    for (const step of result.steps) {
+      expect(step.status).toBe("PASS");
+    }
+  });
+
+  it("GOLDEN-2: A fails — cascading abort SKIPs all remaining tasks across dep and independent branches", async () => {
+    // Plan: A fails. B depends on A. C is independent. D depends on C.
+    // After abort:
+    //   A = FAILED
+    //   B = SKIPPED (upstream dep + abort)
+    //   C = SKIPPED (abort — independent but no new dispatches after abort)
+    //   D = SKIPPED (abort + dep on C which is SKIPPED)
+    const runner = new TopologicalRunner({ executor: makeFailExecutorFor("A") });
+
+    const plan = makePlan([
+      makeTask("A"), // fails — triggers abort
+      makeTask("B", ["A"]), // SKIPPED: dep + abort
+      makeTask("C"), // SKIPPED: abort (independent)
+      makeTask("D", ["C"]), // SKIPPED: abort + dep on SKIPPED C
+    ]);
+
+    const result = await runner.run(plan);
+
+    const stepA = result.steps.find((s) => s.taskId === "A");
+    const stepB = result.steps.find((s) => s.taskId === "B");
+    const stepC = result.steps.find((s) => s.taskId === "C");
+    const stepD = result.steps.find((s) => s.taskId === "D");
+
+    expect(stepA?.status).toBe("FAILED");
+    expect(stepB?.status).toBe("SKIPPED");
+    expect(stepC?.status).toBe("SKIPPED");
+    expect(stepD?.status).toBe("SKIPPED");
+    expect(result.overallStatus).toBe("FAILED");
   });
 });
 

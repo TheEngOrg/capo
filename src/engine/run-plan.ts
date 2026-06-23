@@ -163,7 +163,12 @@ export async function runPlan(
       const fail = result.steps.filter((s) => s.status === "FAILED").length;
       const skipped = result.steps.filter((s) => s.status === "SKIPPED").length;
       const task_count = result.steps.length;
-      ledger.close({ task_count, pass, fail, skipped, tokens: 0, cost_usd: 0 });
+      // Determine if the run was "torn" — a task failed and one or more independent
+      // tasks were abort-SKIPped (not just dep-cascade SKIPped).
+      const wasTorn =
+        result.overallStatus === "FAILED" &&
+        result.steps.some((s) => s.status === "SKIPPED" && s.detail?.includes("plan abort"));
+      ledger.close({ task_count, pass, fail, skipped, tokens: 0, cost_usd: 0, torn: wasTorn });
     } catch {
       // Swallow close errors — never propagate to RunResult.
     }

@@ -615,6 +615,144 @@ describe("runPlan() — signed path misuse cases", () => {
   });
 });
 
+// =============================================================================
+// WS-ARCH-01 — passing (post-impl, CAD gate 2)
+//
+// These tests exercise TORN ledger behavior implemented in WS-ARCH-01.
+// `ledger.close()` now accepts `torn?: boolean` in WorkflowSummary, and
+// run-plan.ts wires `torn: true` when the runner aborted and SKIPped tasks.
+// =============================================================================
+
+describe("runPlan — TORN ledger on abort (WS-ARCH-01)", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "teo-arch01-torn-"));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  const makeSignedOpts = (sessionId: string): RunPlanOptions => ({
+    sessionId,
+    ledgerBaseDir: tmpDir,
+  });
+
+  it("TORN-1: plan with FAILED step and abort-SKIPped independent task → CLOSE event has torn: true", async () => {
+    // Plan: A (independent, PASS), B (independent, FAILED), C (independent).
+    // After WS-ARCH-01 abort: B fails → abort fires → C is SKIPPED (never dispatched).
+    // The CLOSE event in the ledger JSONL must include `torn: true` in its detail.
+    //
+    // This test FAILS until dev:
+    //   1. Adds `torn?: boolean` to WorkflowSummary in ledger.ts
+    //   2. Wires `torn: true` into ledger.close() in run-plan.ts when abort SKIPs were present
+    const sessionId = "arch01-torn-1";
+
+    const taskA = makeAgentTask("torn1-a"); // passes
+    const taskB = makeAgentTask("torn1-b"); // fails — triggers abort
+    const taskC = makeAgentTask("torn1-c"); // independent — SKIPPED by abort
+
+    const plan = makePlan([taskA, taskB, taskC]);
+    const adapter = makeMockAdapter();
+
+    // Make B fail
+    // eslint-disable-next-line @typescript-eslint/no-misused-promises
+    adapter.spawnAgent.mockImplementation((task: TEOTask, _ctx: AgentContext) =>
+      task.id === "torn1-b"
+        ? Promise.resolve({ taskId: task.id, status: "FAILED" as const, detail: "forced failure" })
+        : Promise.resolve({ taskId: task.id, status: "PASS" as const })
+    );
+
+    await runPlan(plan, adapter, makeSignedOpts(sessionId));
+
+    const filePath = path.join(tmpDir, "ledger", `${sessionId}.jsonl`);
+    const raw = fs.readFileSync(filePath, "utf8");
+    const lines = raw
+      .split("\n")
+      .filter((l) => l.trim().length > 0)
+      .map((l) => JSON.parse(l) as LedgerEvent);
+
+    const closeEvent = lines.find((l) => l.phase === "CLOSE");
+    expect(closeEvent).toBeDefined();
+
+    // Assert torn: true in CLOSE event detail — FAILS until WS-ARCH-01 is implemented
+    expect(closeEvent?.detail).toMatchObject({ torn: true });
+  });
+
+  it("TORN-2: all tasks PASS → CLOSE event does NOT have torn: true", async () => {
+    // Regression guard: when nothing fails, the ledger close must not falsely
+    // report the workflow as TORN.
+    const sessionId = "arch01-torn-2";
+
+    const taskA = makeAgentTask("torn2-a");
+    const taskB = makeAgentTask("torn2-b", ["torn2-a"]);
+    const taskC = makeAgentTask("torn2-c"); // independent
+
+    const plan = makePlan([taskA, taskB, taskC]);
+    const adapter = makeMockAdapter(); // all tasks return PASS by default
+
+    await runPlan(plan, adapter, makeSignedOpts(sessionId));
+
+    const filePath = path.join(tmpDir, "ledger", `${sessionId}.jsonl`);
+    const raw = fs.readFileSync(filePath, "utf8");
+    const lines = raw
+      .split("\n")
+      .filter((l) => l.trim().length > 0)
+      .map((l) => JSON.parse(l) as LedgerEvent);
+
+    const closeEvent = lines.find((l) => l.phase === "CLOSE");
+    expect(closeEvent).toBeDefined();
+
+    // torn must be absent or false — workflow completed normally
+    const detail = closeEvent?.detail as Record<string, unknown> | null;
+    expect(detail?.["torn"]).toBeFalsy();
+  });
+
+  it("TORN-3: FAILED step with only dep-cascade SKIPPED (no abort-SKIPPED tasks) → torn: false", async () => {
+    // Plan: A → B (dep). A fails. B is SKIPPED due to upstream dep, NOT abort.
+    // If the runner aborts on first failure but there are no *independent* tasks
+    // that were blocked, the TORN flag should reflect whether any task was
+    // skipped specifically due to abort (vs. normal dep-cascade SKIP).
+    //
+    // This test documents the intended distinction: dep-cascade SKIPPED alone
+    // does NOT make the workflow TORN. Only abort-blocked dispatches make it TORN.
+    //
+    // Note: whether the implementation distinguishes these two skip reasons is
+    // up to dev. If the impl marks all FAILED+SKIPPED runs as TORN regardless,
+    // update this test. This spec documents the intended fine-grained behavior.
+    const sessionId = "arch01-torn-3";
+
+    const taskA = makeAgentTask("torn3-a"); // fails
+    const taskB = makeAgentTask("torn3-b", ["torn3-a"]); // SKIPPED: dep on failed A
+
+    const plan = makePlan([taskA, taskB]);
+    const adapter = makeMockAdapter();
+
+    adapter.spawnAgent.mockResolvedValueOnce({
+      taskId: "torn3-a",
+      status: "FAILED" as const,
+      detail: "forced failure",
+    });
+
+    await runPlan(plan, adapter, makeSignedOpts(sessionId));
+
+    const filePath = path.join(tmpDir, "ledger", `${sessionId}.jsonl`);
+    const raw = fs.readFileSync(filePath, "utf8");
+    const lines = raw
+      .split("\n")
+      .filter((l) => l.trim().length > 0)
+      .map((l) => JSON.parse(l) as LedgerEvent);
+
+    const closeEvent = lines.find((l) => l.phase === "CLOSE");
+    expect(closeEvent).toBeDefined();
+
+    // No independent tasks were abort-blocked — torn should be false/absent
+    const detail = closeEvent?.detail as Record<string, unknown> | null;
+    expect(detail?.["torn"]).toBeFalsy();
+  });
+});
+
 // ---------------------------------------------------------------------------
 // WS-GO-01 — Group 4: error isolation
 // ---------------------------------------------------------------------------

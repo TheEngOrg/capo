@@ -772,6 +772,77 @@ describe("TopologicalRunner — unknown needs ref (defensive)", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// BRANCH COVERAGE: runner.ts line 341 — failedIdx < 0 (else branch)
+//
+// The `if (failedIdx >= 0)` check at line 341 guards same-batch PASS→SKIPPED
+// override logic. The else (failedIdx === -1) path fires when abortRef.failedTaskId
+// is set but the failing task was NOT dispatched in the CURRENT pass — it was
+// dispatched in an earlier iteration and completed late.
+//
+// Scenario:
+//   Pass 1: A and B dispatched (both in pass1's passOrder).
+//             A completes PASS quickly (resolves first in Promise.race).
+//   Pass 2: C (depends on A) is now ready — dispatched in pass2's passOrder.
+//             We await. B (still in-flight from pass 1) fails.
+//             abortRef.failedTaskId = "B", but pass2's passOrder = ["C"].
+//             passOrder.indexOf("B") === -1 → else branch taken, no-op.
+// ---------------------------------------------------------------------------
+
+describe("TopologicalRunner — abort failedIdx < 0 branch (line 341 else path)", () => {
+  it("no-ops safely when abortRef.failedTaskId is not in the current pass's passOrder", async () => {
+    // Arrange: A and B are independent. A resolves PASS quickly; B resolves FAILED slowly.
+    // C depends on A, so C is dispatched in pass 2 (after A completes).
+    // When B fails (still draining from pass 1), failedTaskId="B" is not in pass 2's
+    // passOrder=["C"]. The else branch must be silently skipped — no throw, C stays PASS.
+
+    let resolveB!: (v: StepResult) => void;
+
+    const executor: Executor = async (task: TEOTask): Promise<StepResult> => {
+      if (task.id === "A") {
+        // Resolves quickly so pass 1 race fires, A completes, C becomes ready
+        await new Promise<void>((r) => setTimeout(r, 5));
+        return { taskId: task.id, status: "PASS" };
+      }
+      if (task.id === "B") {
+        // Held until we manually resolve it in pass 2's await — resolves as FAILED
+        return new Promise<StepResult>((res) => {
+          resolveB = () => res({ taskId: task.id, status: "FAILED" });
+          // Delay slightly so pass 1's race fires on A finishing, not B
+          setTimeout(() => resolveB(), 30);
+        });
+      }
+      // C: depends on A, dispatched in pass 2. Returns PASS.
+      return { taskId: task.id, status: "PASS" };
+    };
+
+    // maxParallel: 2 so A and B are dispatched together in pass 1
+    const runner = new TopologicalRunner({ executor, maxParallel: 2 });
+
+    const plan = makePlan([
+      makeTask("A"), // independent, fast PASS
+      makeTask("B"), // independent, slow FAILED
+      makeTask("C", ["A"]), // dep on A — dispatched in pass 2 only
+    ]);
+
+    const result = await runner.run(plan);
+
+    // The run must not throw. B failed so overall is FAILED.
+    expect(result.overallStatus).toBe("FAILED");
+
+    const stepA = result.steps.find((s) => s.taskId === "A");
+    const stepB = result.steps.find((s) => s.taskId === "B");
+    const stepC = result.steps.find((s) => s.taskId === "C");
+
+    expect(stepA?.status).toBe("PASS");
+    expect(stepB?.status).toBe("FAILED");
+    // C was dispatched in pass 2 before B's failure result was observed,
+    // so C may complete as PASS or be SKIPPED by abort. Either is correct —
+    // the key assertion is that no exception was thrown and the run completed.
+    expect(["PASS", "SKIPPED"]).toContain(stepC?.status);
+  });
+});
+
 // =============================================================================
 // WS-GO-04: runtime guard — missing/invalid status coercion
 //

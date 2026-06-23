@@ -1407,3 +1407,196 @@ describe("runPlan() — WS-CRYPTO-01: target_dir wired to content hash (signed p
     }
   });
 });
+
+// =============================================================================
+// BRANCH COVERAGE: run-plan.ts line 101 — `|| "plan"` fallback
+//
+// The sanitizedPlanId expression uses `|| "plan"` as a final fallback for when
+// the entire plan_id consists of non-alphanumeric, non-hyphen, non-underscore
+// characters (e.g. "!!!", "---", "@@@"). After all three .replace() calls, the
+// result is an empty string, so the `|| "plan"` branch fires.
+// =============================================================================
+
+describe('runPlan() — plan_id sanitization "plan" fallback (line 101)', () => {
+  let tmpWsBase: string;
+  let tmpProjectDir: string;
+
+  beforeEach(() => {
+    tmpWsBase = fs.mkdtempSync(path.join(os.tmpdir(), "teo-planid-fallback-"));
+    tmpProjectDir = fs.mkdtempSync(path.join(os.tmpdir(), "teo-planid-proj-"));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpWsBase, { recursive: true, force: true });
+    fs.rmSync(tmpProjectDir, { recursive: true, force: true });
+  });
+
+  it('PLANID-FALLBACK-1: plan_id "!!!" (all non-alphanumeric) → sanitizes to "plan" fallback, runPlan succeeds', async () => {
+    // plan_id "!!!" → replace(/[^a-zA-Z0-9_-]/g, "-") → "---"
+    //               → replace(/^[^a-zA-Z0-9]+/, "")    → ""
+    //               → replace(/[^a-zA-Z0-9_-]+$/, "")  → ""
+    //               → || "plan"                         → "plan"
+    // WorkstreamTree must allocate wsId "plan-<random>" without throwing.
+    const task = makeAgentTask("fallback-task-1");
+    // Bypass PlanSchema validation (which requires valid plan_id format) by casting.
+    // We need to reach the sanitization logic inside runPlan(), not be rejected by validatePlan().
+    // Note: PlanSchema does not constrain plan_id format beyond being a string,
+    // so "!!!" will pass schema validation and reach sanitization.
+    const plan: Plan = {
+      plan_id: "!!!",
+      project_id: "proj-test",
+      created_at: "2026-06-18T00:00:00Z",
+      version: "1",
+      tasks: [task],
+    };
+    const adapter = makeMockAdapter();
+
+    // Must not throw — the "plan" fallback keeps wsId valid for WorkstreamTree
+    const result = await runPlan(plan, adapter, {
+      workstreamBaseDir: tmpWsBase,
+      projectDir: tmpProjectDir,
+    });
+
+    expect(result.overallStatus).toBe("PASS");
+    expect(result.steps).toHaveLength(1);
+    expect(result.steps[0]?.status).toBe("PASS");
+  });
+
+  it('PLANID-FALLBACK-2: plan_id "@@@" (all non-alphanumeric) → sanitizes to "plan" fallback, runPlan succeeds', async () => {
+    // Second variant to confirm the branch is hit regardless of the specific symbol.
+    const task = makeAgentTask("fallback-task-2");
+    const plan: Plan = {
+      plan_id: "@@@",
+      project_id: "proj-test",
+      created_at: "2026-06-18T00:00:00Z",
+      version: "1",
+      tasks: [task],
+    };
+    const adapter = makeMockAdapter();
+
+    const result = await runPlan(plan, adapter, {
+      workstreamBaseDir: tmpWsBase,
+      projectDir: tmpProjectDir,
+    });
+
+    expect(result.overallStatus).toBe("PASS");
+    expect(result.steps[0]?.status).toBe("PASS");
+  });
+});
+
+// =============================================================================
+// BRANCH COVERAGE: run-plan.ts line 145 — gate override detail ternary falsy branch
+//
+// Line 145: `${stepResult.detail ? "; " + stepResult.detail : ""}`
+// The FALSY branch fires when stepResult.detail is undefined or "" at the moment
+// the gate overrides a PASS → FAILED. Verify the resulting detail does NOT
+// contain "; undefined" or a trailing "; ".
+// =============================================================================
+
+describe("runPlan() — gate override detail: both ternary branches at line 145", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "teo-gate-detail-"));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("GATE-DETAIL-1: gate FAIL override on adapter PASS with NO detail → detail does not contain '; undefined' or trailing '; ' (falsy branch)", async () => {
+    // Adapter returns PASS with NO detail field (undefined).
+    // Gate is mocked to return FAIL.
+    // The ternary `stepResult.detail ? "; " + stepResult.detail : ""` takes the
+    // falsy branch → empty string appended → no "; undefined" or "; " suffix.
+    const sessionId = "gate-detail-no-detail";
+    const task = makeAgentTask("gate-detail-task");
+    const plan = makePlan([task]);
+    const adapter = makeMockAdapter();
+    // adapter returns PASS with no detail (default mock: { taskId, status: "PASS" })
+
+    const evaluateGateModule = await import("./evaluate-gate.js");
+    const gateSpy = vi
+      .spyOn(evaluateGateModule, "evaluateGate")
+      .mockResolvedValueOnce("FAIL" as import("./evaluate-gate.js").GateVerdict);
+
+    try {
+      const result = await runPlan(plan, adapter, {
+        sessionId,
+        ledgerBaseDir: tmpDir,
+      });
+
+      expect(result.steps).toHaveLength(1);
+      const step = result.steps[0]!;
+
+      // Gate override must have fired: status is FAILED
+      expect(step.status).toBe("FAILED");
+
+      // Detail must include "gate override" preamble
+      expect(step.detail).toMatch(/gate override/i);
+
+      // The falsy-ternary branch: detail must NOT end with "; " or contain "; undefined"
+      expect(step.detail).not.toContain("; undefined");
+      expect(step.detail).not.toMatch(/;\s*$/); // no trailing semicolon+space
+
+      // Full detail shape: "gate override: gate returned FAIL; original adapter status: PASS"
+      // (no extra suffix because detail was absent)
+      expect(step.detail).toContain("original adapter status: PASS");
+      // Ensure there's no "; " after "PASS" — the ternary resolved to ""
+      expect(step.detail).toMatch(/original adapter status: PASS$/);
+    } finally {
+      gateSpy.mockRestore();
+    }
+  });
+
+  it("GATE-DETAIL-2: gate FAIL override on adapter PASS WITH a detail string → detail includes '; <original detail>' suffix (truthy branch)", async () => {
+    // Adapter returns PASS WITH a detail string.
+    // Gate is mocked to return FAIL.
+    // The ternary `stepResult.detail ? "; " + stepResult.detail : ""` takes the
+    // TRUTHY branch → "; <original detail>" is appended to the gate override message.
+    // This is the branch that was uncovered: adapter reports PASS but includes
+    // diagnostic detail, then the gate overrides it to FAILED.
+    const sessionId = "gate-detail-with-detail";
+    const task = makeAgentTask("gate-detail-with-detail-task");
+    const plan = makePlan([task]);
+    const adapter = makeMockAdapter();
+
+    // Adapter returns PASS but with a diagnostic detail string
+    adapter.spawnAgent.mockResolvedValueOnce({
+      taskId: "gate-detail-with-detail-task",
+      status: "PASS" as const,
+      detail: "adapter passed but noted warnings",
+    });
+
+    const evaluateGateModule = await import("./evaluate-gate.js");
+    const gateSpy = vi
+      .spyOn(evaluateGateModule, "evaluateGate")
+      .mockResolvedValueOnce("FAIL" as import("./evaluate-gate.js").GateVerdict);
+
+    try {
+      const result = await runPlan(plan, adapter, {
+        sessionId,
+        ledgerBaseDir: tmpDir,
+      });
+
+      expect(result.steps).toHaveLength(1);
+      const step = result.steps[0]!;
+
+      // Gate override must have fired: status is FAILED
+      expect(step.status).toBe("FAILED");
+
+      // Detail must include "gate override" preamble
+      expect(step.detail).toMatch(/gate override/i);
+
+      // The TRUTHY ternary branch: the original adapter detail must be appended after "; "
+      expect(step.detail).toContain("; adapter passed but noted warnings");
+
+      // Full detail shape:
+      // "gate override: gate returned FAIL; original adapter status: PASS; adapter passed but noted warnings"
+      expect(step.detail).toContain("original adapter status: PASS");
+      expect(step.detail).toContain("; adapter passed but noted warnings");
+    } finally {
+      gateSpy.mockRestore();
+    }
+  });
+});

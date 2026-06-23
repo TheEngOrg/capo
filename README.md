@@ -2,7 +2,7 @@
 
 Multi-agent engineering orchestration for Claude Code, packaged as a plugin.
 
-CAPO brings a structured engineering team into your Claude Code session. A single orchestrator — **Capo** — takes a request, breaks it into work, and dispatches it to specialist agents through a gated development cycle. QA writes failing tests first. Dev implements to green. A staff engineer reviews before anything commits. Every gate verdict is recorded in an HMAC-signed audit ledger.
+TEO brings a structured engineering team into your Claude Code session. A single orchestrator (**Capo**) takes a request, breaks it into work, and dispatches it to specialist agents — QA, dev, staff-engineer, security, design, and more — through a gated development cycle. Every substantive code change runs QA-first: tests are written before implementation, reviewed by a staff engineer, and recorded in an HMAC-signed audit ledger.
 
 It installs as a Claude Code plugin. No daemon, no server, no API key — everything runs in your own session.
 

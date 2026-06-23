@@ -26,6 +26,31 @@ Classifies workstreams at intake, then coordinates the appropriate track: MECHAN
 - `--force-mechanical` — Override classification, use MECHANICAL track regardless of rules
 - `--force-architectural` — Override classification, use ARCHITECTURAL track regardless of rules
 
+## Engine Binary Guard
+
+**This check runs BEFORE Step 0 and BEFORE any classification, spawn, or memory write.**
+
+Verify that the engine binary is reachable on PATH and functional:
+
+```bash
+command -v teo-run.js && teo-run.js validate-plan '{}'
+```
+
+This exercises the binary with zero disk writes (`validate-plan` runs a Zod parse and returns `{"valid":...}`). `command -v` confirms the binary is on PATH before executing it.
+
+A `valid:false` result here is EXPECTED for the empty-object probe and does NOT indicate failure — the guard passes if the command's EXIT CODE is 0 (binary reachable and ran). Do not halt on the `valid:false` payload; only halt if `command -v teo-run.js` finds nothing or the binary cannot execute.
+
+If `teo-run.js` is not found on PATH — surface this error and stop immediately, do not proceed to classification, spawning, or writing memory:
+
+```
+ERROR: teo-run.js not found on PATH.
+The teo-build skill requires the TEO engine binary to be reachable.
+Install TEO as a Claude Code plugin so that bin/ is added to PATH,
+then retry this workstream.
+```
+
+Do not classify, spawn agents, or write to memory if this guard fails.
+
 ## Step 0: Classify at Intake
 
 Before spawning any agent, classify the workstream by applying R1-R8 and M1-M5 rules to the ticket or request description. Run `teo-classify-workstream <workstream-id>` before spawning any agent; if the script is not found, fall back to manual classification (fail-open).
@@ -132,9 +157,21 @@ Pass → report complete. No leadership review required.
 Step 1: QA writes tests (can overlap with Dev start)
 Step 2: Dev implements against QA tests
 Step 2.5: Dual-specialist review (if code blocks in deliverable)
+Step 2.8: VALIDATION GATE — verify-plugin-install.sh PASS (HARD GATE, blocks L6)
 Step 3: Staff Engineer internal review
 Step 4: /deployment-engineer merge
 ```
+
+### Step 2.8: Validation Gate (HARD GATE — must pass BEFORE L6 review)
+
+**THIS PROJECT (the TEO plugin):** the real-install validation script is a HARD GATE that must pass BEFORE the work goes to Staff Engineer (L6) review. The reviewer must NOT receive work that fails install/asset-count validation — the gate catches blast-radius breakage (stale hard-coded counts, manifest drift, nested-vs-flat paths) that should never reach L6.
+
+Run: `bash scripts/verify-plugin-install.sh`
+
+- **PASS** (`✔ PASS: teo plugin install verified`, all asset counts confirmed) → proceed to Step 3 (Staff Engineer review).
+- **FAIL** → route back to Dev with the exact failure. Do NOT advance to L6. A FAIL here usually means the change altered an asset count/path but a downstream artifact (the gate's own assertions, plugin.json, a manifest) was not updated in the same change — fix the whole blast radius, re-run the gate.
+
+NOTE: agents cannot run the real `claude plugin install` — this gate is executed by the user/proxy. Surface it as a required pre-L6 step; the workstream is GATE_BLOCKED until the user reports the script PASS.
 
 ### Step 1: QA Test Specification
 
@@ -167,6 +204,8 @@ Task:
 ```
 
 When Dev completes, it writes a `handoff` message to `messages-dev-staff-engineer.json`.
+
+> **Definition of done (address-or-justify):** Dev must update tests and documentation affected by the change, OR explicitly note in the handoff why neither was warranted. An unjustified skip is a BLOCK at Step 3 (Staff Engineer review).
 
 ### Step 2.5: Dual-Specialist Review (conditional)
 

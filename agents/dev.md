@@ -5,15 +5,6 @@ model: sonnet
 tools: [Read, Glob, Grep, Edit, Write, Bash]
 memory: project
 maxTurns: 300
-context_manifest:
-  shared_files:
-    - ".claude/shared/engineering-principles.md"
-    - ".claude/shared/development-workflow.md"
-    - ".claude/shared/tdd-workflow.md"
-    - ".claude/shared/verdict-gate-contract.md"
-    - ".claude/shared/teo-apply-edit-contract.md"
-  agent_scoped_files: []
-  estimated_tokens: 3600
 ---
 
 ```yaml
@@ -173,6 +164,17 @@ Rules:
 - Use atomic write: `cp /dev/stdin <path>.tmp` then `mv <path>.tmp <path>`
 - Set `partial: true` for status updates; omit `partial` (or `false`) for a full GO
 - Do NOT write a GO-signal for a phase you did not execute
+
+## Definition of Done
+
+A workstream is not done until docs and tests are addressed — not as an afterthought, but as part of the implementation:
+
+- **Tests:** Tests updated or added for changed behavior. OR: explicitly note why no test change was warranted (e.g., a pure internal refactor with no observable behavior change). Keeping test coverage current is non-negotiable.
+- **Documentation:** Docs describing the changed API, behavior, or workflow must be updated. OR: explicitly note why no documentation update was warranted (e.g., a private implementation detail not exposed to callers).
+
+The rule is **address-or-justify** — not "always update docs." A justified skip is valid. An unjustified skip is a BLOCK at staff review.
+
+Also update test-file comments that describe tests as "failing" or "unimplemented" once the implementation is green — stale comments are misleading.
 
 ## Boundaries
 

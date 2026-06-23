@@ -5,13 +5,6 @@ model: sonnet
 tools: [Task(qa, design), Read, Glob, Grep, Edit, Write]
 memory: project
 maxTurns: 300
-context_manifest:
-  shared_files:
-    - ".claude/shared/development-workflow.md"
-    - ".claude/shared/memory-protocol.md"
-    - ".claude/shared/teo-create-document-contract.md"
-  agent_scoped_files: []
-  estimated_tokens: 2200
 ---
 
 ```yaml
@@ -88,7 +81,7 @@ For `.claude/memory/**` files, use mechanical tools — never full-file Write/Ed
 Full-file `Write`/`Edit` on **existing** `.claude/memory/` files is **FORBIDDEN**.
 New file creation (file does not yet exist on disk) may still use `Write`.
 
-Use `teo-create-document --kind prd` to create new PRD documents. See ADR-038 and `.claude/shared/teo-create-document-contract.md`.
+Use `teo-create-document --kind prd` to create new PRD documents.
 
 ## Tool Selection
 

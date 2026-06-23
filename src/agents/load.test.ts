@@ -93,7 +93,7 @@ const EXPECTED_AGENT_IDS: readonly string[] = [
  * Dev must put these exact strings in the capo.md frontmatter list.
  * Case-sensitive.
  */
-const SAGE_BLOCKED_TOOLS: readonly string[] = ["Write", "Edit", "Bash"] as const;
+const CAPO_BLOCKED_TOOLS: readonly string[] = ["Write", "Edit", "Bash"] as const;
 
 // ---------------------------------------------------------------------------
 // Fixture helpers — temp dir with hand-crafted .md files for misuse tests
@@ -298,7 +298,7 @@ describe("loadAgentDefinition — boundary: capo executor-blocking tools", () =>
   it("capo's disallowedTools_default contains all three required executor-blocking tools at once", () => {
     // Belt-and-suspenders: single assertion covering all three required entries
     const capo = loadAgentDefinition("capo");
-    for (const tool of SAGE_BLOCKED_TOOLS) {
+    for (const tool of CAPO_BLOCKED_TOOLS) {
       expect(capo.disallowedTools_default).toContain(tool);
     }
   });

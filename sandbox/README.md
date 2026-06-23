@@ -66,10 +66,10 @@ PASS: all checks passed
 
 **Expected pass output:** Capo pipeline fires. The Dispatcher routes on the Tier-1 `/teo *` trigger. A MECHANICAL workstream is classified and dev agent edits `sandbox/fixtures/broken-readme.md`, replacing "teh" with "the". After the task completes:
 
-- `.claude/memory/pipeline/sage-result.json` exists
+- `.claude/memory/pipeline/capo-result.json` exists
 - `sandbox/fixtures/broken-readme.md` no longer contains the string "teh "
 
-**On failure:** If `sage-result.json` is not written, the pipeline did not fire. Confirm the TEO plugin is installed (`claude plugin list`) and the Dispatcher CLAUDE.md is active in this session. Check `.claude/memory/traces/` for error output.
+**On failure:** If `capo-result.json` is not written, the pipeline did not fire. Confirm the TEO plugin is installed (`claude plugin list`) and the Dispatcher CLAUDE.md is active in this session. Check `.claude/memory/traces/` for error output.
 
 ---
 
@@ -84,13 +84,13 @@ teo plan add a health-check endpoint to the sandbox
 
 **Expected pass output:** Capo pipeline fires on the Tier-1 `teo plan *` trigger. Capo routes this as an ARCHITECTURAL workstream (plan-only, no code written). After the task completes:
 
-- `.claude/memory/pipeline/sage-result.json` is updated
-- Either `.claude/memory/plans/` contains at least one file, OR `sage-result.json` has a `pipeline_phase` field containing the substring `plan`
-- `sage-result.json.completed_steps` contains at least one entry referencing a planning activity
+- `.claude/memory/pipeline/capo-result.json` is updated
+- Either `.claude/memory/plans/` contains at least one file, OR `capo-result.json` has a `pipeline_phase` field containing the substring `plan`
+- `capo-result.json.completed_steps` contains at least one entry referencing a planning activity
 
 **On failure:** If pipeline does not fire, confirm the message starts with `teo plan` (Tier-1 table match is case-insensitive). If pipeline fires but no plan artifact appears, check `.claude/memory/traces/` for Capo output.
 
-> **Note:** STEP-3A and STEP-3B overwrite the same `sage-result.json`. Run STEP-4 between them if you want to capture STEP-3A state separately.
+> **Note:** STEP-3A and STEP-3B overwrite the same `capo-result.json`. Run STEP-4 between them if you want to capture STEP-3A state separately.
 
 ---
 
@@ -105,9 +105,9 @@ bash sandbox/scripts/verify-traces.sh
 
 **Expected pass output:**
 ```
-PASS: sage-result.json exists
-PASS: sage-result.json is valid JSON
-PASS: sage-result.json has 'status' field
+PASS: capo-result.json exists
+PASS: capo-result.json is valid JSON
+PASS: capo-result.json has 'status' field
 PASS: completed_steps is non-empty
 PASS: fixture file was modified
 PASS: typo 'teh' is absent from fixture
@@ -116,7 +116,7 @@ NOTE: HMAC ledger not checked — runtime engine not wired to plugin path
 PASS: all E2E trace checks complete
 ```
 
-**On failure:** Each check prints its own `FAIL:` line. The most common cause is running STEP-4 before STEP-3A — the script will exit 1 with `FAIL: sage-result.json missing — run STEP-3A first`.
+**On failure:** Each check prints its own `FAIL:` line. The most common cause is running STEP-4 before STEP-3A — the script will exit 1 with `FAIL: capo-result.json missing — run STEP-3A first`.
 
 ---
 
@@ -124,7 +124,7 @@ PASS: all E2E trace checks complete
 
 **HMAC signed ledger is NOT verified.** `src/core` and `src/engine` (the deterministic guardrails, gate runner, and signed audit ledger) are not wired to the plugin execution path. The post-tool-use and task-completed hooks are stubs that exit 0. `verify-traces.sh` explicitly skips ledger checks and prints a note explaining this. Tracked in the TEO Roadmap — the runtime must be wired before the ledger assertion can become a gate.
 
-**STEP-3A and STEP-3B overwrite the same `sage-result.json`.** If you need to validate both states independently, run STEP-4 after STEP-3A before running STEP-3B.
+**STEP-3A and STEP-3B overwrite the same `capo-result.json`.** If you need to validate both states independently, run STEP-4 after STEP-3A before running STEP-3B.
 
 **STEP-3B pass criteria use OR conditions** (`plans/` directory OR `pipeline_phase` field). Capo's plan output path is not fully deterministic — either evidence form is acceptable.
 

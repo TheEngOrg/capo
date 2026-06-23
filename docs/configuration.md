@@ -62,7 +62,7 @@ CAPO ships 9 hook scripts in `.claude/hooks/`. Seven of them have active entries
 | Event | Script | What it does |
 |-------|--------|--------------|
 | SessionStart | `session-start.sh` | Prints version info |
-| SessionStart | `sage-activation.sh` | Loads the Capo/orchestrator persona |
+| SessionStart | `capo-activation.sh` | Loads the Capo/orchestrator persona |
 | SessionStart | `teo-session-start-meta.sh` | Stub — exits 0, no-op |
 | PreToolUse/Bash | `block-no-verify.sh` | Blocks `--no-verify` and signing-bypass flags in git commands |
 | PostToolUse | `post-tool-use.sh` | Stub — exits 0, no-op |

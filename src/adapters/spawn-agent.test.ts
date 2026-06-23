@@ -890,7 +890,7 @@ describe("ClaudeCodeAdapter.spawnAgent — boundary: disallowedTools union", () 
   it("request.disallowedTools is a superset when agent and task both have entries", async () => {
     // Verify no entries are dropped from either side
     const rosterDir = makeTempRoster([
-      { id: "sage-like-agent", disallowedTools: ["Write", "Edit", "Bash"] },
+      { id: "capo-like-agent", disallowedTools: ["Write", "Edit", "Bash"] },
     ]);
     try {
       const { spawner, capturedRequests } = makeMockSpawner({ output: "VERDICT: PASS" });
@@ -902,7 +902,7 @@ describe("ClaudeCodeAdapter.spawnAgent — boundary: disallowedTools union", () 
 
       const task = makeAgentTask({
         id: "superset-task",
-        agent_id: "sage-like-agent",
+        agent_id: "capo-like-agent",
         disallowedTools: ["Read", "Glob"],
       });
       await adapter.spawnAgent(task, VALID_AGENT_CONTEXT);

@@ -235,7 +235,7 @@ done
 if [[ "${#HARD_FAIL_FILES[@]}" -gt 0 ]]; then
   FAILED_LIST="${HARD_FAIL_FILES[*]}"
 
-  REASON="BLOCK: Citation hard-fail detected in researcher output file(s): ${FAILED_LIST}. The researcher output references sources that could not be verified. Review hook-failures.json for details and correct the research file before Sage reads it."
+  REASON="BLOCK: Citation hard-fail detected in researcher output file(s): ${FAILED_LIST}. The researcher output references sources that could not be verified. Review hook-failures.json for details and correct the research file before Capo reads it."
 
   jq -n \
     --arg reason "$REASON" \

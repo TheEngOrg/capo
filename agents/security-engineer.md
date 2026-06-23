@@ -5,13 +5,6 @@ model: sonnet
 tools: [Read, Glob, Grep, Edit, Write, Bash]
 memory: project
 maxTurns: 300
-context_manifest:
-  shared_files:
-    - ".claude/shared/engineering-principles.md"
-    - ".claude/shared/verdict-gate-contract.md"
-    - ".claude/shared/gate-evaluator-protocol.md"
-  agent_scoped_files: []
-  estimated_tokens: 2600
 ---
 
 ```yaml

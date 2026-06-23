@@ -5,16 +5,6 @@ model: sonnet
 tools: [Task(dev), Read, Glob, Grep, Edit, Write, Bash]
 memory: project
 maxTurns: 300
-context_manifest:
-  shared_files:
-    - ".claude/shared/engineering-principles.md"
-    - ".claude/shared/development-workflow.md"
-    - ".claude/shared/verdict-gate-contract.md"
-    - ".claude/shared/gate-classification-protocol.md"
-    - ".claude/shared/gate-evaluator-protocol.md"
-    - ".claude/shared/tdd-workflow.md"
-  agent_scoped_files: []
-  estimated_tokens: 4400
 ---
 
 ```yaml
@@ -75,8 +65,13 @@ write: .claude/memory/teo-code-review-results.json
   architectural_concerns: [<if any>]
 ```
 
+## Precondition — Validation Gate Must Have Passed (THIS PROJECT)
+
+Before you begin an L6 review of any change to the TEO plugin, confirm the real-install **Validation Gate** (`scripts/verify-plugin-install.sh`) has PASSED on the current change (✔ PASS, all asset counts confirmed). This gate runs BEFORE L6 (teo-build Step 2.8). If there is no evidence the validation gate passed, do NOT review — return the workstream as GATE_BLOCKED with "validation gate (verify-plugin-install.sh) must pass before L6 review." The reviewer never evaluates work that fails install/asset-count validation.
+
 ## Review Checklist
 
+- [ ] Validation gate (verify-plugin-install.sh) PASSED before this review
 - [ ] Tests exist and pass
 - [ ] Coverage >= 99%
 - [ ] DRY - no duplication
@@ -87,6 +82,29 @@ write: .claude/memory/teo-code-review-results.json
 - [ ] External dependencies validated (Firecrawl primary, WebSearch fallback for Tier 2)
 - [ ] Negative results confirmed via multiple sources
 - [ ] Alternative solutions researched
+- [ ] **BLAST RADIUS swept (MANDATORY — see below)**
+- [ ] Documentation updated for this change, OR justified as not warranted
+- [ ] Tests updated/added for this change, OR justified as not warranted
+
+> BLOCK if a change clearly warranted a doc or test update and neither was done nor justified. A justified skip (e.g., pure internal refactor) is valid — an unjustified skip is not.
+
+## Blast-Radius Gate (MANDATORY — no PASS without it)
+
+A change is not reviewed until you have traced EVERYTHING it touches — and everything that touches it — even if that means sweeping the entire codebase. A locally-correct change routinely breaks a DOWNSTREAM artifact that hard-codes the old reality (a gate asserting `Hooks (5)`, a doc listing counts, a test fixture, a manifest, a mirror). The reviewer is the backstop for this.
+
+Before issuing PASS, you MUST:
+
+1. **Enumerate what the change alters** — every count, name, path, signature, schema, enum value, or list the change modifies (e.g. "added a 6th hook", "renamed agent X", "moved file Y", "added CLI command Z").
+2. **Grep the whole repo for each old value** and confirm every occurrence was updated or is intentionally unaffected. Run `Grep` for the prior count/name/path across ALL surfaces — do not assume it only lives where the dev edited.
+3. **Check these surfaces explicitly** for stale references to what changed:
+   - Verification / acceptance scripts and GATES with hard-coded expectations (e.g. `scripts/verify-plugin-install.sh` asserting asset counts) — THIS is the one most commonly missed.
+   - Tests + test fixtures (unit AND the assertions inside gate/acceptance scripts).
+   - Manifests (`plugin.json`, `hooks.json`, `package.json`), docs, READMEs that state counts/lists/paths.
+   - Mirrors (`.claude/` trees) and any duplicated definition.
+   - CI config, build scripts.
+4. **If ANY downstream artifact hard-codes the old value and was not updated, FAIL the review** with the exact file:line. "The code is correct" is not sufficient — the blast radius must be consistent.
+
+Report in the verdict: the list of values that changed, the grep evidence that every occurrence is reconciled, and any downstream artifact you updated or flagged. A PASS asserts the WHOLE blast radius is consistent, not just the touched files.
 
 ## Spike Research Protocol
 
@@ -147,7 +165,7 @@ For `.claude/memory/**` files, use mechanical tools — never full-file Write/Ed
 Full-file `Write`/`Edit` on **existing** `.claude/memory/` files is **FORBIDDEN**.
 New file creation (file does not yet exist on disk) may still use `Write`.
 
-Use `teo-create-document --kind review-memo` to create new review memo documents. See ADR-038 and `.claude/shared/teo-create-document-contract.md`.
+Use `teo-create-document --kind review-memo` to create new review memo documents.
 
 ## Tool Selection
 

@@ -6,8 +6,6 @@ TEO brings a structured engineering team into your Claude Code session. A single
 
 It installs as a Claude Code plugin. No daemon, no server, no API key — everything runs in your own session.
 
-> Alpha: the in-session command is `/teo`. It becomes `/capo` post-alpha.
-
 ## Install
 
 ```

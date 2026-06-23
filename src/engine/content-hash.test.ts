@@ -1,19 +1,28 @@
 // WS-SEC-01 — passing (post-impl, CAD gate 2)
+// WS-CRYPTO-03 — passing (post-impl, CAD gate 2): per-file size cap
 //
 // Tests for src/engine/content-hash.ts — the computeContentHash() utility.
 //
-// computeContentHash(dirPath: string): Promise<string | null>
+// computeContentHash(dirPath: string, opts?: { fileSizeLimitBytes?: number }):
+//   Promise<ContentHashResult | null>
+//
+//   ContentHashResult { hash: string; skipped_count: number }
+//
 //   - Returns SHA-256 of the full recursive directory tree.
+//   - Files over fileSizeLimitBytes are SKIPPED (not read into memory).
+//   - Skipped files are warned via console.warn. skipped_count reflects how many
+//     were skipped. The hash covers only the non-oversized files.
 //   - Fail-open: non-existent path, file (not dir), or error → returns null.
 //   - Deterministic: sorted file paths guarantee same hash for same content
 //     regardless of filesystem traversal order.
-//   - Returns a 64-hex-char string on success.
+//   - hash field is a 64-hex-char string on success.
 //
 // Ordering: misuse → boundary → golden path (ADR-064 policy)
 //
-// Implementation complete. All specs pass.
+// WS-SEC-01 implementation complete. All prior specs pass.
+// WS-CRYPTO-03 implementation complete. All 9 size-cap specs pass.
 
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
@@ -86,14 +95,14 @@ describe("computeContentHash() — boundary: edge-case directories", () => {
     const result = await computeContentHash(tmpDir);
 
     expect(result).not.toBeNull();
-    expect(result).toMatch(/^[0-9a-f]{64}$/);
+    expect(result!.hash).toMatch(/^[0-9a-f]{64}$/);
   });
 
   it("empty directory → same hash on repeated calls (deterministic)", async () => {
     const result1 = await computeContentHash(tmpDir);
     const result2 = await computeContentHash(tmpDir);
 
-    expect(result1).toBe(result2);
+    expect(result1!.hash).toBe(result2!.hash);
   });
 
   it("directory with one file → returns 64-hex-char string", async () => {
@@ -102,7 +111,7 @@ describe("computeContentHash() — boundary: edge-case directories", () => {
     const result = await computeContentHash(tmpDir);
 
     expect(result).not.toBeNull();
-    expect(result).toMatch(/^[0-9a-f]{64}$/);
+    expect(result!.hash).toMatch(/^[0-9a-f]{64}$/);
   });
 
   it("directory with one file: different content → different hash", async () => {
@@ -112,7 +121,7 @@ describe("computeContentHash() — boundary: edge-case directories", () => {
     fs.writeFileSync(path.join(tmpDir, "file.txt"), "content version 2");
     const hash2 = await computeContentHash(tmpDir);
 
-    expect(hash1).not.toBe(hash2);
+    expect(hash1!.hash).not.toBe(hash2!.hash);
   });
 });
 
@@ -139,7 +148,7 @@ describe("computeContentHash() — golden path: multi-file directories", () => {
     const result = await computeContentHash(tmpDir);
 
     expect(result).not.toBeNull();
-    expect(result).toMatch(/^[0-9a-f]{64}$/);
+    expect(result!.hash).toMatch(/^[0-9a-f]{64}$/);
   });
 
   it("same files, called twice → identical hash (pure determinism)", async () => {
@@ -149,7 +158,7 @@ describe("computeContentHash() — golden path: multi-file directories", () => {
     const hash1 = await computeContentHash(tmpDir);
     const hash2 = await computeContentHash(tmpDir);
 
-    expect(hash1).toBe(hash2);
+    expect(hash1!.hash).toBe(hash2!.hash);
   });
 
   it("file content change in multi-file dir → different hash", async () => {
@@ -165,7 +174,7 @@ describe("computeContentHash() — golden path: multi-file directories", () => {
 
     const hashAfter = await computeContentHash(tmpDir);
 
-    expect(hashBefore).not.toBe(hashAfter);
+    expect(hashBefore!.hash).not.toBe(hashAfter!.hash);
   });
 
   it("file addition → different hash (new file changes the tree)", async () => {
@@ -176,7 +185,7 @@ describe("computeContentHash() — golden path: multi-file directories", () => {
     fs.writeFileSync(path.join(tmpDir, "b.ts"), "const y = 2;");
     const hashAfter = await computeContentHash(tmpDir);
 
-    expect(hashBefore).not.toBe(hashAfter);
+    expect(hashBefore!.hash).not.toBe(hashAfter!.hash);
   });
 
   it("file removal → different hash (fewer files changes the tree)", async () => {
@@ -191,7 +200,7 @@ describe("computeContentHash() — golden path: multi-file directories", () => {
 
     const hashAfter = await computeContentHash(tmpDir);
 
-    expect(hashBefore).not.toBe(hashAfter);
+    expect(hashBefore!.hash).not.toBe(hashAfter!.hash);
   });
 
   it("files are sorted before hashing — two dirs with identical files in any order produce the same hash", async () => {
@@ -215,7 +224,7 @@ describe("computeContentHash() — golden path: multi-file directories", () => {
       const hashB = await computeContentHash(dirB);
 
       // Content + relative paths are identical → hashes must match
-      expect(hashA).toBe(hashB);
+      expect(hashA!.hash).toBe(hashB!.hash);
     } finally {
       removeTempDir(dirA);
       removeTempDir(dirB);
@@ -236,7 +245,7 @@ describe("computeContentHash() — golden path: multi-file directories", () => {
 
     const hashWithoutNested = await computeContentHash(tmpDir);
 
-    expect(hashWithSubdir).not.toBe(hashWithoutNested);
+    expect(hashWithSubdir!.hash).not.toBe(hashWithoutNested!.hash);
   });
 });
 
@@ -268,7 +277,7 @@ describe("computeContentHash() — WS-CRYPTO-01: exclusion of large/binary dirs"
       // .git/ is excluded → same tracked content → identical hashes
       expect(hashWithout).not.toBeNull();
       expect(hashWith).not.toBeNull();
-      expect(hashWith).toBe(hashWithout);
+      expect(hashWith!.hash).toBe(hashWithout!.hash);
     } finally {
       fs.rmSync(dirWithoutGit, { recursive: true, force: true });
       fs.rmSync(dirWithGit, { recursive: true, force: true });
@@ -301,7 +310,7 @@ describe("computeContentHash() — WS-CRYPTO-01: exclusion of large/binary dirs"
       // node_modules/ is excluded → same tracked content → identical hashes
       expect(hashWithout).not.toBeNull();
       expect(hashWith).not.toBeNull();
-      expect(hashWith).toBe(hashWithout);
+      expect(hashWith!.hash).toBe(hashWithout!.hash);
     } finally {
       fs.rmSync(dirWithout, { recursive: true, force: true });
       fs.rmSync(dirWith, { recursive: true, force: true });
@@ -332,7 +341,7 @@ describe("computeContentHash() — WS-CRYPTO-01: exclusion of large/binary dirs"
 
       // Returns a valid hash (not null) — the tracked main.ts file is included
       expect(result).not.toBeNull();
-      expect(result).toMatch(/^[0-9a-f]{64}$/);
+      expect(result!.hash).toMatch(/^[0-9a-f]{64}$/);
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
@@ -353,9 +362,210 @@ describe("computeContentHash() — WS-CRYPTO-01: exclusion of large/binary dirs"
       const result = await computeContentHash(tmpDir);
 
       expect(result).not.toBeNull();
-      expect(result).toMatch(/^[0-9a-f]{64}$/);
+      expect(result!.hash).toMatch(/^[0-9a-f]{64}$/);
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// WS-CRYPTO-03: per-file size cap (post-impl, passing)
+//
+// Implemented in content-hash.ts:
+//   - Return type: Promise<ContentHashResult | null>
+//     where ContentHashResult = { hash: string; skipped_count: number }
+//   - Function signature:
+//     computeContentHash(dirPath: string, opts?: { fileSizeLimitBytes?: number })
+//   - Files over opts.fileSizeLimitBytes are skipped (not read), a warning is
+//     logged via console.warn, and skipped_count is incremented.
+//   - Default threshold (when opts omitted): FILE_SIZE_LIMIT_BYTES (50 MB).
+//   - Hash is still computed over the remaining non-oversized files.
+//   - If ALL files are oversized: hash of empty set (identical to empty-dir hash).
+//
+// Strategy: tests pass a small fileSizeLimitBytes (e.g. 10 bytes) so tiny
+// real files on disk trigger the "oversized" branch without allocating 50 MB.
+// ---------------------------------------------------------------------------
+
+describe("computeContentHash() — WS-CRYPTO-03: per-file size cap", () => {
+  let tmpDir: string;
+  let warnSpy: { mock: { calls: string[][] }; mockRestore: () => void };
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "teo-crypto03-"));
+    warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {}) as unknown as typeof warnSpy;
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+    warnSpy.mockRestore();
+  });
+
+  // CRYPTO03-1: one oversized file → skipped_count === 1, result is not null
+  it("CRYPTO03-1: one oversized file → returns { hash, skipped_count: 1 }, never null", async () => {
+    // "large.bin" is 20 bytes; threshold is 10 bytes → over threshold → skipped
+    fs.writeFileSync(path.join(tmpDir, "large.bin"), Buffer.alloc(20));
+
+    const result = await computeContentHash(tmpDir, { fileSizeLimitBytes: 10 });
+
+    expect(result).not.toBeNull();
+    expect(result).toHaveProperty("hash");
+    expect(result).toHaveProperty("skipped_count", 1);
+  });
+
+  // CRYPTO03-2: oversized file is excluded from hash — hash equals empty-dir hash
+  it("CRYPTO03-2: oversized file is skipped — hash equals hash of dir without that file", async () => {
+    // Compute baseline: empty dir (no files at all)
+    const emptyDir = fs.mkdtempSync(path.join(os.tmpdir(), "teo-crypto03-empty-"));
+    let emptyDirResult: { hash: string; skipped_count: number } | null = null;
+    try {
+      emptyDirResult = (await computeContentHash(emptyDir, {
+        fileSizeLimitBytes: 10,
+      })) as typeof emptyDirResult;
+    } finally {
+      fs.rmSync(emptyDir, { recursive: true, force: true });
+    }
+
+    // Now add an oversized file to tmpDir
+    fs.writeFileSync(path.join(tmpDir, "oversized.bin"), Buffer.alloc(20));
+    const result = (await computeContentHash(tmpDir, { fileSizeLimitBytes: 10 })) as {
+      hash: string;
+      skipped_count: number;
+    } | null;
+
+    expect(result).not.toBeNull();
+    expect(emptyDirResult).not.toBeNull();
+    // result must be an object with a hash field (not a bare string) — fails pre-impl
+    expect(typeof result).toBe("object");
+    expect(typeof result!.hash).toBe("string");
+    // skipped_count must be 1 — the oversized file was skipped — fails pre-impl
+    expect(result!.skipped_count).toBe(1);
+    // Hash of dir-with-only-oversized-file must equal empty-dir hash (oversized file excluded)
+    expect(result!.hash).toBe(emptyDirResult!.hash);
+  });
+
+  // CRYPTO03-3: no oversized files → skipped_count === 0 (backward-compatible)
+  it("CRYPTO03-3: no oversized files → skipped_count === 0 (backward-compatible behavior)", async () => {
+    fs.writeFileSync(path.join(tmpDir, "small.txt"), "hi"); // 2 bytes, under 10-byte threshold
+
+    const result = await computeContentHash(tmpDir, { fileSizeLimitBytes: 10 });
+
+    expect(result).not.toBeNull();
+    expect(result).toHaveProperty("skipped_count", 0);
+    expect(result).toHaveProperty("hash");
+  });
+
+  // CRYPTO03-4: mix of normal + oversized files → skipped_count matches oversized count,
+  //             hash covers only the non-oversized files
+  it("CRYPTO03-4: mix of normal + oversized → skipped_count equals oversized count; hash covers only normal files", async () => {
+    // normal.txt: 5 bytes (under 10 threshold)
+    // big1.bin, big2.bin: 20 bytes each (over 10 threshold)
+    fs.writeFileSync(path.join(tmpDir, "normal.txt"), "hello"); // 5 bytes
+    fs.writeFileSync(path.join(tmpDir, "big1.bin"), Buffer.alloc(20));
+    fs.writeFileSync(path.join(tmpDir, "big2.bin"), Buffer.alloc(20));
+
+    const result = (await computeContentHash(tmpDir, { fileSizeLimitBytes: 10 })) as {
+      hash: string;
+      skipped_count: number;
+    } | null;
+
+    expect(result).not.toBeNull();
+    expect(result).toHaveProperty("skipped_count", 2);
+
+    // The hash must equal the hash of a dir with only "normal.txt"
+    const refDir = fs.mkdtempSync(path.join(os.tmpdir(), "teo-crypto03-ref-"));
+    try {
+      fs.writeFileSync(path.join(refDir, "normal.txt"), "hello");
+      const refResult = (await computeContentHash(refDir, { fileSizeLimitBytes: 10 })) as {
+        hash: string;
+        skipped_count: number;
+      } | null;
+      expect(refResult).not.toBeNull();
+      expect(result!.hash).toBe(refResult!.hash);
+    } finally {
+      fs.rmSync(refDir, { recursive: true, force: true });
+    }
+  });
+
+  // CRYPTO03-5: all files oversized → hash equals empty-dir hash, skipped_count > 0
+  it("CRYPTO03-5: all files oversized → hash equals empty-dir hash; skipped_count > 0", async () => {
+    fs.writeFileSync(path.join(tmpDir, "a.bin"), Buffer.alloc(20));
+    fs.writeFileSync(path.join(tmpDir, "b.bin"), Buffer.alloc(20));
+    fs.writeFileSync(path.join(tmpDir, "c.bin"), Buffer.alloc(20));
+
+    const allOversizedResult = (await computeContentHash(tmpDir, { fileSizeLimitBytes: 10 })) as {
+      hash: string;
+      skipped_count: number;
+    } | null;
+
+    const emptyDir = fs.mkdtempSync(path.join(os.tmpdir(), "teo-crypto03-allempty-"));
+    let emptyResult: { hash: string; skipped_count: number } | null = null;
+    try {
+      emptyResult = (await computeContentHash(emptyDir, {
+        fileSizeLimitBytes: 10,
+      })) as typeof emptyResult;
+    } finally {
+      fs.rmSync(emptyDir, { recursive: true, force: true });
+    }
+
+    expect(allOversizedResult).not.toBeNull();
+    expect(emptyResult).not.toBeNull();
+    expect(allOversizedResult!.skipped_count).toBe(3);
+    expect(allOversizedResult!.hash).toBe(emptyResult!.hash);
+  });
+
+  // CRYPTO03-6: warning is logged for each skipped file
+  it("CRYPTO03-6: console.warn is called for each skipped file, containing the file path", async () => {
+    const largePath = path.join(tmpDir, "large.bin");
+    fs.writeFileSync(largePath, Buffer.alloc(20));
+
+    await computeContentHash(tmpDir, { fileSizeLimitBytes: 10 });
+
+    // At least one console.warn call must reference the oversized file path
+    expect(warnSpy).toHaveBeenCalled();
+    const calls = warnSpy.mock.calls.flat().join(" ");
+    expect(calls).toContain("large.bin");
+  });
+
+  // CRYPTO03-7: hash field preserves 64-hex-char format
+  it("CRYPTO03-7: hash field is a 64-hex-char SHA-256 string regardless of skipped files", async () => {
+    fs.writeFileSync(path.join(tmpDir, "small.txt"), "data"); // 4 bytes, under threshold
+    fs.writeFileSync(path.join(tmpDir, "big.bin"), Buffer.alloc(20)); // over threshold
+
+    const result = await computeContentHash(tmpDir, { fileSizeLimitBytes: 10 });
+
+    expect(result).not.toBeNull();
+    expect(result!.hash).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  // CRYPTO03-8: result shape — return value is an object, not a bare string
+  it("CRYPTO03-8: return value is an object { hash, skipped_count }, NOT a bare string", async () => {
+    fs.writeFileSync(path.join(tmpDir, "file.txt"), "ok");
+
+    const result = await computeContentHash(tmpDir, { fileSizeLimitBytes: 10 });
+
+    expect(result).not.toBeNull();
+    // Must be an object, not a primitive string
+    expect(typeof result).toBe("object");
+    expect(typeof result!.hash).toBe("string");
+    expect(typeof result!.skipped_count).toBe("number");
+  });
+
+  // CRYPTO03-9: default threshold (no opts) — large real file is skipped
+  //             Uses a sparse write to create a 60 MB apparent file without
+  //             allocating 60 MB of memory.
+  it("CRYPTO03-9: default threshold (no opts) — a 60 MB sparse file is skipped", async () => {
+    const bigPath = path.join(tmpDir, "huge.bin");
+    // Create a sparse file: open, seek to 60 MB - 1, write 1 byte, close.
+    // On most filesystems this creates a 60 MB apparent file with minimal allocation.
+    const fd = fs.openSync(bigPath, "w");
+    fs.writeSync(fd, Buffer.alloc(1), 0, 1, 60 * 1024 * 1024 - 1);
+    fs.closeSync(fd);
+
+    const result = await computeContentHash(tmpDir);
+
+    expect(result).not.toBeNull();
+    expect(result!.skipped_count).toBeGreaterThan(0);
+    expect(warnSpy).toHaveBeenCalled();
   });
 });

@@ -40,6 +40,7 @@
 # Protected paths (hardcoded — matches teo-apply-edit built-in allowlist):
 #   .claude/scripts/**  .claude/hooks/**  .claude/shared/**
 #   docs/**  src/**  packages/**
+#   package.json  tsconfig.json  vitest.config.ts  .eslintrc  .eslintrc.json
 #   Extended by .claude/config/teo-allowlist.json additional_enforced_paths
 #
 # Fail-open cases (exit 0 with WARN):
@@ -70,6 +71,11 @@ PROTECTED_PREFIXES=(
   "docs"
   "src"
   "packages"
+  "package.json"
+  "tsconfig.json"
+  "vitest.config.ts"
+  ".eslintrc"
+  ".eslintrc.json"
 )
 
 # ─── Environment ─────────────────────────────────────────────────────────────

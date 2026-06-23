@@ -1,4 +1,5 @@
 // WS-SEC-03 — passing (post-impl, CAD gate 2)
+// WS-SEC-05 — passing (post-impl, CAD gate 2)
 
 import { describe, it, expect } from "vitest";
 import { execSync } from "node:child_process";
@@ -132,7 +133,8 @@ describe("pre-edit-write-guard.sh — boundary: direct protected path (regressio
 describe("pre-edit-write-guard.sh — boundary: .git/config edge case", () => {
   it("allows: .git/config (NOT in PROTECTED_PREFIXES) [PASSES pre-fix]", () => {
     // .git is NOT listed in PROTECTED_PREFIXES (only .claude/scripts, .claude/hooks,
-    // .claude/shared, .claude/agents, .claude/settings.json, docs, src, packages).
+    // .claude/shared, .claude/agents, .claude/settings.json, docs, src, packages,
+    // package.json, tsconfig.json, vitest.config.ts, .eslintrc, .eslintrc.json).
     // This test documents that .git writes are ALLOWED by the guard as-is.
     // If .git protection is ever added, this expectation must flip to 2.
     expect(runHook(makeEditPayload(".git/config"))).toBe(0);
@@ -177,5 +179,85 @@ describe("pre-edit-write-guard.sh — golden path: unprotected paths always allo
   it("allows: Write dist/output.js (Write tool, unprotected) [PASSES pre-fix]", () => {
     // Write tool on an unprotected path must exit 0, same as Edit.
     expect(runHook(makeWritePayload("dist/output.js"))).toBe(0);
+  });
+});
+
+// =============================================================================
+// WS-SEC-05 — root-level build config protection
+//
+// Security gap: root-level config files (package.json, tsconfig.json,
+// vitest.config.ts, .eslintrc*) are NOT in PROTECTED_PREFIXES. A subagent
+// could directly rewrite build config without triggering the guard.
+//
+// Fix: add "package.json", "tsconfig.json", "vitest.config.ts", ".eslintrc",
+// ".eslintrc.json" (and other .eslintrc.* variants) to PROTECTED_PREFIXES.
+//
+// MISUSE tests below FAIL until dev adds those entries. Existing tests above
+// are regression guards that must stay green before and after the fix.
+//
+// TEST ORDERING: misuse → boundary → golden path (ADR-064 critical-path policy)
+// =============================================================================
+
+describe("pre-edit-write-guard.sh — misuse: root-level build config writes blocked (WS-SEC-05)", () => {
+  it("blocks: Write package.json (root build config — FAILS until WS-SEC-05 fix)", () => {
+    // package.json is the root of all dependency and script configuration.
+    // A subagent silently rewriting it could inject malicious dependencies or
+    // override build scripts. Must be blocked (exit 2) after the fix.
+    // Currently exits 0 (allowed) because "package.json" is not in PROTECTED_PREFIXES.
+    expect(runHook(makeWritePayload("package.json"))).toBe(2);
+  });
+
+  it("blocks: Edit package.json (root build config — FAILS until WS-SEC-05 fix)", () => {
+    // Covers the Edit tool path as well — same guard, same fix required.
+    expect(runHook(makeEditPayload("package.json"))).toBe(2);
+  });
+
+  it("blocks: Write tsconfig.json (TypeScript compiler config — FAILS until WS-SEC-05 fix)", () => {
+    // tsconfig.json controls compilation targets, strict mode, path aliases.
+    // A subagent weakening strictness or aliasing paths is a silent integrity risk.
+    expect(runHook(makeWritePayload("tsconfig.json"))).toBe(2);
+  });
+
+  it("blocks: Edit tsconfig.json (TypeScript compiler config — FAILS until WS-SEC-05 fix)", () => {
+    expect(runHook(makeEditPayload("tsconfig.json"))).toBe(2);
+  });
+
+  it("blocks: Write vitest.config.ts (test runner config — FAILS until WS-SEC-05 fix)", () => {
+    // vitest.config.ts controls coverage thresholds, test include patterns, reporters.
+    // A subagent lowering the coverage gate or excluding test dirs defeats QA enforcement.
+    expect(runHook(makeWritePayload("vitest.config.ts"))).toBe(2);
+  });
+
+  it("blocks: Edit vitest.config.ts (test runner config — FAILS until WS-SEC-05 fix)", () => {
+    expect(runHook(makeEditPayload("vitest.config.ts"))).toBe(2);
+  });
+
+  it("blocks: Write .eslintrc (base ESLint config — FAILS until WS-SEC-05 fix)", () => {
+    // .eslintrc (no extension) is a valid ESLint config format.
+    // Silently disabling lint rules undermines code quality gates.
+    expect(runHook(makeWritePayload(".eslintrc"))).toBe(2);
+  });
+
+  it("blocks: Write .eslintrc.json (ESLint JSON config — FAILS until WS-SEC-05 fix)", () => {
+    // .eslintrc.json is the most common variant in this repo.
+    // Requires a separate PROTECTED_PREFIXES entry (prefix-match on ".eslintrc"
+    // does NOT catch ".eslintrc.json" via startsWith — no trailing slash).
+    expect(runHook(makeWritePayload(".eslintrc.json"))).toBe(2);
+  });
+});
+
+describe("pre-edit-write-guard.sh — boundary: existing src/ protection unaffected by WS-SEC-05", () => {
+  it("blocks: src/some-file.ts (regression — must remain blocked after WS-SEC-05 fix)", () => {
+    // Verifies that adding new entries to PROTECTED_PREFIXES does not accidentally
+    // break the existing "src" prefix protection.
+    expect(runHook(makeWritePayload("src/some-file.ts"))).toBe(2);
+  });
+});
+
+describe("pre-edit-write-guard.sh — golden path: non-config files not false-positived (WS-SEC-05)", () => {
+  it("allows: Write some-output.txt (arbitrary root file, not a build config)", () => {
+    // An unrelated root-level file that shares no prefix with any protected entry
+    // must still exit 0. Confirms the new entries don't over-block.
+    expect(runHook(makeWritePayload("some-output.txt"))).toBe(0);
   });
 });

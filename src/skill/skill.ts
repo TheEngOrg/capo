@@ -41,7 +41,7 @@ export interface SkillOptions {
   revocationOpts: Omit<CheckRevocationOptions, "data">;
   /** Override the auto-generated UUID session identifier passed to runPlan(). */
   sessionId?: string;
-  /** Override the auto-detected WorkstreamTree backend passed to runPlan(). */
+  /** WorkstreamTree backend passed to runPlan(). Defaults to "none" — the CC host governs isolation. */
   backend?: Backend;
 }
 
@@ -109,8 +109,7 @@ export async function invokeSkill(opts: SkillOptions): Promise<SkillResult> {
   // discriminant on SkillResult.
   // -------------------------------------------------------------------------
   const sessionId = opts.sessionId ?? randomUUID();
-  const hasTargetDir = plan.tasks.some((t) => t.type === "AGENT" && t.target_dir !== undefined);
-  const backend: Backend = opts.backend ?? (hasTargetDir ? "sandbox" : "none");
+  const backend: Backend = opts.backend ?? "none";
   const result = await runPlan(plan, opts.adapter, { sessionId, backend });
   return { status: "ok", result };
 }

@@ -234,12 +234,12 @@ describe("marketplace.json — golden: GitHub source object is correct", () => {
     expect(teo?.source?.source).toBe("github");
   });
 
-  it('teo plugin source.repo field equals "TheEngOrg/the-eng-org"', () => {
+  it('teo plugin source.repo field equals "TheEngOrg/capo"', () => {
     const parsed = parseMarketplace() as {
       plugins?: Array<{ name?: string; source?: { source?: string; repo?: string } }>;
     };
     const teo = (parsed.plugins ?? []).find((p) => p.name === "teo");
-    expect(teo?.source?.repo).toBe("TheEngOrg/the-eng-org");
+    expect(teo?.source?.repo).toBe("TheEngOrg/capo");
   });
 
   it('source object has exactly the two expected fields: "source" and "repo"', () => {
@@ -265,11 +265,11 @@ describe("marketplace.json — golden: GitHub source object is correct", () => {
 });
 
 describe("verify-plugin-install.sh — golden: GitHub marketplace registration is present", () => {
-  it('Step 2 contains the GitHub repo form "marketplace add TheEngOrg/the-eng-org"', () => {
-    // The post-swap registration command: claude plugin marketplace add TheEngOrg/the-eng-org
+  it('Step 2 contains the GitHub repo form "marketplace add TheEngOrg/capo"', () => {
+    // The post-swap registration command: claude plugin marketplace add TheEngOrg/capo
     // This is the GitHub-source equivalent of the old "marketplace add ./"
     const script = readVerifyScript();
-    expect(script).toContain("marketplace add TheEngOrg/the-eng-org");
+    expect(script).toContain("marketplace add TheEngOrg/capo");
   });
 
   it('Step 2 update command "marketplace update teo-marketplace" is still present', () => {
@@ -333,6 +333,6 @@ describe("verify-plugin-install.sh — golden: GitHub marketplace registration i
     expect(headerEnd).toBeGreaterThan(-1);
     const header = script.slice(0, headerEnd).toLowerCase();
     // Header must reference the GitHub repo somewhere — either in prose or example
-    expect(header).toContain("theengorg/the-eng-org");
+    expect(header).toContain("theengorg/capo");
   });
 });

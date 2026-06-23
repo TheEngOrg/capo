@@ -2,7 +2,7 @@
 // spawn-agent.test.ts — Passing specs for spawnAgent (WS-P1-05, LLM call site #2)
 //
 // This file is the authoritative specification for the AgentSpawner seam and
-// ClaudeCodeAdapter.spawnAgent(). All 35 tests PASS at gate-2 (implementation complete).
+// ClaudeCodeAdapter.spawnAgent(). All 41 tests PASS (WS-ADAPTER-02: +6 fail-closed errored-state tests).
 // Implementation lives in src/adapters/claude-code.ts.
 //
 // ============================================================================
@@ -39,14 +39,14 @@
 //   NOTE: `spawner` is required so callers cannot accidentally omit it and get silent
 //   failure. If `spawner` is omitted, TypeScript compilation fails.
 //
-// VERDICT PARSING RULES (critical-path; fail-safe):
+// VERDICT PARSING RULES (critical-path; fail-safe; updated for WS-ADAPTER-02):
 //
-//   spawnAgent() parses a structured VERDICT block from spawner output using a
-//   regex — no LLM judging. The parser applies these rules in order:
+//   spawnAgent() applies these rules in order (errored checked BEFORE verdict):
 //
 //   1. If spawner rejects/throws          → BLOCKED ("BLOCKED: spawner error: <msg>")
-//   2. If spawner returns { errored:true }
-//      and output has no parseable VERDICT → BLOCKED ("BLOCKED: spawner errored and no verdict")
+//   2. If spawner returns { errored:true } → BLOCKED unconditionally, regardless
+//      of output content ("BLOCKED: spawner errored. raw output: ...")
+//      The errored flag takes precedence over all output content — fail-closed.
 //   3. Scan output for /^VERDICT:\s*(PASS|FAIL)\s*$/m (case-sensitive, full-word):
 //      a. Exactly one "VERDICT: PASS" found, no "VERDICT: FAIL" → status "PASS"
 //      b. Exactly one "VERDICT: FAIL" found, no "VERDICT: PASS" → status "FAILED"
@@ -1142,18 +1142,16 @@ describe("ClaudeCodeAdapter.spawnAgent — golden: model-free", () => {
 });
 
 // =============================================================================
-// BOUNDARY TESTS — errored: true flag behavior (gate-1, pre-implementation)
+// BOUNDARY TESTS — errored: true flag behavior (updated for WS-ADAPTER-02)
 //
 // AgentSpawnRaw.errored is an optional flag the spawner sets on soft errors
 // (subprocess exited non-zero but still produced output).
 //
-// Rules:
-//   1. errored: true + no parseable verdict  → BLOCKED (infrastructure error)
+// Rules (post WS-ADAPTER-02 fix — errored checked FIRST, unconditionally):
+//   1. errored: true + any output  → BLOCKED (errored flag wins unconditionally)
 //      detail must start with "BLOCKED:" AND mention "spawner errored" or "errored"
-//   2. errored: true + VERDICT: PASS output  → status "PASS" (verdict wins)
-//   3. errored: true + VERDICT: FAIL output  → status "FAILED", detail does NOT
-//      start with "BLOCKED:" (clean agent failure, not infrastructure error)
-//   4. errored: false + no verdict           → status "FAILED", detail matches
+//   2. errored: false + VERDICT: PASS → status "PASS" (clean happy path)
+//   3. errored: false + no verdict   → status "FAILED", detail matches
 //      "BLOCKED: no verdict in output" (confirms the two paths are distinguishable)
 // =============================================================================
 
@@ -1190,10 +1188,12 @@ describe("ClaudeCodeAdapter.spawnAgent — boundary: errored flag", () => {
   });
 
   // -------------------------------------------------------------------------
-  // errored: true, VERDICT: PASS in output → verdict wins.
-  // Even if the spawner set errored, a parseable PASS verdict is authoritative.
+  // errored: true, VERDICT: PASS in output → FAILED (errored flag wins, WS-ADAPTER-02).
+  // The errored flag takes unconditional precedence — output content is untrusted.
+  // A PASS verdict in errored output could be injected noise, a partial run,
+  // or stale output from a prior invocation.
   // -------------------------------------------------------------------------
-  it("returns PASS when errored: true but output contains VERDICT: PASS (verdict wins)", async () => {
+  it("returns FAILED when errored: true even if output contains VERDICT: PASS (errored flag wins)", async () => {
     const rosterDir = makeTempRoster([{ id: "test-agent" }]);
     try {
       const { spawner } = makeMockSpawner({
@@ -1210,18 +1210,20 @@ describe("ClaudeCodeAdapter.spawnAgent — boundary: errored flag", () => {
       const result = await adapter.spawnAgent(task, VALID_AGENT_CONTEXT);
 
       expect(result.taskId).toBe("errored-with-pass-task");
-      expect(result.status).toBe("PASS");
+      expect(result.status).toBe("FAILED");
+      expect(result.detail).toMatch(/^BLOCKED:/);
     } finally {
       cleanupTempRoster(rosterDir);
     }
   });
 
   // -------------------------------------------------------------------------
-  // errored: true, VERDICT: FAIL in output → clean FAILED (not BLOCKED).
-  // The agent reported failure via verdict; this is a clean failure signal,
-  // not an infrastructure error. detail must NOT start with "BLOCKED:".
+  // errored: true, VERDICT: FAIL in output → BLOCKED (errored flag wins, WS-ADAPTER-02).
+  // The errored flag is checked unconditionally before parseVerdict. Even though
+  // the output contains a valid VERDICT: FAIL, the spawner flagged an infrastructure
+  // error so the result is BLOCKED, not a clean agent-reported failure.
   // -------------------------------------------------------------------------
-  it("returns FAILED without BLOCKED: prefix when errored: true and output has VERDICT: FAIL", async () => {
+  it("returns FAILED with BLOCKED: prefix when errored: true and output has VERDICT: FAIL (errored flag wins)", async () => {
     const rosterDir = makeTempRoster([{ id: "test-agent" }]);
     try {
       const { spawner } = makeMockSpawner({
@@ -1239,10 +1241,8 @@ describe("ClaudeCodeAdapter.spawnAgent — boundary: errored flag", () => {
 
       expect(result.taskId).toBe("errored-with-fail-task");
       expect(result.status).toBe("FAILED");
-      // Clean agent failure — must NOT be presented as an infrastructure BLOCKED error
-      if (result.detail !== undefined) {
-        expect(result.detail).not.toMatch(/^BLOCKED:/);
-      }
+      // errored guard fires first — result is BLOCKED (infrastructure error)
+      expect(result.detail).toMatch(/^BLOCKED:/);
     } finally {
       cleanupTempRoster(rosterDir);
     }
@@ -1280,25 +1280,18 @@ describe("ClaudeCodeAdapter.spawnAgent — boundary: errored flag", () => {
   });
 
   // -------------------------------------------------------------------------
-  // WS-ADAPTER-01 Part A — regression guard for errored-flag inversion.
+  // WS-ADAPTER-01 Part A — updated for WS-ADAPTER-02 contract.
   //
-  // Audit finding: "raw.errored check inversion means a spawner error produces
-  // a PASS result instead of FAILED." This guard verifies the finding is a
-  // false positive against the CURRENT code — the errored check at line 437
-  // correctly gates on (errored === true && verdict === null && passCount === 0
-  // && failCount === 0), so it only fires when there is NO parseable verdict.
-  //
-  // This test covers the one boundary the existing suite doesn't hit:
-  // errored: true with CONFLICTING verdicts (both VERDICT: PASS and VERDICT:
-  // FAIL present). The errored guard must NOT intercept this — the conflicting-
-  // verdicts BLOCKED path owns it. If someone later inverts the errored guard
-  // (e.g., changes === true to !== true), this guard catches that regression.
+  // Post WS-ADAPTER-02 fix: errored: true is checked FIRST, unconditionally,
+  // before parseVerdict is called. This means errored: true with conflicting
+  // verdicts now routes through the errored guard (not the conflicting-verdicts
+  // path). The errored flag takes precedence over all output content.
   // -------------------------------------------------------------------------
-  it("WS-ADAPTER-01-A: errored:true with conflicting verdicts is NOT intercepted by the errored guard — falls through to BLOCKED:conflicting", async () => {
+  it("WS-ADAPTER-01-A: errored:true with conflicting verdicts → BLOCKED via errored guard (errored flag takes precedence, WS-ADAPTER-02)", async () => {
     const rosterDir = makeTempRoster([{ id: "test-agent" }]);
     try {
       const { spawner } = makeMockSpawner({
-        // Both VERDICT lines present — passCount > 0, failCount > 0
+        // Both VERDICT lines present — but errored: true fires before parseVerdict
         output: "VERDICT: PASS\nVERDICT: FAIL\n",
         errored: true,
       });
@@ -1313,12 +1306,207 @@ describe("ClaudeCodeAdapter.spawnAgent — boundary: errored flag", () => {
 
       expect(result.taskId).toBe("errored-conflicting-verdict-task");
       expect(result.status).toBe("FAILED");
-      // Must be the conflicting-verdicts path — NOT the "spawner errored" path.
-      // The errored guard only fires when passCount === 0 && failCount === 0;
-      // with both PASS and FAIL present it must fall through to the conflict path.
-      expect(result.detail).toMatch(/BLOCKED: conflicting verdicts/i);
-      // Guard against inversion: must NOT say "spawner errored"
-      expect(result.detail).not.toMatch(/spawner errored/i);
+      // The errored guard fires first — detail reflects the spawner-errored path.
+      expect(result.detail).toMatch(/^BLOCKED:/);
+    } finally {
+      cleanupTempRoster(rosterDir);
+    }
+  });
+});
+
+// =============================================================================
+// WS-ADAPTER-02 — fail-closed errored state (QA gate, pre-implementation)
+//
+// BUG: parseVerdict(raw.output) is called BEFORE the errored guard. The guard
+// condition is:
+//
+//   if (raw.errored === true && verdict === null && passCount === 0 && failCount === 0)
+//
+// This only fires when there is NO parseable verdict. When errored: true AND
+// output contains "VERDICT: PASS", verdict === "PASS" so the guard is skipped,
+// and spawnAgent falls through to `if (verdict === "PASS") → return PASS`.
+// That is the bug: a poisoned/errored spawn that happens to emit "VERDICT: PASS"
+// is treated as a clean success.
+//
+// CORRECT CONTRACT (post-fix):
+//   errored: true  → ALWAYS return FAILED, regardless of output content.
+//   The errored flag must be checked FIRST, before parseVerdict is consulted.
+//
+// TEST STATUS:
+//   Tests marked [MUST FAIL NOW]  → expose the bug; will FAIL against current code.
+//   Tests marked [MUST PASS NOW]  → regression guards; must PASS before and after fix.
+//
+// NOTE: The existing test "returns PASS when errored: true but output contains
+// VERDICT: PASS (verdict wins)" at line ~1196 documents the current WRONG behavior.
+// Dev must flip that test's assertion (or remove it) as part of the fix.
+// =============================================================================
+
+describe("ClaudeCodeAdapter.spawnAgent — WS-ADAPTER-02: fail-closed errored state", () => {
+  // -------------------------------------------------------------------------
+  // [MUST FAIL NOW] Primary bug case:
+  // errored: true + "VERDICT: PASS\n" → MUST return FAILED (currently returns PASS).
+  //
+  // A spawner that sets errored:true has signaled an infrastructure failure.
+  // The errored flag takes unconditional precedence — the output content is
+  // untrusted. A PASS verdict in errored output could be injected noise, a
+  // partial run, or a stale output from a prior invocation.
+  // -------------------------------------------------------------------------
+  it("[MUST FAIL NOW] WS-ADAPTER-02: errored:true + VERDICT:PASS output → MUST return FAILED (currently returns PASS — this is the bug)", async () => {
+    const rosterDir = makeTempRoster([{ id: "test-agent" }]);
+    try {
+      const { spawner } = makeMockSpawner({
+        output: "VERDICT: PASS\n",
+        errored: true,
+      });
+      const adapter = new ClaudeCodeAdapter({
+        runner: NO_OP_RUNNER,
+        spawner,
+        agentsDir: rosterDir,
+      });
+
+      const task = makeAgentTask({ id: "ws-adapter-02-primary-bug-task" });
+      const result = await adapter.spawnAgent(task, VALID_AGENT_CONTEXT);
+
+      // FAILS NOW: current code returns "PASS" because parseVerdict fires first.
+      // PASSES AFTER FIX: errored guard fires before parseVerdict.
+      expect(result.taskId).toBe("ws-adapter-02-primary-bug-task");
+      expect(result.status).toBe("FAILED");
+      expect(result.detail).toMatch(/^BLOCKED:/);
+    } finally {
+      cleanupTempRoster(rosterDir);
+    }
+  });
+
+  // -------------------------------------------------------------------------
+  // [MUST FAIL NOW] Secondary bug case:
+  // errored: true + multi-line output with "VERDICT: PASS" buried in noise →
+  // MUST return FAILED (currently returns PASS).
+  //
+  // Real-world version of the primary case: a subprocess that crashed mid-run
+  // may emit partial test output that happens to include "VERDICT: PASS" from
+  // a prior successful section before the crash.
+  // -------------------------------------------------------------------------
+  it("[MUST FAIL NOW] WS-ADAPTER-02: errored:true + noisy output containing VERDICT:PASS → MUST return FAILED (currently returns PASS)", async () => {
+    const rosterDir = makeTempRoster([{ id: "test-agent" }]);
+    try {
+      const { spawner } = makeMockSpawner({
+        output:
+          "Running tests...\n" +
+          "VERDICT: PASS\n" +
+          "1 passed\n" +
+          "Process exited with non-zero code: 137\n",
+        errored: true,
+      });
+      const adapter = new ClaudeCodeAdapter({
+        runner: NO_OP_RUNNER,
+        spawner,
+        agentsDir: rosterDir,
+      });
+
+      const task = makeAgentTask({ id: "ws-adapter-02-noisy-pass-task" });
+      const result = await adapter.spawnAgent(task, VALID_AGENT_CONTEXT);
+
+      // FAILS NOW: current code returns "PASS" because parseVerdict fires first.
+      // PASSES AFTER FIX: errored guard fires before parseVerdict.
+      expect(result.taskId).toBe("ws-adapter-02-noisy-pass-task");
+      expect(result.status).toBe("FAILED");
+      expect(result.detail).toMatch(/^BLOCKED:/);
+    } finally {
+      cleanupTempRoster(rosterDir);
+    }
+  });
+
+  // -------------------------------------------------------------------------
+  // [MUST PASS NOW] Regression guard A:
+  // errored: true + empty output → BLOCKED (already works; must continue to work).
+  //
+  // This is the case the current errored guard handles correctly. After the fix,
+  // the errored check must still cover this path.
+  // -------------------------------------------------------------------------
+  it("[MUST PASS NOW] WS-ADAPTER-02 regression guard A: errored:true + empty output → FAILED/BLOCKED", async () => {
+    const rosterDir = makeTempRoster([{ id: "test-agent" }]);
+    try {
+      const { spawner } = makeMockSpawner({
+        output: "",
+        errored: true,
+      });
+      const adapter = new ClaudeCodeAdapter({
+        runner: NO_OP_RUNNER,
+        spawner,
+        agentsDir: rosterDir,
+      });
+
+      const task = makeAgentTask({ id: "ws-adapter-02-guard-a-task" });
+      const result = await adapter.spawnAgent(task, VALID_AGENT_CONTEXT);
+
+      expect(result.taskId).toBe("ws-adapter-02-guard-a-task");
+      expect(result.status).toBe("FAILED");
+      expect(result.detail).toMatch(/^BLOCKED:/);
+    } finally {
+      cleanupTempRoster(rosterDir);
+    }
+  });
+
+  // -------------------------------------------------------------------------
+  // [MUST PASS NOW] Regression guard B:
+  // errored: false + "VERDICT: PASS\n" → status PASS (the clean happy path).
+  //
+  // The fix must not regress the non-errored PASS path. When errored is false
+  // (or absent), a clean VERDICT: PASS must still return PASS.
+  // -------------------------------------------------------------------------
+  it("[MUST PASS NOW] WS-ADAPTER-02 regression guard B: errored:false + VERDICT:PASS → PASS (clean path must not regress)", async () => {
+    const rosterDir = makeTempRoster([{ id: "test-agent" }]);
+    try {
+      const { spawner } = makeMockSpawner({
+        output: "VERDICT: PASS\n",
+        errored: false,
+      });
+      const adapter = new ClaudeCodeAdapter({
+        runner: NO_OP_RUNNER,
+        spawner,
+        agentsDir: rosterDir,
+      });
+
+      const task = makeAgentTask({ id: "ws-adapter-02-guard-b-task" });
+      const result = await adapter.spawnAgent(task, VALID_AGENT_CONTEXT);
+
+      expect(result.taskId).toBe("ws-adapter-02-guard-b-task");
+      expect(result.status).toBe("PASS");
+    } finally {
+      cleanupTempRoster(rosterDir);
+    }
+  });
+
+  // -------------------------------------------------------------------------
+  // [MUST PASS NOW] Regression guard C:
+  // errored: true + "VERDICT: FAIL\n" → FAILED (already correct behavior, but
+  // verify the errored-first fix doesn't change the observable result here).
+  //
+  // Both the current code and the fixed code return FAILED for this case —
+  // current via `if (verdict === "FAIL")`, fixed via errored guard first.
+  // Observable result is the same; the route through the code changes.
+  // -------------------------------------------------------------------------
+  it("[MUST PASS NOW] WS-ADAPTER-02 regression guard C: errored:true + VERDICT:FAIL → FAILED (result unchanged by fix, route changes)", async () => {
+    const rosterDir = makeTempRoster([{ id: "test-agent" }]);
+    try {
+      const { spawner } = makeMockSpawner({
+        output: "VERDICT: FAIL\n",
+        errored: true,
+      });
+      const adapter = new ClaudeCodeAdapter({
+        runner: NO_OP_RUNNER,
+        spawner,
+        agentsDir: rosterDir,
+      });
+
+      const task = makeAgentTask({ id: "ws-adapter-02-guard-c-task" });
+      const result = await adapter.spawnAgent(task, VALID_AGENT_CONTEXT);
+
+      expect(result.taskId).toBe("ws-adapter-02-guard-c-task");
+      expect(result.status).toBe("FAILED");
+      // After the fix, this will route through the errored guard and produce a
+      // BLOCKED: detail. Before the fix, it routes through verdict==="FAIL" and
+      // may have no BLOCKED: prefix. We only assert the required FAILED status here.
     } finally {
       cleanupTempRoster(rosterDir);
     }

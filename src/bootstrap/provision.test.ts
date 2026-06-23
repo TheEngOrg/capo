@@ -2020,3 +2020,263 @@ describe("provision() — WS-GO-04 S3: pluginRoot containment check", () => {
     expect(["ok", "already_provisioned"]).toContain(result.status);
   });
 });
+
+// =============================================================================
+// WS-BOOTSTRAP-01: Symlink bypass in pluginRoot containment check
+//
+// BUG: provision.ts S3 containment check (lines ~186-199) uses path.resolve()
+// which does NOT dereference symlinks. A bundleDir that is a symlink pointing
+// OUTSIDE pluginRoot passes path.resolve's startsWith check (because the symlink
+// path itself is inside pluginRoot), but fs.readdirSync/readFileSync follow the
+// symlink to the real target — bypassing containment entirely.
+//
+// FIX NEEDED: replace path.resolve(bundleDir) with fs.realpathSync(bundleDir)
+// (and path.resolve(pluginRoot) with fs.realpathSync(pluginRoot)) so the
+// containment check compares physical paths, not logical symlink paths.
+//
+// TEST ORDERING (adversarial first per ADR-064):
+//   T-SYM-1: MUST FAIL NOW — symlink pointing outside pluginRoot passes the
+//             current path.resolve check but must be caught by the fixed code.
+//   T-SYM-2: MUST PASS NOW — regression guard: real dir inside pluginRoot is
+//             not falsely blocked by the containment check.
+//   T-SYM-3: MUST PASS NOW — regression guard: real dir outside pluginRoot
+//             returns error (already works with path.resolve, must stay working).
+//   T-SYM-4: MUST FAIL NOW — symlink to a real dir still inside pluginRoot
+//             must NOT be blocked (symlinks within the root are legitimate).
+// =============================================================================
+
+describe("provision() — WS-BOOTSTRAP-01: symlink bypass in pluginRoot containment check", () => {
+  it("T-SYM-1 (MUST FAIL NOW): bundleDir is a symlink inside pluginRoot pointing OUTSIDE → error io_error 'containment'", async () => {
+    // Arrange: create a pluginRoot and an outside-target dir, then create a symlink
+    // inside pluginRoot that points to the outside dir.
+    //
+    // Layout:
+    //   pluginRoot/            ← the "trusted" plugin root
+    //   pluginRoot/sym-escape  ← symlink → outsideTarget (OUTSIDE pluginRoot)
+    //   outsideTarget/         ← real directory OUTSIDE pluginRoot
+    //
+    // path.resolve("pluginRoot/sym-escape") = "pluginRoot/sym-escape"
+    //   → startsWith("pluginRoot") PASSES (BUG: containment check is fooled)
+    //
+    // fs.realpathSync("pluginRoot/sym-escape") = "/real/path/outsideTarget"
+    //   → startsWith("pluginRoot") FAILS (correct behaviour after fix)
+    //
+    // This test MUST FAIL against the current code (path.resolve does not follow
+    // symlinks) and MUST PASS after the fix (fs.realpathSync follows symlinks).
+
+    const pluginRoot = fs.mkdtempSync(path.join(os.tmpdir(), "teo-sym1-plugin-"));
+    tempDirs.push(pluginRoot);
+
+    const outsideTarget = fs.mkdtempSync(path.join(os.tmpdir(), "teo-sym1-outside-"));
+    tempDirs.push(outsideTarget);
+
+    // Write a valid agent .md file in the outside target so listAgentIds() finds
+    // something — this ensures the containment check fires before the scan errors out.
+    const agentContent =
+      `---\n` +
+      `agent_id: evil\n` +
+      `name: Evil\n` +
+      `role: Escaped from pluginRoot.\n` +
+      `disallowedTools_default:\n` +
+      `---\n\n` +
+      `# evil\n\nThis should never be read.\n`;
+    fs.writeFileSync(path.join(outsideTarget, "evil.md"), agentContent, "utf8");
+
+    // The symlink lives INSIDE pluginRoot, but points OUTSIDE it.
+    const symlinkPath = path.join(pluginRoot, "sym-escape");
+    fs.symlinkSync(outsideTarget, symlinkPath);
+
+    const homeDir = makeTempHome();
+
+    // Act: use the symlink as bundleDir. The host context triggers the containment check.
+    const result = await provision({
+      homeDir,
+      bundleDir: symlinkPath,
+      host: { kind: "claude-code-plugin", pluginRoot },
+      revocationOpts: {
+        signature: new Uint8Array(64).fill(0x01),
+        publicKey: new Uint8Array(32).fill(0x02),
+        keyId: "sym1-key",
+        revocationList: { revoked_keys: [] },
+      },
+    });
+
+    // EXPECTED AFTER FIX: error with 'containment' in reason.
+    // CURRENT BEHAVIOUR (bug): result.status is NOT 'error' — path.resolve doesn't
+    // dereference the symlink so the startsWith check passes, and provision proceeds
+    // to read the outside directory. This test is RED against the current code.
+    expect(result.status).toBe("error");
+    if (result.status !== "error") throw new Error("narrowing guard");
+    expect(result.kind).toBe("io_error");
+    expect(result.reason).toMatch(/containment/i);
+
+    // Nothing must be written to homeDir — the containment check fires before any writes.
+    expect(fs.existsSync(path.join(homeDir, "ledger"))).toBe(false);
+    expect(fs.existsSync(path.join(homeDir, "keyring"))).toBe(false);
+  });
+
+  it("T-SYM-2 (MUST PASS NOW): real bundleDir inside pluginRoot → NOT blocked by containment check", async () => {
+    // Regression guard: a genuine (non-symlink) bundleDir that lives inside pluginRoot
+    // must continue to pass the containment check after the fix. The fix must not
+    // break the normal plugin path.
+
+    const pluginRoot = fs.mkdtempSync(path.join(os.tmpdir(), "teo-sym2-plugin-"));
+    tempDirs.push(pluginRoot);
+
+    const validBundleDir = path.join(pluginRoot, "agents");
+    fs.mkdirSync(validBundleDir, { recursive: true });
+
+    const agentContent =
+      `---\n` +
+      `agent_id: stub\n` +
+      `name: Stub\n` +
+      `role: Stub role.\n` +
+      `disallowedTools_default:\n` +
+      `---\n\n` +
+      `# stub\n\nBody.\n`;
+    fs.writeFileSync(path.join(validBundleDir, "stub.md"), agentContent, "utf8");
+
+    const homeDir = makeTempHome();
+
+    const result = await provision({
+      homeDir,
+      bundleDir: validBundleDir,
+      host: { kind: "claude-code-plugin", pluginRoot },
+      revocationOpts: {
+        signature: new Uint8Array(64).fill(0x01),
+        publicKey: new Uint8Array(32).fill(0x02),
+        keyId: "sym2-key",
+        revocationList: { revoked_keys: [] },
+      },
+    });
+
+    // Must NOT be blocked — this is the correct, non-symlink path.
+    expect(result.status).not.toBe("error");
+    expect(["ok", "already_provisioned"]).toContain(result.status);
+  });
+
+  it("T-SYM-3 (MUST PASS NOW): real bundleDir that resolves OUTSIDE pluginRoot → error 'containment'", async () => {
+    // Regression guard: a non-symlink bundleDir that uses "../" traversal to escape
+    // pluginRoot must still be caught. This already works with path.resolve — the fix
+    // must not break it.
+
+    const pluginRoot = fs.mkdtempSync(path.join(os.tmpdir(), "teo-sym3-plugin-"));
+    tempDirs.push(pluginRoot);
+
+    const homeDir = makeTempHome();
+
+    // bundleDir uses path component traversal to escape pluginRoot
+    const traversingBundleDir = path.join(pluginRoot, "..", "escaped");
+
+    const result = await provision({
+      homeDir,
+      bundleDir: traversingBundleDir,
+      host: { kind: "claude-code-plugin", pluginRoot },
+      revocationOpts: {
+        signature: new Uint8Array(64).fill(0x01),
+        publicKey: new Uint8Array(32).fill(0x02),
+        keyId: "sym3-key",
+        revocationList: { revoked_keys: [] },
+      },
+    });
+
+    expect(result.status).toBe("error");
+    if (result.status !== "error") throw new Error("narrowing guard");
+    expect(result.kind).toBe("io_error");
+    expect(result.reason).toMatch(/containment/i);
+  });
+
+  it("T-SYM-4 (MUST PASS NOW): bundleDir is a symlink INSIDE pluginRoot pointing to another dir INSIDE pluginRoot → NOT blocked", async () => {
+    // A symlink that stays within pluginRoot is a legitimate configuration.
+    // After the fix uses fs.realpathSync, both the symlink path AND its real target
+    // resolve to paths inside pluginRoot — the check must pass.
+    //
+    // Layout:
+    //   pluginRoot/
+    //   pluginRoot/real-agents/   ← real directory with agent files
+    //   pluginRoot/sym-agents     ← symlink → pluginRoot/real-agents (INSIDE pluginRoot)
+    //
+    // fs.realpathSync("pluginRoot/sym-agents") = "/real/path/pluginRoot/real-agents"
+    //   → startsWith("/real/path/pluginRoot") PASSES (correct)
+    //
+    // This test MUST FAIL against the current code because listAgentIds() will be
+    // called on the symlink path — but since path.resolve already returns a path
+    // inside pluginRoot, the current code actually PASSES this case. So this is a
+    // MUST PASS NOW test to ensure the fix doesn't over-block legitimate internal symlinks.
+    //
+    // Correction: re-assessing adversarial stance — this scenario CURRENTLY passes
+    // (path.resolve keeps it inside pluginRoot). After fix with realpathSync, it should
+    // ALSO pass (real path is still inside pluginRoot). This is a MUST PASS NOW test.
+
+    const pluginRoot = fs.mkdtempSync(path.join(os.tmpdir(), "teo-sym4-plugin-"));
+    tempDirs.push(pluginRoot);
+
+    // Create a real agents dir inside pluginRoot
+    const realAgentsDir = path.join(pluginRoot, "real-agents");
+    fs.mkdirSync(realAgentsDir, { recursive: true });
+
+    const agentContent =
+      `---\n` +
+      `agent_id: internal\n` +
+      `name: Internal\n` +
+      `role: Internal agent.\n` +
+      `disallowedTools_default:\n` +
+      `---\n\n` +
+      `# internal\n\nBody.\n`;
+    fs.writeFileSync(path.join(realAgentsDir, "internal.md"), agentContent, "utf8");
+
+    // Symlink inside pluginRoot pointing to another dir inside pluginRoot
+    const internalSymlink = path.join(pluginRoot, "sym-agents");
+    fs.symlinkSync(realAgentsDir, internalSymlink);
+
+    const homeDir = makeTempHome();
+
+    const result = await provision({
+      homeDir,
+      bundleDir: internalSymlink,
+      host: { kind: "claude-code-plugin", pluginRoot },
+      revocationOpts: {
+        signature: new Uint8Array(64).fill(0x01),
+        publicKey: new Uint8Array(32).fill(0x02),
+        keyId: "sym4-key",
+        revocationList: { revoked_keys: [] },
+      },
+    });
+
+    // Must NOT be blocked — the symlink resolves to a real path still inside pluginRoot.
+    // Both current code (path.resolve) and fixed code (realpathSync) must allow this.
+    expect(result.status).not.toBe("error");
+    expect(["ok", "already_provisioned"]).toContain(result.status);
+  });
+
+  it("T-SYM-5 (MUST PASS NOW): verify path.resolve behavioral gap — path.resolve does NOT dereference symlinks", () => {
+    // This is a pure unit test that demonstrates the behavioral difference between
+    // path.resolve and fs.realpathSync when given a symlink path.
+    // It does NOT call provision() — it is a spec-level proof of the bug.
+    //
+    // EXPECTED:
+    //   path.resolve(symlinkInsideRoot) = symlinkInsideRoot (stays inside root) ← BUG
+    //   fs.realpathSync(symlinkInsideRoot) = outsideTarget (escapes root) ← correct
+    //
+    // This test always PASSES — it documents the invariant the fix must exploit.
+
+    const pluginRoot = fs.mkdtempSync(path.join(os.tmpdir(), "teo-sym5-proof-root-"));
+    tempDirs.push(pluginRoot);
+
+    const outsideTarget = fs.mkdtempSync(path.join(os.tmpdir(), "teo-sym5-proof-outside-"));
+    tempDirs.push(outsideTarget);
+
+    const symlinkPath = path.join(pluginRoot, "sym");
+    fs.symlinkSync(outsideTarget, symlinkPath);
+
+    const resolvedPluginRoot = path.resolve(pluginRoot);
+
+    // path.resolve does NOT follow the symlink — returns the symlink's own path
+    const resolvedViaResolve = path.resolve(symlinkPath);
+    expect(resolvedViaResolve.startsWith(resolvedPluginRoot + path.sep)).toBe(true); // BUG: passes
+
+    // fs.realpathSync DOES follow the symlink — returns the real target path
+    const resolvedViaRealpath = fs.realpathSync(symlinkPath);
+    expect(resolvedViaRealpath.startsWith(resolvedPluginRoot + path.sep)).toBe(false); // correct: caught
+  });
+});

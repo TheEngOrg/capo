@@ -25,6 +25,8 @@ import { HmacSigner } from "../../src/core/sign.js";
 import { provision } from "../../src/bootstrap/provision.js";
 import type { ProvisionOptions } from "../../src/bootstrap/provision.js";
 import type { LedgerEvent } from "../../src/core/ledger.js";
+import * as ed from "@noble/ed25519";
+import { signPluginRoot } from "../../src/bootstrap/install-sig.js";
 
 // ---------------------------------------------------------------------------
 // Binary path for CLI tests
@@ -310,9 +312,13 @@ describe("AC-4: provision() creates correct data-dir structure", () => {
     const bundleDir = makeBundleDir();
     tempDirs.push(bundleDir);
 
-    // Use the plugin context fail-open path: set CLAUDE_PLUGIN_ROOT + pass signature: undefined
-    // This causes checkRevocation() to return { verdict: "PASS", warning: "unsigned-plugin-context" }
-    // without requiring a real ed25519 signature, keeping the acceptance test free from crypto deps.
+    // WS-REVOKE-01: fail-open is gone. We must write a real install-sig so that
+    // checkRevocation()'s Step 0 (install-sig path) passes and provision() can proceed.
+    const privKey = ed.utils.randomSecretKey();
+    const pubKey = await ed.getPublicKeyAsync(privKey);
+    const keyId = "go04-test-key";
+    await signPluginRoot(bundleDir, keyId, privKey);
+
     vi.stubEnv("CLAUDE_PLUGIN_ROOT", bundleDir);
 
     let result: Awaited<ReturnType<typeof provision>>;
@@ -323,10 +329,10 @@ describe("AC-4: provision() creates correct data-dir structure", () => {
         homeDir,
         host: { kind: "claude-code-plugin", pluginRoot: bundleDir },
         revocationOpts: {
-          // signature: undefined triggers plugin fail-open path in checkRevocation
+          // No explicit signature — checkRevocation() auto-verifies via .teo-install-sig
           signature: undefined,
-          publicKey: new Uint8Array(32).fill(0x02),
-          keyId: "go04-test-key",
+          publicKey: pubKey,
+          keyId,
           revocationList: { revoked_keys: [] },
         },
       });
@@ -360,6 +366,7 @@ describe("AC-4: provision() creates correct data-dir structure", () => {
     expect((manifest["bundle_signature_key_id"] as string).length).toBeGreaterThan(0);
 
     // Assert: calling provision() a second time returns already_provisioned
+    // The .teo-install-sig written above is still present in bundleDir; reuse same keys.
     vi.stubEnv("CLAUDE_PLUGIN_ROOT", bundleDir);
     let secondResult: Awaited<ReturnType<typeof provision>>;
     try {
@@ -369,8 +376,8 @@ describe("AC-4: provision() creates correct data-dir structure", () => {
         host: { kind: "claude-code-plugin", pluginRoot: bundleDir },
         revocationOpts: {
           signature: undefined,
-          publicKey: new Uint8Array(32).fill(0x02),
-          keyId: "go04-test-key",
+          publicKey: pubKey,
+          keyId,
           revocationList: { revoked_keys: [] },
         },
       });
@@ -670,76 +677,63 @@ describe("AC-5 CLI binary: bin/teo-run.js acceptance", () => {
     }
   );
 
-  it.skipIf(!binExists)(
-    "provision golden path with plugin context: CLAUDE_PLUGIN_ROOT set → exit 0, status ok or already_provisioned",
-    () => {
-      const bundleDir = makeBundleDir();
-      tempDirs.push(bundleDir);
-      const homeDir = makeTempDir("teo-go04-cli-prov-");
+  // SKIPPED (WS-REVOKE-01): The compiled binary predates WS-REVOKE-01 and still has the old
+  // fail-open path. These CLI provision tests rely on unsigned plugin context producing PASS.
+  // After the binary is rebuilt with WS-REVOKE-01 source, restore and add signPluginRoot() setup.
+  it.skip("provision golden path with plugin context: CLAUDE_PLUGIN_ROOT set → exit 0, status ok or already_provisioned", () => {
+    const bundleDir = makeBundleDir();
+    tempDirs.push(bundleDir);
+    const homeDir = makeTempDir("teo-go04-cli-prov-");
 
-      // Use fail-open path: CLAUDE_PLUGIN_ROOT + no signature → unsigned-plugin-context PASS
-      // This mirrors the pattern used by T18 in teo-run.test.ts.
-      const provisionOpts = JSON.stringify({
-        bundleDir,
-        homeDir,
-        revocationOpts: {
-          // No signature field — triggers plugin fail-open in checkRevocation()
-          keyId: "cli-go04-key",
-          revocationList: { revoked_keys: [] },
-        },
-      });
+    // Requires real install-sig after WS-REVOKE-01: signPluginRoot(bundleDir, keyId, privKey)
+    // must be called and the matching publicKey passed before this test is meaningful.
+    const provisionOpts = JSON.stringify({
+      bundleDir,
+      homeDir,
+      revocationOpts: {
+        keyId: "cli-go04-key",
+        revocationList: { revoked_keys: [] },
+      },
+    });
 
-      const { exitCode, stdout } = runCli("provision", provisionOpts, {
-        CLAUDE_PLUGIN_ROOT: bundleDir, // triggers fail-open revocation path
-      });
+    const { exitCode, stdout } = runCli("provision", provisionOpts, {
+      CLAUDE_PLUGIN_ROOT: bundleDir,
+    });
 
-      expect(exitCode).toBe(0);
-      expect(stdout).toMatchObject({
-        status: expect.stringMatching(/^(ok|already_provisioned)$/),
-      });
-    }
-  );
+    expect(exitCode).toBe(0);
+    expect(stdout).toMatchObject({
+      status: expect.stringMatching(/^(ok|already_provisioned)$/),
+    });
+  });
 
-  it.skipIf(!binExists)(
-    "provision with plugin context (unsigned): stdout is clean JSON, stderr contains 'unsigned-plugin-context' (S8 follow-on)",
-    () => {
-      // S8 follow-on: handleProvision() must write result.warning to stderr.
-      // The "unsigned-plugin-context" warning is emitted by checkRevocation() when
-      // CLAUDE_PLUGIN_ROOT is set + no signature is provided (fail-open plugin path).
-      // provision() propagates this as result.warning, and handleProvision() must
-      // write it to process.stderr.
-      //
-      // This test will FAIL today because:
-      //   handleProvision() in teo-run-entry.ts does not yet write result.warning to stderr.
-      const bundleDir = makeBundleDir();
-      tempDirs.push(bundleDir);
-      const homeDir = makeTempDir("teo-go04-cli-s8-");
+  // SKIPPED (WS-REVOKE-01): The old "unsigned-plugin-context" warning no longer exists —
+  // unsigned plugin context is now BLOCKED, not a warned PASS. The S8 follow-on behavior
+  // (warning → stderr) is superseded. Skip until a new CLI test covering REVOKE-01
+  // behavior (signed install-sig → ok) is written for the rebuilt binary.
+  it.skip("provision with plugin context (unsigned): stdout is clean JSON, stderr contains 'unsigned-plugin-context' (S8 follow-on)", () => {
+    // This test is obsolete: WS-REVOKE-01 removed the fail-open "unsigned-plugin-context"
+    // path. Unsigned plugin context now produces BLOCKED + status:error, not a warning.
+    const bundleDir = makeBundleDir();
+    tempDirs.push(bundleDir);
+    const homeDir = makeTempDir("teo-go04-cli-s8-");
 
-      // Use fail-open path: no signature → "unsigned-plugin-context" warning from checkRevocation
-      const provisionOpts = JSON.stringify({
-        bundleDir,
-        homeDir,
-        revocationOpts: {
-          // No signature — triggers "unsigned-plugin-context" warning in plugin context
-          keyId: "cli-go04-s8-key",
-          revocationList: { revoked_keys: [] },
-        },
-      });
+    const provisionOpts = JSON.stringify({
+      bundleDir,
+      homeDir,
+      revocationOpts: {
+        keyId: "cli-go04-s8-key",
+        revocationList: { revoked_keys: [] },
+      },
+    });
 
-      const { exitCode, stdoutRaw, stderr } = runCli("provision", provisionOpts, {
-        CLAUDE_PLUGIN_ROOT: bundleDir,
-      });
+    const { exitCode, stdoutRaw, stderr } = runCli("provision", provisionOpts, {
+      CLAUDE_PLUGIN_ROOT: bundleDir,
+    });
 
-      // stdout must be clean JSON
-      expect(() => JSON.parse(stdoutRaw.trim())).not.toThrow();
-
-      // Exit 0 for ok/already_provisioned
-      expect(exitCode).toBe(0);
-
-      // This assertion will FAIL today — S8 follow-on not yet implemented in handleProvision()
-      expect(stderr).toContain("unsigned-plugin-context");
-    }
-  );
+    expect(() => JSON.parse(stdoutRaw.trim())).not.toThrow();
+    expect(exitCode).toBe(0);
+    expect(stderr).toContain("unsigned-plugin-context");
+  });
 
   it.skipIf(!binExists)(
     "sign golden path: valid payload → { signature: 64-char hex }, exit 0",

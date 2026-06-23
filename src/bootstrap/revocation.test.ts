@@ -1041,18 +1041,19 @@ describe("checkRevocation — security invariant: BLOCKED always has non-empty r
 });
 
 // ---------------------------------------------------------------------------
-// WS-GO-02: Plugin-context fail-open path for checkRevocation()
+// WS-REVOKE-01: Plugin-context fail-closed path for checkRevocation()
 //
-// When CLAUDE_PLUGIN_ROOT env var is set, a missing signature should return
-// { verdict: "PASS", warning: "unsigned-plugin-context" } instead of BLOCKED.
-// The standalone path (no CLAUDE_PLUGIN_ROOT) remains fail-safe BLOCKED.
+// UPDATED (WS-REVOKE-01): The old WS-GO-02 fail-open path (returning PASS with
+// warning for unsigned plugin bundles) has been removed. Plugin context is now
+// FAIL-CLOSED — an absent signature in plugin context MUST return BLOCKED, just
+// like the non-plugin path. There is no "unsigned-plugin-context" escape hatch.
 //
-// T5: CLAUDE_PLUGIN_ROOT set + signature absent → PASS with warning
-// T6: CLAUDE_PLUGIN_ROOT unset + signature absent → BLOCKED (regression guard)
-// T7: CLAUDE_PLUGIN_ROOT set + valid 64-byte signature present → Ed25519 path runs (not short-circuited to PASS)
+// T5: CLAUDE_PLUGIN_ROOT set + signature absent → BLOCKED (updated: was PASS, now BLOCKED)
+// T6: CLAUDE_PLUGIN_ROOT unset + signature absent → BLOCKED (unchanged)
+// T7: CLAUDE_PLUGIN_ROOT set + valid 64-byte signature present → Ed25519 path runs → PASS
 // ---------------------------------------------------------------------------
 
-describe("checkRevocation — WS-GO-02: plugin-context fail-open (CLAUDE_PLUGIN_ROOT env var)", () => {
+describe("checkRevocation — WS-REVOKE-01: plugin-context fail-closed (CLAUDE_PLUGIN_ROOT env var)", () => {
   let kp: EphemeralKeyPair;
   const data = new Uint8Array([0x01, 0x02, 0x03]);
 
@@ -1073,11 +1074,11 @@ describe("checkRevocation — WS-GO-02: plugin-context fail-open (CLAUDE_PLUGIN_
   });
 
   // T5 (misuse — plugin context): signature absent in plugin context →
-  // { verdict: "PASS", warning: "unsigned-plugin-context" }
-  // This is the fail-open path introduced by WS-GO-02 for plugin packaging.
-  // An unsigned plugin bundle does not block — but it MUST carry a warning.
-  it("T5. CLAUDE_PLUGIN_ROOT set + signature undefined → { verdict: 'PASS', warning: 'unsigned-plugin-context' }", async () => {
-    requireImpl("T5: plugin context fail-open");
+  // BLOCKED (WS-REVOKE-01 fix: plugin context is no longer a bypass).
+  // The old WS-GO-02 fail-open path that returned { verdict: "PASS", warning:
+  // "unsigned-plugin-context" } has been removed. An unsigned plugin MUST block.
+  it("T5. CLAUDE_PLUGIN_ROOT set + signature undefined → BLOCKED (WS-REVOKE-01: fail-open removed, now fail-closed)", async () => {
+    requireImpl("T5: plugin context fail-closed");
     process.env["CLAUDE_PLUGIN_ROOT"] = "/fake/plugin/root";
 
     const result = (await (
@@ -1090,10 +1091,12 @@ describe("checkRevocation — WS-GO-02: plugin-context fail-open (CLAUDE_PLUGIN_
       revocationList: { revoked_keys: [] },
     })) as RevocationResult;
 
-    // In plugin context, missing sig must PASS (not BLOCKED) — fail-open
-    expect(result.verdict).toBe("PASS");
-    // Must carry a warning so callers know this is unsigned
-    expect(result.warning).toBe("unsigned-plugin-context");
+    // Plugin context is no longer a bypass — missing sig MUST be BLOCKED.
+    expect(result.verdict).toBe("BLOCKED");
+    // Must carry a diagnosable reason, not the old warning
+    expect(result.reason).toBeTruthy();
+    // The unsigned-plugin-context escape hatch is gone
+    expect(result.warning).toBeUndefined();
   });
 
   // T6 (misuse — standalone regression guard): signature absent outside plugin context →
@@ -1188,5 +1191,453 @@ describe("checkRevocation — zero network calls", () => {
     // All our fetchers are injected stubs that never use fetch.
     // If this fails, a test is accidentally hitting the network.
     expect(getNetworkCallCount()).toBe(0);
+  });
+});
+
+// =============================================================================
+// WS-REVOKE-01: Post-install signature verification — fail-closed plugin context
+//
+// STATUS: FAILING (tests written before implementation — this is the QA gate)
+//
+// BUG BEING FIXED:
+//   When CLAUDE_PLUGIN_ROOT is set AND signature is undefined/null, the current
+//   code at revocation.ts lines ~108-110 returns { verdict: "PASS", warning:
+//   "unsigned-plugin-context" } — bypassing all crypto verification.
+//
+//   This is a security vulnerability: any unsigned payload can load in plugin
+//   context with no verification whatsoever.
+//
+// DECIDED FIX (Option B — Post-install signatures):
+//   At plugin install time, sign the plugin root path (or bundle content).
+//   On load, checkRevocation() verifies that signature.
+//   FAIL-CLOSED if signature is absent OR mismatches in a plugin context.
+//   There is no longer any "unsigned-plugin-context" PASS escape hatch.
+//
+// CONFLICT WITH EXISTING TESTS:
+//   Existing test T5 (line ~1079) asserts the OLD broken behavior:
+//     expect(result.verdict).toBe("PASS")  // fail-open — this was wrong
+//   After dev implements the fix, T5 MUST be updated to:
+//     expect(result.verdict).toBe("BLOCKED")
+//   Dev is responsible for updating T5. Staff review must verify T5 was updated,
+//   not silently deleted.
+//
+// TEST ORDER: misuse → boundary → golden path
+// =============================================================================
+
+describe("checkRevocation — WS-REVOKE-01: plugin context MUST be fail-closed (FAILING AGAINST CURRENT CODE)", () => {
+  let kp: EphemeralKeyPair;
+  const data = new Uint8Array([0x01, 0x02, 0x03]);
+
+  let savedPluginRoot: string | undefined;
+
+  beforeEach(() => {
+    kp = generateEphemeralKeyPair();
+    savedPluginRoot = process.env["CLAUDE_PLUGIN_ROOT"];
+  });
+
+  afterEach(() => {
+    if (savedPluginRoot === undefined) {
+      delete process.env["CLAUDE_PLUGIN_ROOT"];
+    } else {
+      process.env["CLAUDE_PLUGIN_ROOT"] = savedPluginRoot;
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // MISUSE: signature absent in plugin context → BLOCKED (fails now, returns PASS)
+  //
+  // These are the primary bug-exposure tests. They MUST fail against current code
+  // (current code returns PASS). They MUST pass after dev implements Option B.
+  // ---------------------------------------------------------------------------
+
+  it("REVOKE-01-M1. CLAUDE_PLUGIN_ROOT set + signature undefined → BLOCKED (currently returns PASS — BUG)", async () => {
+    requireImpl("REVOKE-01-M1: plugin context + undefined sig → BLOCKED");
+    process.env["CLAUDE_PLUGIN_ROOT"] = "/fake/plugin/root";
+
+    const result = await (
+      checkRevocation as (opts: CheckRevocationOptions) => Promise<RevocationResult>
+    )({
+      data,
+      signature: undefined,
+      publicKey: kp.publicKeyBytes,
+      keyId: "test-key-id",
+      revocationList: { revoked_keys: [] },
+    });
+
+    // MUST be BLOCKED — plugin context is NOT a bypass. An unsigned plugin is
+    // not a trusted plugin. Currently returns PASS (the bug).
+    expect(result.verdict).toBe("BLOCKED");
+    // Must carry a diagnosable reason — never a silent failure
+    expect(typeof result.reason).toBe("string");
+    expect((result.reason as string).trim().length).toBeGreaterThan(0);
+    // Must NOT carry the old unsigned-plugin-context warning (that escape hatch is gone)
+    expect((result as RevocationResult).warning).toBeUndefined();
+  });
+
+  it("REVOKE-01-M2. CLAUDE_PLUGIN_ROOT set + signature null → BLOCKED (currently returns PASS — BUG)", async () => {
+    requireImpl("REVOKE-01-M2: plugin context + null sig → BLOCKED");
+    process.env["CLAUDE_PLUGIN_ROOT"] = "/fake/plugin/root";
+
+    const result = await (
+      checkRevocation as (opts: CheckRevocationOptions) => Promise<RevocationResult>
+    )({
+      data,
+      signature: null,
+      publicKey: kp.publicKeyBytes,
+      keyId: "test-key-id",
+      revocationList: { revoked_keys: [] },
+    });
+
+    // MUST be BLOCKED — null signature is as dangerous as undefined.
+    // Currently returns PASS (the bug).
+    expect(result.verdict).toBe("BLOCKED");
+    expect(typeof result.reason).toBe("string");
+    expect((result.reason as string).trim().length).toBeGreaterThan(0);
+    expect((result as RevocationResult).warning).toBeUndefined();
+  });
+
+  it("REVOKE-01-M3. CLAUDE_PLUGIN_ROOT set + empty string plugin root + signature undefined → BLOCKED", async () => {
+    requireImpl("REVOKE-01-M3: empty-string plugin root + undefined sig → BLOCKED");
+    // Empty string is NOT a valid CLAUDE_PLUGIN_ROOT — the current isPluginContext
+    // check already guards this (length > 0). This test confirms empty string does
+    // NOT trigger the plugin-context path and falls through to normal BLOCKED.
+    process.env["CLAUDE_PLUGIN_ROOT"] = "";
+
+    const result = await (
+      checkRevocation as (opts: CheckRevocationOptions) => Promise<RevocationResult>
+    )({
+      data,
+      signature: undefined,
+      publicKey: kp.publicKeyBytes,
+      keyId: "test-key-id",
+      revocationList: { revoked_keys: [] },
+    });
+
+    // Empty-string CLAUDE_PLUGIN_ROOT must NOT trigger any plugin-context path.
+    // Both current and post-fix code should return BLOCKED here.
+    // (This test should pass now AND after the fix — it is a regression guard.)
+    expect(result.verdict).toBe("BLOCKED");
+    expect(result.reason).toBeTruthy();
+  });
+
+  // ---------------------------------------------------------------------------
+  // MISUSE: invalid sig in plugin context → BLOCKED
+  //
+  // This should already work (current code only bypasses when sig IS absent).
+  // Included as an explicit regression guard to confirm the crypto path is not
+  // accidentally removed when dev strips the fail-open block.
+  // ---------------------------------------------------------------------------
+
+  it("REVOKE-01-M4. CLAUDE_PLUGIN_ROOT set + 64-byte garbage signature → BLOCKED (regression guard, should pass now)", async () => {
+    requireImpl("REVOKE-01-M4: plugin context + garbage sig → BLOCKED");
+    process.env["CLAUDE_PLUGIN_ROOT"] = "/fake/plugin/root";
+
+    const garbageSig = crypto.randomBytes(64);
+
+    const result = await (
+      checkRevocation as (opts: CheckRevocationOptions) => Promise<RevocationResult>
+    )({
+      data,
+      signature: garbageSig,
+      publicKey: kp.publicKeyBytes,
+      keyId: "test-key-id",
+      revocationList: { revoked_keys: [] },
+    });
+
+    // Bad sig in plugin context was never bypassed — should BLOCK now and after fix.
+    expect(result.verdict).toBe("BLOCKED");
+    expect(result.reason).toBeTruthy();
+  });
+
+  it("REVOKE-01-M5. CLAUDE_PLUGIN_ROOT set + sig for WRONG keypair → BLOCKED (regression guard, should pass now)", async () => {
+    requireImpl("REVOKE-01-M5: plugin context + wrong-key sig → BLOCKED");
+    process.env["CLAUDE_PLUGIN_ROOT"] = "/fake/plugin/root";
+
+    const otherKp = generateEphemeralKeyPair();
+    const sigFromOtherKey = signData(data, otherKp.privateKeyObject);
+
+    const result = await (
+      checkRevocation as (opts: CheckRevocationOptions) => Promise<RevocationResult>
+    )({
+      data,
+      signature: sigFromOtherKey,
+      publicKey: kp.publicKeyBytes, // mismatch: sig is from otherKp
+      keyId: "test-key-id",
+      revocationList: { revoked_keys: [] },
+    });
+
+    expect(result.verdict).toBe("BLOCKED");
+    expect(result.reason).toBeTruthy();
+  });
+
+  // ---------------------------------------------------------------------------
+  // REGRESSION GUARD: non-plugin context (CLAUDE_PLUGIN_ROOT unset) behavior
+  // must not be affected by the fix.
+  //
+  // These should pass now AND after the fix. If they break, the fix is too broad.
+  // ---------------------------------------------------------------------------
+
+  it("REVOKE-01-R1. CLAUDE_PLUGIN_ROOT unset + signature undefined → BLOCKED (regression guard, non-plugin path unchanged)", async () => {
+    requireImpl("REVOKE-01-R1: no plugin context + undefined sig → BLOCKED");
+    delete process.env["CLAUDE_PLUGIN_ROOT"];
+
+    const result = await (
+      checkRevocation as (opts: CheckRevocationOptions) => Promise<RevocationResult>
+    )({
+      data,
+      signature: undefined,
+      publicKey: kp.publicKeyBytes,
+      keyId: "test-key-id",
+      revocationList: { revoked_keys: [] },
+    });
+
+    // Non-plugin path was already BLOCKED — must stay BLOCKED after fix.
+    expect(result.verdict).toBe("BLOCKED");
+    expect(result.reason).toBeTruthy();
+    // No warning of any kind on non-plugin path
+    expect((result as RevocationResult).warning).toBeUndefined();
+  });
+
+  it("REVOKE-01-R2. CLAUDE_PLUGIN_ROOT unset + valid signature → PASS (regression guard, golden path unchanged)", async () => {
+    requireImpl("REVOKE-01-R2: no plugin context + valid sig → PASS");
+    delete process.env["CLAUDE_PLUGIN_ROOT"];
+
+    const sig = signData(data, kp.privateKeyObject);
+
+    const result = await (
+      checkRevocation as (opts: CheckRevocationOptions) => Promise<RevocationResult>
+    )({
+      data,
+      signature: sig,
+      publicKey: kp.publicKeyBytes,
+      keyId: "test-key-id",
+      revocationList: { revoked_keys: [] },
+    });
+
+    // Non-plugin context + valid sig must still PASS after the fix.
+    expect(result.verdict).toBe("PASS");
+  });
+
+  // ---------------------------------------------------------------------------
+  // GOLDEN PATH: valid signature in plugin context → PASS
+  //
+  // After Option B is implemented, a validly-signed plugin must still load.
+  // The signing payload is the plugin root path at install time.
+  // The exact mechanism (where the sig lives, what key signs it, what the
+  // signed payload is) is NOT YET DESIGNED — see acceptance criteria below.
+  //
+  // REVOKE-01-G1 is a concrete test using the existing checkRevocation() interface
+  // (data = pluginRoot path bytes, sig = ed25519 over those bytes).
+  // This describes the post-fix contract even if the install-time signing
+  // infrastructure doesn't exist yet.
+  // ---------------------------------------------------------------------------
+
+  it("REVOKE-01-G1. CLAUDE_PLUGIN_ROOT set + valid signature over plugin-root-path bytes → PASS (regression guard, should pass now)", async () => {
+    requireImpl("REVOKE-01-G1: plugin context + valid sig → PASS");
+    const pluginRoot = "/fake/plugin/root";
+    process.env["CLAUDE_PLUGIN_ROOT"] = pluginRoot;
+
+    // Option B: the signed payload is the plugin root path as UTF-8 bytes.
+    // At install time, the installer signs this path. On load, checkRevocation()
+    // verifies the sig over the same path bytes.
+    const pluginRootBytes = new Uint8Array(Buffer.from(pluginRoot, "utf8"));
+    const sig = signData(pluginRootBytes, kp.privateKeyObject);
+
+    const result = await (
+      checkRevocation as (opts: CheckRevocationOptions) => Promise<RevocationResult>
+    )({
+      data: pluginRootBytes, // signed payload = plugin root path
+      signature: sig,
+      publicKey: kp.publicKeyBytes,
+      keyId: "install-signing-key-v1",
+      revocationList: { revoked_keys: [] },
+    });
+
+    // A validly signed plugin in plugin context must PASS (not be blocked).
+    // No warning — this is properly signed.
+    expect(result.verdict).toBe("PASS");
+    expect((result as RevocationResult).warning).toBeUndefined();
+  });
+
+  it("REVOKE-01-G2. CLAUDE_PLUGIN_ROOT set + valid signature over plugin-root-path bytes + key revoked → BLOCKED", async () => {
+    requireImpl("REVOKE-01-G2: plugin context + valid sig + revoked key → BLOCKED");
+    const pluginRoot = "/fake/plugin/root";
+    process.env["CLAUDE_PLUGIN_ROOT"] = pluginRoot;
+
+    const pluginRootBytes = new Uint8Array(Buffer.from(pluginRoot, "utf8"));
+    const sig = signData(pluginRootBytes, kp.privateKeyObject);
+
+    const result = await (
+      checkRevocation as (opts: CheckRevocationOptions) => Promise<RevocationResult>
+    )({
+      data: pluginRootBytes,
+      signature: sig,
+      publicKey: kp.publicKeyBytes,
+      keyId: "compromised-install-key",
+      // The install signing key has been revoked — block even in plugin context
+      revocationList: {
+        revoked_keys: [
+          { key_id: "compromised-install-key", reason: "install key leaked 2026-06-23" },
+        ],
+      },
+    });
+
+    // Revocation takes precedence over sig validity, even in plugin context.
+    expect(result.verdict).toBe("BLOCKED");
+    expect(result.reason).toBeTruthy();
+  });
+
+  // ---------------------------------------------------------------------------
+  // PENDING: install-time signing infrastructure (Option B — not yet designed)
+  //
+  // These todo tests document the acceptance criteria for the install-time
+  // signing mechanism that Option B requires. Dev must design the mechanism
+  // before these can be written as executable tests.
+  // ---------------------------------------------------------------------------
+
+  it.todo(
+    "REVOKE-01-TODO-1. Install-time signer: plugin install generates ed25519 keypair and signs plugin root path"
+    // Acceptance criteria:
+    //   - A one-time ed25519 keypair is generated at install time
+    //   - The plugin root path is signed with the private key
+    //   - The signature is stored in a known location (design decision: where?)
+    //     Options: manifest.json, .teo/install-sig, CLAUDE_PLUGIN_ROOT/.teo-sig
+    //   - The public key + key_id are embedded in the plugin bundle or fetched
+    //     from a well-known URL
+    //   - Private key is NEVER stored (ephemeral, used once at install)
+  );
+
+  it.todo(
+    "REVOKE-01-TODO-2. checkRevocation() in plugin context reads install-time sig from known location"
+    // Acceptance criteria:
+    //   - When CLAUDE_PLUGIN_ROOT is set, checkRevocation() (or its caller in provision.ts)
+    //     automatically reads the install-time signature from the known location
+    //   - If the sig file is absent → BLOCKED (not PASS)
+    //   - If the sig file is present but malformed → BLOCKED
+    //   - The signed payload is deterministic: e.g. canonicalized plugin root path bytes
+    //   - The public key used to verify is pinned (not provided by the attacker)
+  );
+
+  it.todo(
+    "REVOKE-01-TODO-3. Sig file tamper: install sig replaced with different sig → BLOCKED"
+    // Acceptance criteria:
+    //   - If the sig file is overwritten with a sig for a different path → BLOCKED
+    //   - If the sig file is overwritten with a sig from a different keypair → BLOCKED
+    //   - Plugin root path must be re-verified on every provision() call (not cached)
+  );
+
+  it.todo(
+    "REVOKE-01-TODO-4. Sig file permissions: sig file readable only by install user"
+    // Acceptance criteria:
+    //   - Sig file is created with mode 0o600 at install time
+    //   - provision() fails gracefully (BLOCKED) if sig file is unreadable (EACCES)
+  );
+});
+
+// =============================================================================
+// WS-REVOKE-01: SECURITY INVARIANTS — plugin context
+//
+// Cross-cutting: the plugin-context changes must not loosen any existing
+// security invariant. All BLOCKED paths must still carry non-empty reasons.
+// =============================================================================
+
+describe("checkRevocation — WS-REVOKE-01: security invariants hold in plugin context after fix", () => {
+  let kp: EphemeralKeyPair;
+  const data = new Uint8Array([0x12, 0x34, 0x56]);
+
+  let savedPluginRoot: string | undefined;
+
+  beforeEach(() => {
+    kp = generateEphemeralKeyPair();
+    savedPluginRoot = process.env["CLAUDE_PLUGIN_ROOT"];
+    process.env["CLAUDE_PLUGIN_ROOT"] = "/fake/plugin/root";
+  });
+
+  afterEach(() => {
+    if (savedPluginRoot === undefined) {
+      delete process.env["CLAUDE_PLUGIN_ROOT"];
+    } else {
+      process.env["CLAUDE_PLUGIN_ROOT"] = savedPluginRoot;
+    }
+  });
+
+  it("REVOKE-01-SI1. plugin context + undefined sig → BLOCKED has non-empty reason (currently FAILS — returns PASS with no reason)", async () => {
+    requireImpl("REVOKE-01-SI1: plugin context + undefined sig → BLOCKED with reason");
+
+    const result = await (
+      checkRevocation as (opts: CheckRevocationOptions) => Promise<RevocationResult>
+    )({
+      data,
+      signature: undefined,
+      publicKey: kp.publicKeyBytes,
+      keyId: "key",
+      revocationList: { revoked_keys: [] },
+    });
+
+    // Security invariant: every BLOCKED result must have a non-empty diagnosable reason.
+    // Current code returns PASS (the bug) — after fix, must return BLOCKED with reason.
+    expect(result.verdict).toBe("BLOCKED");
+    expect(typeof result.reason).toBe("string");
+    expect((result.reason as string).trim().length).toBeGreaterThan(0);
+  });
+
+  it("REVOKE-01-SI2. plugin context + null sig → BLOCKED has non-empty reason (currently FAILS — returns PASS with no reason)", async () => {
+    requireImpl("REVOKE-01-SI2: plugin context + null sig → BLOCKED with reason");
+
+    const result = await (
+      checkRevocation as (opts: CheckRevocationOptions) => Promise<RevocationResult>
+    )({
+      data,
+      signature: null,
+      publicKey: kp.publicKeyBytes,
+      keyId: "key",
+      revocationList: { revoked_keys: [] },
+    });
+
+    expect(result.verdict).toBe("BLOCKED");
+    expect(typeof result.reason).toBe("string");
+    expect((result.reason as string).trim().length).toBeGreaterThan(0);
+  });
+
+  it("REVOKE-01-SI3. plugin context + fetch failure → BLOCKED with reason (regression guard, should pass now)", async () => {
+    requireImpl("REVOKE-01-SI3: plugin context + fetch failure → BLOCKED with reason");
+
+    const sig = signData(data, kp.privateKeyObject);
+
+    const result = await (
+      checkRevocation as (opts: CheckRevocationOptions) => Promise<RevocationResult>
+    )({
+      data,
+      signature: sig,
+      publicKey: kp.publicKeyBytes,
+      keyId: "key",
+      revocationListFetcher: failingFetcher("ECONNREFUSED in plugin context"),
+    });
+
+    expect(result.verdict).toBe("BLOCKED");
+    expect(typeof result.reason).toBe("string");
+    expect((result.reason as string).trim().length).toBeGreaterThan(0);
+  });
+
+  it("REVOKE-01-SI4. plugin context + revoked key → BLOCKED with reason (regression guard, should pass now)", async () => {
+    requireImpl("REVOKE-01-SI4: plugin context + revoked key → BLOCKED with reason");
+
+    const sig = signData(data, kp.privateKeyObject);
+
+    const result = await (
+      checkRevocation as (opts: CheckRevocationOptions) => Promise<RevocationResult>
+    )({
+      data,
+      signature: sig,
+      publicKey: kp.publicKeyBytes,
+      keyId: "revoked-plugin-key",
+      revocationList: {
+        revoked_keys: [{ key_id: "revoked-plugin-key", reason: "compromised at install" }],
+      },
+    });
+
+    expect(result.verdict).toBe("BLOCKED");
+    expect(typeof result.reason).toBe("string");
+    expect((result.reason as string).trim().length).toBeGreaterThan(0);
   });
 });

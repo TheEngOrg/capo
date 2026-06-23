@@ -1,5 +1,5 @@
 // =============================================================================
-// revocation.ts — ed25519 bootstrap revocation check (WS-P1-02)
+// revocation.ts — ed25519 bootstrap revocation check (WS-P1-02, WS-REVOKE-01)
 //
 // CONTRACT:
 //   checkRevocation(opts: CheckRevocationOptions): Promise<RevocationResult>
@@ -8,12 +8,19 @@
 // ed25519 signature over the exact data bytes, with the signing key absent from
 // a successfully resolved revocation list, produces PASS.
 //
+// PLUGIN CONTEXT (WS-REVOKE-01): When CLAUDE_PLUGIN_ROOT is set and `signature`
+// is absent, checkRevocation() attempts to auto-verify via the install-time
+// signature file ($CLAUDE_PLUGIN_ROOT/.teo-install-sig). If the file is absent,
+// unreadable, or the sig is invalid → BLOCKED. There is NO fail-open escape
+// hatch for unsigned plugins; the old WS-GO-02 bypass has been removed.
+//
 // DEPENDENCY: @noble/ed25519 for signature verification.
 // Inputs are normalized via Buffer.from() before passing to @noble so that
 // both Uint8Array and Buffer callers work identically.
 // =============================================================================
 
 import * as ed from "@noble/ed25519";
+import { readInstallSig, verifyInstallSig } from "./install-sig.js";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -76,6 +83,63 @@ function isRevocationList(value: unknown): value is RevocationList {
 }
 
 // ---------------------------------------------------------------------------
+// checkRevocationListOnly — resolve list + check keyId (no sig verification)
+//
+// Used by the install-sig path: the signature has already been verified by
+// verifyInstallSig(). This function handles only the revocation list steps.
+// ---------------------------------------------------------------------------
+
+async function checkRevocationListOnly(
+  keyId: string,
+  revocationList: RevocationList | undefined,
+  revocationListFetcher: (() => Promise<unknown>) | undefined
+): Promise<RevocationResult> {
+  /* c8 ignore next 6 */
+  if (revocationList === undefined && revocationListFetcher === undefined) {
+    return blocked(
+      "No revocation list source provided. " +
+        "Provide either revocationList or revocationListFetcher to verify the key."
+    );
+  }
+
+  let resolvedList: RevocationList;
+
+  if (revocationList !== undefined) {
+    resolvedList = revocationList;
+  } else {
+    let fetched: unknown;
+    try {
+      fetched = await revocationListFetcher!();
+    } catch (err) {
+      /* c8 ignore next */
+      const message = err instanceof Error ? err.message : String(err);
+      return blocked(`Revocation list fetch failed: ${message}`);
+    }
+
+    if (!isRevocationList(fetched)) {
+      const fetchedType = typeof fetched;
+      const fetchedDesc =
+        fetchedType === "object" && fetched !== null
+          ? `object with keys: [${Object.keys(fetched as Record<string, unknown>).join(", ")}]`
+          : String(fetched);
+      return blocked(
+        `Revocation list has invalid shape: expected { revoked_keys: Array }, got ${fetchedDesc}.`
+      );
+    }
+
+    resolvedList = fetched;
+  }
+
+  const revokedEntry = resolvedList.revoked_keys.find((entry) => entry.key_id === keyId);
+  if (revokedEntry !== undefined) {
+    const detail = revokedEntry.reason ? `: ${revokedEntry.reason}` : "";
+    return blocked(`Key "${keyId}" has been revoked${detail}.`);
+  }
+
+  return { verdict: "PASS" };
+}
+
+// ---------------------------------------------------------------------------
 // checkRevocation
 // ---------------------------------------------------------------------------
 
@@ -95,18 +159,41 @@ export async function checkRevocation(opts: CheckRevocationOptions): Promise<Rev
   const { data, signature, publicKey, keyId, revocationList, revocationListFetcher } = opts;
 
   // -------------------------------------------------------------------------
-  // WS-GO-02: Plugin-context fail-open path.
-  // When CLAUDE_PLUGIN_ROOT is set and non-empty, a missing signature returns
-  // PASS with a warning instead of BLOCKED. A present signature (even in plugin
-  // context) runs through the normal Ed25519 verify path below.
+  // Step 0 — Plugin-context install-sig path (WS-REVOKE-01).
+  //
+  // When CLAUDE_PLUGIN_ROOT is set and no explicit signature is provided,
+  // attempt to auto-verify via the install-time sig file
+  // ($CLAUDE_PLUGIN_ROOT/.teo-install-sig). This lets the load path verify
+  // a plugin without the caller constructing the sig/data explicitly.
+  //
+  // FAIL-CLOSED: if the file is absent, unreadable, or sig is invalid → BLOCKED.
+  // There is no "unsigned-plugin-context" escape hatch.
+  //
+  // When an explicit signature IS provided (even in plugin context), skip this
+  // path and fall through to Step 1 (normal Ed25519 verify path).
   // -------------------------------------------------------------------------
 
-  const isPluginContext =
-    typeof process.env["CLAUDE_PLUGIN_ROOT"] === "string" &&
-    process.env["CLAUDE_PLUGIN_ROOT"].length > 0;
+  const pluginRoot = process.env["CLAUDE_PLUGIN_ROOT"];
+  const isPluginContext = typeof pluginRoot === "string" && pluginRoot.length > 0;
 
   if ((signature === undefined || signature === null) && isPluginContext) {
-    return { verdict: "PASS", warning: "unsigned-plugin-context" };
+    // Try to read the install-time sig file.
+    const readResult = readInstallSig(pluginRoot);
+    if (!readResult.ok) {
+      return blocked(readResult.reason);
+    }
+
+    // Verify the install sig over the canonicalized plugin root path.
+    const verifyResult = await verifyInstallSig(pluginRoot, readResult.file, publicKey);
+    if (!verifyResult.ok) {
+      return blocked(verifyResult.reason);
+    }
+
+    // Install sig is valid — use the key_id from the sig file for revocation check.
+    // Continue to Step 2 (revocation list resolution) and Step 3 (revocation check)
+    // using the install sig's key_id. Skip Steps 1 and 4 (handled above).
+    const installKeyId = readResult.file.key_id;
+    return checkRevocationListOnly(installKeyId, revocationList, revocationListFetcher);
   }
 
   // -------------------------------------------------------------------------

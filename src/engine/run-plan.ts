@@ -22,6 +22,8 @@ import { validatePlan } from "../core/validate.js";
 import { AppendOnlyLedger } from "../core/ledger.js";
 import type { LedgerVerdict } from "../core/ledger.js";
 import { HmacSigner } from "../core/sign.js";
+import * as evaluateGateModule from "./evaluate-gate.js";
+import { computeContentHash } from "./content-hash.js";
 
 export interface RunPlanOptions {
   stepTimeoutMs?: number;
@@ -91,6 +93,17 @@ export async function runPlan(
     // Signed run path: append to ledger and sign the verdict.
     if (ledger !== undefined && signer !== undefined) {
       try {
+        // Evaluate gate inline (signed path only).
+        // Gate can override adapter PASS → FAIL; never promotes FAILED → PASS.
+        // Wrapped in the same try/catch as the ledger so gate errors are swallowed.
+        const gateVerdict = await evaluateGateModule.evaluateGate(task, stepResult, runContext);
+        if (gateVerdict === "FAIL" && stepResult.status !== "FAILED") {
+          stepResult = {
+            ...stepResult,
+            status: "FAILED",
+            detail: `gate override: gate returned FAIL; original adapter status: ${stepResult.status}${stepResult.detail ? "; " + stepResult.detail : ""}`,
+          };
+        }
         // Map StepResult.status to LedgerVerdict
         const verdictMap: Record<StepResult["status"], LedgerVerdict> = {
           PASS: "PASS",
@@ -101,6 +114,10 @@ export async function runPlan(
 
         const actorId = task.type === "AGENT" ? task.agent_id : "SYSTEM";
         const actorType = task.type === "AGENT" ? ("AGENT" as const) : ("SCRIPT" as const);
+
+        // Compute content hash for target_dir (if present on task).
+        const target_dir = (task as TEOTask & { target_dir?: string }).target_dir;
+        const content_hash = target_dir !== undefined ? await computeContentHash(target_dir) : null;
 
         const { seq, ts } = ledger.append({
           session_id: opts!.sessionId!,
@@ -121,6 +138,7 @@ export async function runPlan(
           verdict: mappedVerdict,
           ts,
           seq,
+          content_hash,
         });
 
         stepResult.signature = signature;

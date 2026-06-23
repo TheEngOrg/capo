@@ -753,6 +753,188 @@ describe("runPlan — TORN ledger on abort (WS-ARCH-01)", () => {
   });
 });
 
+// =============================================================================
+// WS-SEC-01 — evaluateGate() inline verification on signed path (passing, post-impl, CAD gate 2)
+// =============================================================================
+
+describe("runPlan — evaluateGate() inline verification (WS-SEC-01)", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "teo-sec01-gate-"));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  const makeSignedOpts = (sessionId: string): RunPlanOptions => ({
+    sessionId,
+    ledgerBaseDir: tmpDir,
+  });
+
+  // SEC01-U1: unsigned path — evaluateGate() is NOT called
+  it("SEC01-U1: unsigned path (no sessionId) — PASS result stays PASS, gate is NOT invoked", async () => {
+    // On the unsigned path, evaluateGate() must never be called.
+    // A PASS result from the adapter must remain PASS.
+    // Regression guard: adding gate wiring must not change unsigned-path behavior.
+    const task = makeAgentTask("sec01-u1-task");
+    const plan = makePlan([task]);
+    const adapter = makeMockAdapter();
+    // adapter returns PASS by default
+
+    const result = await runPlan(plan, adapter, { ledgerBaseDir: tmpDir }); // no sessionId
+
+    expect(result.steps).toHaveLength(1);
+    expect(result.steps[0]!.status).toBe("PASS");
+    expect(result.overallStatus).toBe("PASS");
+    // signingStatus confirms unsigned path
+    expect(result.steps[0]!.signingStatus).toBe("unsigned_by_design");
+  });
+
+  // SEC01-U2: unsigned path — FAILED stays FAILED
+  it("SEC01-U2: unsigned path (no sessionId) — FAILED result stays FAILED, gate is NOT invoked", async () => {
+    const task = makeAgentTask("sec01-u2-task");
+    const plan = makePlan([task]);
+    const adapter = makeMockAdapter();
+    adapter.spawnAgent.mockResolvedValueOnce({
+      taskId: "sec01-u2-task",
+      status: "FAILED" as const,
+      detail: "forced adapter failure",
+    });
+
+    const result = await runPlan(plan, adapter, { ledgerBaseDir: tmpDir }); // no sessionId
+
+    expect(result.steps[0]!.status).toBe("FAILED");
+    expect(result.steps[0]!.detail).toBe("forced adapter failure");
+    expect(result.overallStatus).toBe("FAILED");
+  });
+
+  // SEC01-S1: signed path, adapter PASS, gate PASS → result stays PASS
+  it("SEC01-S1: signed path — adapter PASS + gate PASS → step status is PASS", async () => {
+    // Happy path: adapter and gate agree. No override needed.
+    const sessionId = "sec01-s1-agree-pass";
+    const task = makeAgentTask("sec01-s1-task");
+    const plan = makePlan([task]);
+    const adapter = makeMockAdapter();
+    // adapter returns PASS by default; gate stub maps PASS → "PASS"
+
+    const result = await runPlan(plan, adapter, makeSignedOpts(sessionId));
+
+    expect(result.steps).toHaveLength(1);
+    expect(result.steps[0]!.status).toBe("PASS");
+    expect(result.overallStatus).toBe("PASS");
+  });
+
+  // SEC01-S2: signed path, adapter FAILED, gate FAIL → result stays FAILED
+  it("SEC01-S2: signed path — adapter FAILED + gate FAIL → step status is FAILED", async () => {
+    // Both agree on failure. No override needed. Trust the failure.
+    const sessionId = "sec01-s2-agree-fail";
+    const task = makeAgentTask("sec01-s2-task");
+    const plan = makePlan([task]);
+    const adapter = makeMockAdapter();
+    adapter.spawnAgent.mockResolvedValueOnce({
+      taskId: "sec01-s2-task",
+      status: "FAILED" as const,
+      detail: "adapter reports failure",
+    });
+
+    const result = await runPlan(plan, adapter, makeSignedOpts(sessionId));
+
+    expect(result.steps[0]!.status).toBe("FAILED");
+    expect(result.overallStatus).toBe("FAILED");
+  });
+
+  // SEC01-S3 (KEY TEST): signed path, adapter PASS but gate FAIL → override to FAILED
+  it("SEC01-S3: signed path — adapter PASS but gate FAIL → step overridden to FAILED with 'gate override' detail", async () => {
+    // This is the critical security test. When the gate disagrees with a PASS
+    // self-report, the gate's FAIL verdict wins. The step must be FAILED and
+    // the ledger must reflect the override.
+    //
+    // Implementation note: to force the gate to return FAIL for a PASS adapter
+    // result, dev can expose a gate injection hook (e.g. evaluateGate mock) or
+    // make target_dir point to a non-existent path so the content hash fails
+    // some invariant. For now this test requires that the gate injection seam
+    // is mockable — or that evaluateGate is importable and vi.mock()-able.
+    //
+    // This test FAILS until:
+    //   1. evaluateGate() is wired into run-plan.ts executor on the signed path
+    //   2. The gate-override logic rewrites status + detail when gate disagrees
+    //
+    // The test uses vi.mock to stub evaluateGate so we can control its return
+    // without needing a real gate implementation.
+    const sessionId = "sec01-s3-gate-override";
+    const task = makeAgentTask("sec01-s3-task");
+    const plan = makePlan([task]);
+    const adapter = makeMockAdapter();
+    // adapter returns PASS
+    // gate is mocked to return FAIL via module mock below
+
+    // Import evaluate-gate module and mock it at the module level.
+    // The mock is set up before runPlan is called so the executor picks it up.
+    const evaluateGateModule = await import("./evaluate-gate.js");
+    const gateSpy = vi
+      .spyOn(evaluateGateModule, "evaluateGate")
+      .mockResolvedValueOnce("FAIL" as import("./evaluate-gate.js").GateVerdict);
+
+    try {
+      const result = await runPlan(plan, adapter, makeSignedOpts(sessionId));
+
+      expect(result.steps).toHaveLength(1);
+      // Gate override: adapter said PASS but gate said FAIL → must be FAILED
+      expect(result.steps[0]!.status).toBe("FAILED");
+      // Detail must mention gate override so operators can distinguish from genuine failures
+      expect(result.steps[0]!.detail).toMatch(/gate override/i);
+      expect(result.overallStatus).toBe("FAILED");
+
+      // Ledger must also record FAIL (not PASS) — gate override propagates to ledger
+      const filePath = path.join(tmpDir, "ledger", `${sessionId}.jsonl`);
+      const lines = readLedgerLines(filePath);
+      const executeEvent = lines.find(
+        (l) => l.phase === "EXECUTE" && l.task_id === "sec01-s3-task"
+      );
+      expect(executeEvent).toBeDefined();
+      expect(executeEvent?.verdict).toBe("FAIL");
+    } finally {
+      gateSpy.mockRestore();
+    }
+  });
+
+  // SEC01-S4: signed path, adapter FAILED, gate PASS → result stays FAILED (conservative)
+  it("SEC01-S4: signed path — adapter FAILED + gate PASS → step stays FAILED (trust failure, never override to PASS)", async () => {
+    // Conservative rule: when the gate says PASS but the adapter says FAILED,
+    // do NOT override. A self-reporting adapter that says it failed is trustworthy
+    // in that direction — the gate cannot rehabilitate a failure.
+    const sessionId = "sec01-s4-conservative";
+    const task = makeAgentTask("sec01-s4-task");
+    const plan = makePlan([task]);
+    const adapter = makeMockAdapter();
+    adapter.spawnAgent.mockResolvedValueOnce({
+      taskId: "sec01-s4-task",
+      status: "FAILED" as const,
+      detail: "adapter says it failed",
+    });
+
+    // Gate is mocked to say PASS — but run-plan.ts must NOT promote a FAILED result
+    const evaluateGateModule = await import("./evaluate-gate.js");
+    const gateSpy = vi
+      .spyOn(evaluateGateModule, "evaluateGate")
+      .mockResolvedValueOnce("PASS" as import("./evaluate-gate.js").GateVerdict);
+
+    try {
+      const result = await runPlan(plan, adapter, makeSignedOpts(sessionId));
+
+      expect(result.steps[0]!.status).toBe("FAILED");
+      // Original adapter detail must be preserved — no "gate override" here
+      expect(result.steps[0]!.detail).toBe("adapter says it failed");
+      expect(result.steps[0]!.detail).not.toMatch(/gate override/i);
+      expect(result.overallStatus).toBe("FAILED");
+    } finally {
+      gateSpy.mockRestore();
+    }
+  });
+});
+
 // ---------------------------------------------------------------------------
 // WS-GO-01 — Group 4: error isolation
 // ---------------------------------------------------------------------------

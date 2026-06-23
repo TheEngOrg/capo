@@ -7,8 +7,9 @@
 // CONTRACT (read this before changing anything):
 //
 //   1. CANONICAL PAYLOAD FORMAT
-//      Signed string: plan_id|task_id|actor_id|verdict|ts|seq
-//      Fields are pipe-delimited in exactly that order.
+//      Signed string: plan_id|task_id|actor_id|verdict|ts|seq|content_hash
+//      Seven fields, pipe-delimited in exactly that order (WS-SEC-01 added
+//      content_hash as the 7th field — SHA-256 of target_dir tree, or "" for null).
 //
 //      Null task_id — some events are plan-scoped (no task). null serializes
 //      as the empty string "". This is explicit and deterministic:
@@ -95,11 +96,11 @@ export class SignKeyError extends Error {
 }
 
 // ---------------------------------------------------------------------------
-// SignPayload — the six fields that form the canonical signed string
+// SignPayload — the seven fields that form the canonical signed string
 // ---------------------------------------------------------------------------
 
 /**
- * The six fields signed by HmacSigner.
+ * The seven fields signed by HmacSigner (WS-SEC-01 added content_hash as 7th).
  *
  * These align with LedgerEvent fields so callers can pass ledger events
  * directly (after extracting the relevant fields).
@@ -110,6 +111,8 @@ export class SignKeyError extends Error {
  * - verdict: the gate verdict (aligns with LedgerVerdict — null for non-gate events)
  * - ts: ISO-8601 UTC timestamp (from the ledger event; assigned by the ledger)
  * - seq: monotonically increasing sequence number (from the ledger; starts at 1)
+ * - content_hash: SHA-256 hex of the full target_dir tree, or null if no target_dir
+ *   (→ "" in payload; optional field — absent callers get "" serialization)
  */
 export interface SignPayload {
   plan_id: string;
@@ -118,6 +121,8 @@ export interface SignPayload {
   verdict: LedgerVerdict;
   ts: string;
   seq: number;
+  /** SHA-256 hex of the full target_dir tree, or null if no target_dir. */
+  content_hash?: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -201,13 +206,13 @@ export class HmacSigner {
    * Sign a payload using HMAC-SHA-256.
    *
    * Builds the canonical length-prefixed pipe-delimited string:
-   *   <len(plan_id)>:<plan_id>|<len(task_id_str)>:<task_id_str>|<len(actor_id)>:<actor_id>|<len(verdict_str)>:<verdict_str>|<len(ts)>:<ts>|<len(seq_str)>:<seq_str>
+   *   <len(plan_id)>:<plan_id>|<len(task_id_str)>:<task_id_str>|<len(actor_id)>:<actor_id>|<len(verdict_str)>:<verdict_str>|<len(ts)>:<ts>|<len(seq_str)>:<seq_str>|<len(content_hash_str)>:<content_hash_str>
    *
-   * where null task_id → "" and null verdict → "".
+   * where null task_id → "", null verdict → "", null/absent content_hash → "".
    *
    * Returns 64 lowercase hex characters.
    *
-   * @param payload - The six fields to sign.
+   * @param payload - The seven fields to sign.
    * @returns Hex-encoded HMAC-SHA-256 (64 chars).
    */
   sign(payload: SignPayload): string {
@@ -263,6 +268,7 @@ export class HmacSigner {
     const task_id_str = payload.task_id ?? "";
     const verdict_str = payload.verdict ?? "";
     const seq_str = String(payload.seq);
+    const content_hash_str = payload.content_hash ?? "";
 
     const fields = [
       payload.plan_id,
@@ -271,6 +277,7 @@ export class HmacSigner {
       verdict_str,
       payload.ts,
       seq_str,
+      content_hash_str,
     ];
 
     return fields.map((f) => `${f.length}:${f}`).join("|");

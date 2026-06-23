@@ -606,7 +606,7 @@ describe("HmacSigner — boundary: canonical payload format", () => {
     expect(withNull).not.toBe(withValue);
   });
 
-  it("canonical string contains all six fields in order: plan_id|task_id|actor_id|verdict|ts|seq", () => {
+  it("canonical string contains all seven fields in order: plan_id|task_id|actor_id|verdict|ts|seq|content_hash", () => {
     const payload: SignPayload = {
       plan_id: "p",
       task_id: "t",
@@ -616,13 +616,187 @@ describe("HmacSigner — boundary: canonical payload format", () => {
       seq: 7,
     };
     const canonical = HmacSigner.buildCanonical(payload);
-    // With length-prefix: "1:p|1:t|1:a|4:PASS|24:2026-01-01T00:00:00.000Z|1:7"
-    expect(canonical).toBe("1:p|1:t|1:a|4:PASS|24:2026-01-01T00:00:00.000Z|1:7");
+    // With length-prefix (7 fields; content_hash absent → "" → "0:")
+    // "1:p|1:t|1:a|4:PASS|24:2026-01-01T00:00:00.000Z|1:7|0:"
+    expect(canonical).toBe("1:p|1:t|1:a|4:PASS|24:2026-01-01T00:00:00.000Z|1:7|0:");
   });
 
   it("seq is serialized as its decimal string representation", () => {
     const canonical = HmacSigner.buildCanonical(makePayload({ seq: 42 }));
     expect(canonical).toContain("2:42");
+  });
+});
+
+// =============================================================================
+// WS-SEC-01 — content_hash in SignPayload (passing, post-impl, CAD gate 2)
+// =============================================================================
+
+describe("HmacSigner — content_hash in SignPayload (WS-SEC-01)", () => {
+  let tempDir: string;
+  let signer: HmacSigner;
+
+  beforeEach(() => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "teo-sign-sec01-"));
+    signer = new HmacSigner({ baseDir: tempDir });
+  });
+
+  afterEach(() => {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  // SEC01-SH1: content_hash: null — backward-compatible sign + verify
+  it("SEC01-SH1: content_hash: null → sign and verify work correctly (backward-compatible)", () => {
+    // Tasks without a target_dir produce content_hash: null.
+    // Existing callers that omit content_hash or pass null must still verify.
+    const payload: SignPayload = {
+      plan_id: "plan-no-dir",
+      task_id: "task-no-dir",
+      actor_id: "eng",
+      verdict: "PASS",
+      ts: "2026-06-23T00:00:00.000Z",
+      seq: 1,
+      content_hash: null,
+    };
+
+    const sig = signer.sign(payload);
+
+    // Must produce a valid 64-hex-char signature
+    expect(sig).toMatch(/^[0-9a-f]{64}$/);
+    // Round-trip: verify must return true
+    expect(signer.verify(payload, sig)).toBe(true);
+  });
+
+  // SEC01-SH2: content_hash with a real hash value — sign + verify
+  it("SEC01-SH2: content_hash: '<64-hex-string>' → sign and verify work correctly", () => {
+    const contentHash = "a".repeat(64); // 64-char hex string (deterministic test value)
+    const payload: SignPayload = {
+      plan_id: "plan-with-dir",
+      task_id: "task-with-dir",
+      actor_id: "eng",
+      verdict: "PASS",
+      ts: "2026-06-23T00:00:00.000Z",
+      seq: 2,
+      content_hash: contentHash,
+    };
+
+    const sig = signer.sign(payload);
+
+    expect(sig).toMatch(/^[0-9a-f]{64}$/);
+    expect(signer.verify(payload, sig)).toBe(true);
+  });
+
+  // SEC01-SH3: null vs real hash → DIFFERENT signatures (hash protects integrity)
+  it("SEC01-SH3: same payload with content_hash: null vs content_hash: '<hash>' → DIFFERENT signatures", () => {
+    // If content_hash is excluded from the canonical string, an attacker could
+    // substitute a different directory hash without invalidating the signature.
+    // This test proves the hash is integrity-protecting.
+    const baseFields = {
+      plan_id: "plan-diff-hash",
+      task_id: "task-diff-hash",
+      actor_id: "eng",
+      verdict: "PASS" as const,
+      ts: "2026-06-23T00:00:00.000Z",
+      seq: 3,
+    };
+
+    const payloadNull: SignPayload = { ...baseFields, content_hash: null };
+    const payloadWithHash: SignPayload = {
+      ...baseFields,
+      content_hash: "b".repeat(64),
+    };
+
+    const sigNull = signer.sign(payloadNull);
+    const sigWithHash = signer.sign(payloadWithHash);
+
+    expect(sigNull).not.toBe(sigWithHash);
+  });
+
+  // SEC01-SH4: two different hash values → different signatures
+  it("SEC01-SH4: two different content_hash values → different signatures", () => {
+    const baseFields = {
+      plan_id: "plan-two-hashes",
+      task_id: "task-two-hashes",
+      actor_id: "eng",
+      verdict: "PASS" as const,
+      ts: "2026-06-23T00:00:00.000Z",
+      seq: 4,
+    };
+
+    const payload1: SignPayload = { ...baseFields, content_hash: "a".repeat(64) };
+    const payload2: SignPayload = { ...baseFields, content_hash: "b".repeat(64) };
+
+    expect(signer.sign(payload1)).not.toBe(signer.sign(payload2));
+  });
+
+  // SEC01-SH5: pipe-injection in content_hash → canonical string still unambiguous
+  it("SEC01-SH5: content_hash containing '|' → different canonical strings from boundary-shifted variant", () => {
+    // Length-prefix defense must apply to content_hash too.
+    // {content_hash: "a|b", task_id: "c"} must differ from {content_hash: "a", task_id: "b|c"}
+    // (illustrative — task_id and content_hash in different positions, same principle applies).
+    const payloadPipe: SignPayload = {
+      plan_id: "plan-pipe",
+      task_id: "task-pipe",
+      actor_id: "eng",
+      verdict: "PASS" as const,
+      ts: "2026-06-23T00:00:00.000Z",
+      seq: 5,
+      content_hash: "a|b",
+    };
+    const payloadNoPipe: SignPayload = {
+      plan_id: "plan-pipe",
+      task_id: "task-pipe",
+      actor_id: "eng",
+      verdict: "PASS" as const,
+      ts: "2026-06-23T00:00:00.000Z",
+      seq: 5,
+      content_hash: "a",
+    };
+
+    const c1 = HmacSigner.buildCanonical(payloadPipe);
+    const c2 = HmacSigner.buildCanonical(payloadNoPipe);
+
+    // Different lengths of content_hash → different canonical strings
+    expect(c1).not.toBe(c2);
+    expect(signer.sign(payloadPipe)).not.toBe(signer.sign(payloadNoPipe));
+  });
+
+  // SEC01-SH6: null content_hash serializes as "0:" in canonical string
+  it("SEC01-SH6: content_hash: null serializes as '0:' in canonical string (empty string sentinel)", () => {
+    const payload: SignPayload = {
+      plan_id: "p",
+      task_id: "t",
+      actor_id: "a",
+      verdict: "PASS" as const,
+      ts: "2026-06-23T00:00:00.000Z",
+      seq: 1,
+      content_hash: null,
+    };
+
+    const canonical = HmacSigner.buildCanonical(payload);
+
+    // content_hash: null → "" → length-prefixed as "0:"
+    // The canonical string must contain "0:" for the content_hash field
+    expect(canonical).toContain("|0:");
+  });
+
+  // SEC01-SH7: tampering with content_hash post-signing → verify returns false
+  it("SEC01-SH7: changing content_hash post-signing → verify returns false (tamper-evident)", () => {
+    const original: SignPayload = {
+      plan_id: "plan-tamper",
+      task_id: "task-tamper",
+      actor_id: "eng",
+      verdict: "PASS" as const,
+      ts: "2026-06-23T00:00:00.000Z",
+      seq: 6,
+      content_hash: "c".repeat(64),
+    };
+
+    const sig = signer.sign(original);
+
+    // Attacker substitutes a different content_hash
+    const tampered: SignPayload = { ...original, content_hash: "d".repeat(64) };
+
+    expect(signer.verify(tampered, sig)).toBe(false);
   });
 });
 

@@ -18,7 +18,7 @@
 // DEPENDENCY: @noble/ed25519 for signing and verification.
 // =============================================================================
 
-import * as ed from "@noble/ed25519";
+import * as ed from "../lib/ed25519.js";
 import * as fs from "node:fs";
 import * as path from "node:path";
 

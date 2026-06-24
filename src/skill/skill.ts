@@ -23,7 +23,6 @@ import type { RunResult } from "../core/runner.js";
 import type { ProvisionErrorKind } from "../bootstrap/provision.js";
 import type { Plan } from "../core/plan.js";
 import type { CheckRevocationOptions } from "../bootstrap/revocation.js";
-import type { Backend } from "../core/workstream-tree.js";
 import { provision } from "../bootstrap/provision.js";
 import { runPlan } from "../engine/run-plan.js";
 
@@ -41,8 +40,6 @@ export interface SkillOptions {
   revocationOpts: Omit<CheckRevocationOptions, "data">;
   /** Override the auto-generated UUID session identifier passed to runPlan(). */
   sessionId?: string;
-  /** WorkstreamTree backend passed to runPlan(). Defaults to "none" — the CC host governs isolation. */
-  backend?: Backend;
 }
 
 export type SkillResult =
@@ -109,7 +106,6 @@ export async function invokeSkill(opts: SkillOptions): Promise<SkillResult> {
   // discriminant on SkillResult.
   // -------------------------------------------------------------------------
   const sessionId = opts.sessionId ?? randomUUID();
-  const backend: Backend = opts.backend ?? "none";
-  const result = await runPlan(plan, opts.adapter, { sessionId, backend });
+  const result = await runPlan(plan, opts.adapter, { sessionId });
   return { status: "ok", result };
 }

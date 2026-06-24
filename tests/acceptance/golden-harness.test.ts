@@ -1,9 +1,8 @@
 // =============================================================================
 // golden-harness.test.ts — WS-CORE-09 Phase 0 completion gate
 //
-// 12 SCRIPT-only demo scenarios exercising the full deterministic pipeline:
+// 11 SCRIPT-only demo scenarios exercising the full deterministic pipeline:
 //   validatePlan → TopologicalRunner → evaluateGate → AppendOnlyLedger → HmacSigner
-//   + WorkstreamTree (none backend, temp baseDir)
 //
 // ZERO live-model calls. Network is blocked globally (see vitest.config.ts setupFiles).
 // All demos complete in seconds and are fully deterministic.
@@ -11,7 +10,7 @@
 // Golden comparison: GOLDEN_UPDATE=1 regenerates; normal runs diff against committed files.
 // =============================================================================
 
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect } from "vitest";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -24,7 +23,6 @@ import { evaluateGate } from "../../src/core/gate.js";
 import { ScriptMechanism } from "../../src/core/verification.js";
 import { AppendOnlyLedger, type LedgerEvent } from "../../src/core/ledger.js";
 import { HmacSigner, type SignPayload } from "../../src/core/sign.js";
-import { WorkstreamTree } from "../../src/core/workstream-tree.js";
 
 import { getNetworkCallCount } from "./support/no-network.js";
 import { normalizeEvent, isValidHmacHex, type NormalizedDemoResult } from "./support/normalize.js";
@@ -43,7 +41,6 @@ import {
   DEMO_09_CYCLE_REJECTION,
   DEMO_10_PQ_WARNING,
   DEMO_11_PQ03_CAPO_REJECTION,
-  DEMO_12_WORKTREE_NONE,
 } from "./fixtures/plans.js";
 
 // ---------------------------------------------------------------------------
@@ -576,119 +573,11 @@ describe("Demo 11 — PQ-03 capo-as-executor → VALIDATION_REJECTED", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Demo 12: WorkstreamTree none-backend isolation
-// ---------------------------------------------------------------------------
-
-describe("Demo 12 — WorkstreamTree none-backend isolation", () => {
-  let tmpDir: string;
-
-  beforeAll(() => {
-    tmpDir = path.join(os.tmpdir(), `teo-demo12-${crypto.randomUUID()}`);
-    fs.mkdirSync(tmpDir, { recursive: true });
-  });
-
-  afterAll(() => {
-    if (fs.existsSync(tmpDir)) {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
-    }
-  });
-
-  it("none backend lockfile is in temp dir, never in project dir or real ~/.teo", async () => {
-    const projectDir = path.join(tmpDir, "project");
-    fs.mkdirSync(projectDir, { recursive: true });
-
-    const tree = new WorkstreamTree({
-      projectId: "demo-12-project",
-      projectDir,
-      baseDir: tmpDir,
-    });
-
-    const handle = await tree.allocate("demo-12-ws", "none");
-
-    // cwd for none backend IS the projectDir
-    expect(handle.backend).toBe("none");
-    expect(handle.cwd).toBe(projectDir);
-
-    // Lockfile MUST be inside tmpDir, NOT in the project dir or real ~/.teo
-    const lockfilePath = path.join(tmpDir, ".teo", "locks", "demo-12-project", "demo-12-ws.lock");
-    expect(fs.existsSync(lockfilePath)).toBe(true);
-
-    // Verify the lockfile is NOT in the real ~/.teo
-    const realTeoLock = path.join(
-      os.homedir(),
-      ".teo",
-      "locks",
-      "demo-12-project",
-      "demo-12-ws.lock"
-    );
-    expect(fs.existsSync(realTeoLock)).toBe(false);
-
-    // Verify NOT in the project dir
-    const projectLock = path.join(projectDir, "demo-12-ws.lock");
-    expect(fs.existsSync(projectLock)).toBe(false);
-
-    // Registry is in tmpDir
-    const registryPath = path.join(
-      tmpDir,
-      ".teo",
-      "worktrees",
-      "demo-12-project",
-      "registry.jsonl"
-    );
-    expect(fs.existsSync(registryPath)).toBe(true);
-
-    // Close the worktree — lockfile should be removed
-    await tree.close("demo-12-ws");
-    expect(fs.existsSync(lockfilePath)).toBe(false);
-
-    // list() returns both created and closed records
-    const records = await tree.list("demo-12-project");
-    expect(records.some((r) => r.event === "created" && r.wsId === "demo-12-ws")).toBe(true);
-    expect(records.some((r) => r.event === "closed" && r.wsId === "demo-12-ws")).toBe(true);
-
-    // Run the full pipeline through the plan to get events
-    const result = await runDemo({
-      scenarioId: "demo-12-worktree-none",
-      plan: DEMO_12_WORKTREE_NONE,
-      commandStubs: { "ws-task-a": 0, "ws-task-b": 0 },
-    });
-
-    expect(result.overallStatus).toBe("PASS");
-
-    const golden = {
-      scenarioId: "demo-12-worktree-none",
-      planId: result.planId,
-      overallStatus: result.overallStatus,
-      noneBackendIsolation: {
-        lockfileInTempDir: true,
-        lockfileInRealTeo: false,
-        lockfileInProjectDir: false,
-        registryInTempDir: true,
-      },
-      events: result.events.map((e) => normalizeEvent(e as unknown as Record<string, unknown>)),
-      signatures: result.signedVerdicts.map((sv) => ({
-        seq: sv.seq,
-        task_id: sv.taskId,
-        signatureFormat: "<hmac-sha256-hex-64>" as const,
-        verified: isValidHmacHex(sv.signature),
-      })),
-      validationWarnings: result.validationResult.warnings.map((w) => w.code),
-    };
-
-    const updated = compareOrUpdateGolden("demo-12-worktree-none", golden);
-    if (!updated) {
-      const committed = readGolden("demo-12-worktree-none");
-      expect(golden).toEqual(committed);
-    }
-  });
-});
-
-// ---------------------------------------------------------------------------
 // Post-suite: zero-HTTP assertion (authoritative check)
 // ---------------------------------------------------------------------------
 
 describe("Post-suite zero-HTTP assertion", () => {
-  it("zero outbound HTTP/HTTPS/fetch calls were made across all 12 demos", () => {
+  it("zero outbound HTTP/HTTPS/fetch calls were made across all 11 demos", () => {
     expect(getNetworkCallCount()).toBe(0);
   });
 });

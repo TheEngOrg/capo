@@ -89,7 +89,7 @@ import { PlanBuilder } from "./plan-builder.js";
 
 // ---------------------------------------------------------------------------
 // Temp-roster fixture helpers
-// (Same pattern as load.test.ts / workstream-tree.test.ts)
+// (Same pattern as load.test.ts)
 // ---------------------------------------------------------------------------
 
 let tempDir: string;

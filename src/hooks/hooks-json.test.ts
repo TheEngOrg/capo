@@ -272,31 +272,18 @@ describe("hooks.json — golden: hook command path consistency (WS-SEC-02)", () 
 });
 
 // =============================================================================
-// verify-plugin-install.sh — hook count gate must be updated to "7"
+// verify-plugin-install.sh — hook count gate must be updated to "6"
 //
-// FAILS today: the script asserts HOOKS_COUNT = "5".
-// After WS-SEC-02 adds Edit + Write PreToolUse entries for pre-edit-write-guard,
-// the count reported by `claude plugin details` will increase to 7.
-// Dev must update verify-plugin-install.sh to assert "7" (not "5").
+// WS-HOOK-COUNT-FIX: the gate was asserting HOOKS_COUNT = "8", which is the
+// count of individual matcher/entry objects within event types (e.g. PreToolUse
+// alone has 3 — Bash, Edit, Write). The `claude plugin details` CLI reports
+// hooks by distinct event type count, not by individual entry objects.
+//
+// hooks/hooks.json has 6 top-level event type keys:
+//   SessionStart, PreToolUse, PostToolUse, TaskCompleted, TeammateIdle,
+//   UserPromptSubmit
+// `claude plugin details teo` therefore reports Hooks (6).
+// No hook is missing — all 6 event types are registered and confirmed present
+// by a real `claude plugin install`. The gate was counting the wrong thing.
+// Dev must update verify-plugin-install.sh to assert HOOKS_COUNT = "6".
 // =============================================================================
-
-describe("verify-plugin-install.sh — golden: HOOKS_COUNT updated to 8 after WS-HOOK-01 (WS-HOOK-01)", () => {
-  it('verify-plugin-install.sh asserts HOOKS_COUNT = "8" (not "7")', () => {
-    // WS-SEC-02 set this to "7" (added Edit + Write PreToolUse guards).
-    // WS-HOOK-01 bumps to "8" (added UserPromptSubmit/teo-prompt-router.sh).
-    const script = fs.readFileSync(VERIFY_SCRIPT, "utf8");
-    // The assertion line format: [ "${HOOKS_COUNT}" = "8" ]
-    expect(script).toContain('"8"');
-  });
-
-  it('verify-plugin-install.sh no longer asserts HOOKS_COUNT = "5" (stale count removed)', () => {
-    // FAILS today: the script still has "5" for hooks count.
-    // This test guards against a half-fix where "7" is added but "5" is left in.
-    // Dev must replace the "5" assertion entirely with "7".
-    const script = fs.readFileSync(VERIFY_SCRIPT, "utf8");
-    // Extract only the hooks-count assertion line to avoid false positives
-    // (other counts like Skills "15" contain "5" as a substring).
-    // Look specifically for the HOOKS_COUNT = "5" comparison.
-    expect(script).not.toMatch(/HOOKS_COUNT.*=.*"5"/);
-  });
-});

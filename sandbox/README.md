@@ -19,7 +19,7 @@ bash scripts/verify-plugin-install.sh
 ```
 OK: Agents (21) confirmed
 OK: Skills (15) confirmed
-OK: Hooks (5) confirmed
+OK: Hooks (6 event types) confirmed
 ✔ PASS: teo plugin install verified
 ```
 

@@ -1,7 +1,7 @@
 {
   "name": "teo",
   "displayName": "TEO — The Engineering Org",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Multi-agent orchestration for Claude Code. Enforces QA-first CAD development through prompt-gated pipeline discipline and harness-enforced hook walls.",
   "author": {
     "name": "TheEngOrg",

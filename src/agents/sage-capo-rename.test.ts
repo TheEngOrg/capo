@@ -133,6 +133,11 @@ const ALLOWLIST: readonly string[] = [
   // FALSE POSITIVE: this test file's own name "sage-capo-rename.test.ts"
   // appears as a file path string in go-signal JSON artifacts.
   "sage-capo-rename",
+  // FALSE POSITIVE: agent-quality.test.ts guards that agents/sage.md was
+  // deleted (the tombstone cleanup). All references to "sage" in that file
+  // are either the SUBJECT OF THE GUARD (asserting the file does not exist)
+  // or comments documenting the deletion — not persona re-introductions.
+  "agent-quality.test.ts",
 ];
 
 /**
@@ -173,7 +178,11 @@ function isAllowlisted(hit: GrepHit): boolean {
     (pattern) =>
       hit.content.includes(pattern) ||
       // Case-insensitive check for uppercase variants (e.g. SAGEGLYPH)
-      hit.content.toLowerCase().includes(pattern.toLowerCase())
+      hit.content.toLowerCase().includes(pattern.toLowerCase()) ||
+      // File-path match: some false positives are identified by their file path
+      // (e.g. a test file whose purpose is to guard against the old name).
+      hit.file.includes(pattern) ||
+      hit.file.toLowerCase().includes(pattern.toLowerCase())
   );
 }
 

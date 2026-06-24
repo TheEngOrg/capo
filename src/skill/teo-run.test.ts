@@ -235,10 +235,10 @@ describe("teo-run CLI — misuse: unknown command and malformed JSON", () => {
 // =============================================================================
 
 describe("teo-run CLI — boundary: edge cases per command", () => {
-  // T18 (boundary): provision with valid bundleDir + tmpDir homeDir →
-  // exit code 0, stdout JSON { status: "ok" or "already_provisioned" }
-  // Uses CLAUDE_PLUGIN_ROOT for fail-open revocation path (no real sig needed).
-  it("T18. provision with valid bundleDir + tmpDir homeDir (plugin context) → exit code 0, { status: 'ok' | 'already_provisioned' }", () => {
+  // T18 (boundary): provision in plugin context with no install-sig file →
+  // BLOCKED (fail-closed) — exit non-zero, status "error".
+  // WS-REVOKE-01 removed the fail-open path; unsigned plugins must now BLOCK.
+  it("T18. provision with valid bundleDir + tmpDir homeDir (plugin context, no install-sig) → exit non-zero, { status: 'error' }", () => {
     // Use a real temporary bundle dir with a valid agent file
     const bundleDir = makeTempDir();
     const homeDir = makeTempDir();
@@ -258,19 +258,21 @@ describe("teo-run CLI — boundary: edge cases per command", () => {
       bundleDir,
       homeDir,
       revocationOpts: {
-        // No real signature — CLAUDE_PLUGIN_ROOT triggers fail-open in plugin context
+        // No signature provided — in plugin context, checkRevocation() attempts
+        // to read $CLAUDE_PLUGIN_ROOT/.teo-install-sig. File absent → BLOCKED.
         keyId: "test-key",
         revocationList: { revoked_keys: [] },
       },
     });
 
     const { exitCode, stdout } = runCli("provision", input, {
-      CLAUDE_PLUGIN_ROOT: bundleDir, // triggers fail-open revocation path
+      CLAUDE_PLUGIN_ROOT: bundleDir, // plugin context; no .teo-install-sig → BLOCKED
     });
 
-    expect(exitCode).toBe(0);
+    // Fail-closed: BLOCKED → exit non-zero
+    expect(exitCode).not.toBe(0);
     const result = stdout as Record<string, unknown>;
-    expect(["ok", "already_provisioned"]).toContain(result["status"]);
+    expect(result["status"]).toBe("error");
   });
 
   // validate-plan with a non-"1" version literal → valid: false (wrong literal)
@@ -475,15 +477,15 @@ describe("teo-run CLI — golden path: each command returns expected output", ()
 });
 
 // =============================================================================
-// WS-GO-04: S8 follow-on — handleProvision() emits warning to stderr
+// WS-GO-04: S8 follow-on — provision fail-closed behavior (BLOCKED → exit non-zero)
 //
-// This test will FAIL today (or be SKIPPED if bin absent) because:
-//   - handleProvision() in teo-run-entry.ts does not yet write result.warning to stderr.
+// T-S8 tests that when checkRevocation returns BLOCKED (e.g. bad signature),
+// the CLI exits non-zero. The old fail-open path ("unsigned-plugin-context") is gone.
 // =============================================================================
 
-describe("teo-run CLI — WS-GO-04 S8: provision warning emitted to stderr", () => {
+describe("teo-run CLI — WS-GO-04 S8: provision fail-closed BLOCKED → exit non-zero", () => {
   it.skipIf(!fs.existsSync(BIN_PATH))(
-    "T-S8: provision with CLAUDE_PLUGIN_ROOT set and no bundle signature → stdout clean JSON, stderr contains 'unsigned-plugin-context'",
+    "T-S8: provision with CLAUDE_PLUGIN_ROOT set and no bundle signature → stdout BLOCKED JSON, exit non-zero (fail-closed)",
     () => {
       // Arrange: create a real bundle dir with a stub .md file
       const bundleDir = makeTempDir();
@@ -499,17 +501,16 @@ describe("teo-run CLI — WS-GO-04 S8: provision warning emitted to stderr", () 
         `# stub-agent constitution\n\nBody.\n`;
       fs.writeFileSync(path.join(bundleDir, "stub-agent.md"), content, "utf8");
 
-      // Use revocationOpts that will cause checkRevocation to return
-      // { verdict: "PASS", warning: "unsigned-plugin-context" }
-      // This requires provision.ts to propagate the warning and
-      // handleProvision() to write it to stderr.
+      // Use revocationOpts with a zero-filled signature against a zero-filled key.
+      // Passing an explicit signature triggers the Ed25519 explicit-sig path in
+      // checkRevocation; verification fails → { verdict: "BLOCKED" }.
+      // This exercises fail-closed behavior: BLOCKED → exit non-zero.
       const provisionOpts = JSON.stringify({
         bundleDir, // explicit bundleDir so provision() reads agents from this dir (not pluginRoot/agents)
         homeDir,
         host: { kind: "claude-code-plugin", pluginRoot: bundleDir },
         revocationOpts: {
-          // No real signature — will trigger unsigned-plugin-context warning
-          // from checkRevocation when in plugin context with no sig verification
+          // Zero-filled signature + key → Ed25519 verification fails → BLOCKED (fail-closed)
           signature: Array.from(new Uint8Array(64).fill(0x00)),
           publicKey: Array.from(new Uint8Array(32).fill(0x00)),
           keyId: "s8-test-key",
@@ -521,20 +522,20 @@ describe("teo-run CLI — WS-GO-04 S8: provision warning emitted to stderr", () 
         CLAUDE_PLUGIN_ROOT: bundleDir,
       });
 
-      // stdout must be clean JSON (parseable)
+      // stdout must be parseable JSON even on BLOCKED
       expect(() => JSON.parse(stdoutRaw.trim())).not.toThrow();
 
-      // stdout must have a status field (ok or already_provisioned)
+      // stdout must have status "error" on BLOCKED
       expect(stdout).toMatchObject({
-        status: expect.stringMatching(/^(ok|already_provisioned)$/),
+        status: "error",
       });
 
-      // Exit 0 for success
-      expect(exitCode).toBe(0);
+      // Exit non-zero for BLOCKED result
+      expect(exitCode).not.toBe(0);
 
-      // stderr must contain the warning "unsigned-plugin-context"
-      // This FAILS today — handleProvision() does not yet write to stderr.
-      expect(stderr).toContain("unsigned-plugin-context");
+      // On BLOCKED the binary exits non-zero; the fail-open "unsigned-plugin-context"
+      // warning must never appear (that code path was removed in WS-REVOKE-01).
+      expect(stderr).not.toContain("unsigned-plugin-context");
     }
   );
 });

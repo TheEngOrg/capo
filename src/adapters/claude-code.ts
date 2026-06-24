@@ -458,16 +458,20 @@ export class ClaudeCodeAdapter implements TEOAdapter {
       };
     }
 
-    // 5. Parse verdict — parseVerdict returns passCount/failCount so we never re-parse.
-    const { verdict, passCount, failCount } = parseVerdict(raw.output);
-
-    if (raw.errored === true && verdict === null && passCount === 0 && failCount === 0) {
+    // 5. Check error state FIRST — fail-closed before parsing output (WS-ADAPTER-02).
+    // If the spawner set errored: true, the output is untrusted (partial run,
+    // injected noise, stale output from prior invocation). Fail immediately,
+    // regardless of what parseVerdict would return.
+    if (raw.errored === true) {
       return {
         taskId: task.id,
         status: "FAILED",
-        detail: "BLOCKED: spawner errored and no verdict",
+        detail: `BLOCKED: spawner errored. raw output: ${raw.output.slice(0, 200)}`,
       };
     }
+
+    // 6. Parse verdict — parseVerdict returns passCount/failCount so we never re-parse.
+    const { verdict, passCount, failCount } = parseVerdict(raw.output);
 
     if (verdict === "PASS") {
       return { taskId: task.id, status: "PASS" };

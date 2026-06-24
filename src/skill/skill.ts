@@ -17,11 +17,13 @@
 // No import-time side effects — all logic is inside invokeSkill().
 // =============================================================================
 
+import { randomUUID } from "node:crypto";
 import type { TEOAdapter, PlanningContext } from "../adapters/types.js";
 import type { RunResult } from "../core/runner.js";
 import type { ProvisionErrorKind } from "../bootstrap/provision.js";
 import type { Plan } from "../core/plan.js";
 import type { CheckRevocationOptions } from "../bootstrap/revocation.js";
+import type { Backend } from "../core/workstream-tree.js";
 import { provision } from "../bootstrap/provision.js";
 import { runPlan } from "../engine/run-plan.js";
 
@@ -37,6 +39,10 @@ export interface SkillOptions {
   bundleDir: string;
   homeDir?: string;
   revocationOpts: Omit<CheckRevocationOptions, "data">;
+  /** Override the auto-generated UUID session identifier passed to runPlan(). */
+  sessionId?: string;
+  /** WorkstreamTree backend passed to runPlan(). Defaults to "none" — the CC host governs isolation. */
+  backend?: Backend;
 }
 
 export type SkillResult =
@@ -102,6 +108,8 @@ export async function invokeSkill(opts: SkillOptions): Promise<SkillResult> {
   // FAILED overallStatus propagates inside the 'ok' wrapper — not a separate
   // discriminant on SkillResult.
   // -------------------------------------------------------------------------
-  const result = await runPlan(plan, opts.adapter);
+  const sessionId = opts.sessionId ?? randomUUID();
+  const backend: Backend = opts.backend ?? "none";
+  const result = await runPlan(plan, opts.adapter, { sessionId, backend });
   return { status: "ok", result };
 }

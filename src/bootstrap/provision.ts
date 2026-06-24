@@ -184,8 +184,18 @@ export async function provision(opts: ProvisionOptions): Promise<ProvisionResult
   // -------------------------------------------------------------------------
 
   if (host.kind === "claude-code-plugin" && host.pluginRoot) {
-    const resolvedBundleDir = path.resolve(bundleDir);
-    const resolvedPluginRoot = path.resolve(host.pluginRoot);
+    let resolvedBundleDir: string;
+    let resolvedPluginRoot: string;
+    try {
+      resolvedBundleDir = fs.realpathSync(bundleDir);
+      resolvedPluginRoot = fs.realpathSync(host.pluginRoot);
+    } catch {
+      return {
+        status: "error",
+        kind: "io_error",
+        reason: "pluginRoot containment check failed: bundleDir escapes plugin root",
+      };
+    }
     if (
       !resolvedBundleDir.startsWith(resolvedPluginRoot + path.sep) &&
       resolvedBundleDir !== resolvedPluginRoot
@@ -255,7 +265,7 @@ export async function provision(opts: ProvisionOptions): Promise<ProvisionResult
     };
   }
 
-  // Capture any warning from the revocation result (e.g. "unsigned-plugin-context").
+  // Capture any warning from the revocation result.
   const revocationWarning = revResult.warning;
 
   // -------------------------------------------------------------------------

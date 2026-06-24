@@ -936,6 +936,83 @@ describe("WorkstreamTree — ASYNC-01: close() never emits uncaughtException", (
   });
 });
 
+// =============================================================================
+// WS-A07-04 (partial): A06-VERIFY-04, A06-VERIFY-05 — audit-06 regression guards
+//
+// These tests verify that the audit-06 implementations are still clean.
+// All must be GREEN immediately.
+// =============================================================================
+
+describe("A06-VERIFY: audit-06 workstream-tree regression guards", () => {
+  // A06-VERIFY-04: setImmediate catch block — close() resolves even when
+  // closeSandbox throws. Mirrors ASYNC-01-A from audit-06.
+  // This MUST be GREEN: the fix was implemented in audit-06.
+  it("A06-VERIFY-04: close() resolves and does not emit uncaughtException when closeSandbox throws (ASYNC-01-A regression guard)", async () => {
+    const tree = makeTree("proj-a06-verify-04");
+    const handle = await tree.allocate("ws-a06-verify-04", "sandbox");
+    expect(fs.existsSync(handle.cwd)).toBe(true);
+
+    // Create a read-only subdirectory so fs.rmSync throws EACCES.
+    const lockedSubdir = path.join(handle.cwd, "locked-subdir-a06");
+    fs.mkdirSync(lockedSubdir);
+    fs.writeFileSync(path.join(lockedSubdir, "file.txt"), "contents");
+    fs.chmodSync(lockedSubdir, 0o444);
+
+    let caughtError: Error | undefined;
+    const uncaughtHandler = (err: Error) => {
+      caughtError = err;
+    };
+    process.once("uncaughtException", uncaughtHandler);
+
+    // close() must resolve — the catch block swallows the EACCES error
+    await tree.close("ws-a06-verify-04");
+
+    // Wait one extra tick for any uncaughtException to propagate
+    await new Promise<void>((r) => setImmediate(r));
+
+    process.removeListener("uncaughtException", uncaughtHandler);
+
+    // Restore permissions so afterEach cleanup can succeed
+    try {
+      fs.chmodSync(lockedSubdir, 0o755);
+    } catch {
+      // best-effort
+    }
+
+    // Audit-06 fix: no uncaughtException must escape
+    expect(caughtError).toBeUndefined();
+  });
+
+  // A06-VERIFY-05: symlink containment — absolute symlink to os.tmpdir() is NOT
+  // copied into the sandbox. Mirrors SYMLINK-01-A from audit-06.
+  // This MUST be GREEN: the fix was implemented in audit-06.
+  it("A06-VERIFY-05: absolute symlink pointing outside the project is NOT present in the sandbox (SYMLINK-01-A regression guard)", async () => {
+    // Create a symlink in the project whose target is outside tmpProjectDir.
+    const escapedTarget = os.tmpdir();
+    fs.symlinkSync(escapedTarget, path.join(tmpProjectDir, "a06-verify-escaped-link"));
+
+    const tree = makeTree("proj-a06-verify-05");
+    const handle = await tree.allocate("ws-a06-verify-05", "sandbox");
+
+    // The absolute-escape symlink must NOT appear in the sandbox
+    const sbEscapedLink = path.join(handle.cwd, "a06-verify-escaped-link");
+    expect(fs.existsSync(sbEscapedLink)).toBe(false);
+
+    // Also confirm the lstatSync check (the link node itself must not exist)
+    const linkNodeExists = (() => {
+      try {
+        fs.lstatSync(sbEscapedLink);
+        return true;
+      } catch {
+        return false;
+      }
+    })();
+    expect(linkNodeExists).toBe(false);
+
+    await tree.close("ws-a06-verify-05");
+  });
+});
+
 function getAllFilesRecursive(dir: string): string[] {
   const results: string[] = [];
   const entries = fs.readdirSync(dir, { withFileTypes: true });

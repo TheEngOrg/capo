@@ -570,6 +570,115 @@ describe("AppendOnlyLedger.append() return value (WS-GO-01)", () => {
 });
 
 // ---------------------------------------------------------------------------
+// WS-A07-04 (partial): A06-VERIFY-03 — close() return type yields { seq, ts }
+//
+// Mirrors the audit-06 fix that changed close() from void to returning
+// { seq: number; ts: string }. Written as a direct unit test on
+// AppendOnlyLedger to verify the return contract independently of run-plan.ts.
+//
+// This MUST be GREEN: the fix was implemented in audit-06.
+// ---------------------------------------------------------------------------
+
+describe("AppendOnlyLedger — A06-VERIFY-03: close() returns { seq, ts } (regression guard)", () => {
+  let tempDir: string;
+  const SESSION_ID = "session-a06-verify-03";
+
+  beforeEach(() => {
+    tempDir = makeTempDir();
+  });
+
+  afterEach(() => {
+    removeTempDir(tempDir);
+  });
+
+  it("A06-VERIFY-03: close() returns an object with numeric seq and ISO-8601 ts string (SIGN-02 regression guard)", () => {
+    const ledger = new AppendOnlyLedger({ session_id: SESSION_ID, baseDir: tempDir });
+    ledger.append(makeEventInput({ phase: "EXECUTE", verdict: "PASS" }));
+
+    const closeResult = ledger.close({
+      task_count: 1,
+      pass: 1,
+      fail: 0,
+      skipped: 0,
+      tokens: 0,
+      cost_usd: 0,
+    });
+
+    // close() must return { seq, ts } — not void
+    expect(closeResult).toBeDefined();
+    expect(typeof closeResult).toBe("object");
+    expect(typeof closeResult.seq).toBe("number");
+    expect(closeResult.seq).toBeGreaterThan(0);
+
+    // ts must be an ISO-8601 UTC string ending in Z
+    expect(typeof closeResult.ts).toBe("string");
+    expect(closeResult.ts).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/);
+
+    // seq on return value matches the CLOSE event's seq in the JSONL file
+    const filePath = path.join(tempDir, "ledger", `${SESSION_ID}.jsonl`);
+    const lines = readLines(filePath);
+    const closeEvent = lines[lines.length - 1];
+    expect(closeEvent?.seq).toBe(closeResult.seq);
+    expect(closeEvent?.ts).toBe(closeResult.ts);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// WS-A07-01: PATH-LEN — session_id maximum length enforcement
+//
+// The constructor currently only validates that session_id has no path
+// separators or traversal sequences. It does NOT cap the maximum length.
+// A crafted session_id of 256+ characters could produce an arbitrarily
+// long filesystem path under ~/.teo/ledger/.
+//
+// Required fix: reject session_id longer than 255 characters with a
+// LedgerPathError whose message contains "too long" or "length".
+//
+// Test ordering: misuse (256/1000 chars — must FAIL red) → boundary (255 chars — must pass).
+// PATH-LEN-01: green today (255-char accepted by current code, intended behavior stays the same).
+// PATH-LEN-02 & -03: RED today — current code has no length cap. These are the failing specs.
+// ---------------------------------------------------------------------------
+
+describe("AppendOnlyLedger — PATH-LEN: session_id maximum length cap", () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = makeTempDir();
+  });
+
+  afterEach(() => {
+    removeTempDir(tempDir);
+  });
+
+  // PATH-LEN-01: exactly 255 alphanumeric chars — at the boundary, must SUCCEED.
+  // This should be GREEN on the current code AND after the fix (it is the allowed limit).
+  it("PATH-LEN-01: session_id of exactly 255 chars (all alphanumeric) constructs without throwing", () => {
+    const sessionId = "a".repeat(255);
+    expect(() => {
+      new AppendOnlyLedger({ session_id: sessionId, baseDir: tempDir });
+    }).not.toThrow();
+  });
+
+  // PATH-LEN-02: 256 chars — one over the limit, must throw LedgerPathError.
+  // FAILS today: the current implementation has no length check.
+  it("PATH-LEN-02: session_id of 256 chars throws LedgerPathError with 'too long' or 'length' in message", () => {
+    const sessionId = "a".repeat(256);
+    expect(() => {
+      new AppendOnlyLedger({ session_id: sessionId, baseDir: tempDir });
+    }).toThrow(/too long|length/i);
+  });
+
+  // PATH-LEN-03: 1000 chars — well over the limit, must throw LedgerPathError.
+  // FAILS today: no length cap implemented.
+  it("PATH-LEN-03: session_id of 1000 chars throws LedgerPathError", () => {
+    const sessionId = "b".repeat(1000);
+    expect(() => {
+      new AppendOnlyLedger({ session_id: sessionId, baseDir: tempDir });
+    }).toThrow(/too long|length/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // BOUNDARY: nothing written outside the injected base dir (isolation)
 // ---------------------------------------------------------------------------
 

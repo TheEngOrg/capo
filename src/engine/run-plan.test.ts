@@ -2387,3 +2387,79 @@ describe("WS-AUDIT-01 — signing failure surfaced in RunResult", () => {
     }
   });
 });
+
+// =============================================================================
+// WS-A07-04: A06-VERIFY — audit-06 closure regression guards (run-plan.ts side)
+//
+// These tests verify that the audit-06 implementations are still clean.
+// They mirror the original failing tests from audit-06 but are written as
+// independent regression guards rather than relying on the original test names.
+//
+// All A06-VERIFY tests in this file MUST BE GREEN immediately (they test
+// already-implemented behavior).
+// =============================================================================
+
+describe("A06-VERIFY: audit-06 closure regression guards (run-plan)", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "teo-a06-verify-"));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  const makeSignedOpts = (sessionId: string): RunPlanOptions => ({
+    sessionId,
+    ledgerBaseDir: tmpDir,
+  });
+
+  // A06-VERIFY-01: ledger.close() failure increments signingErrors
+  // Mirrors CLOSE-01-A from audit-06 — verify it still works.
+  // This MUST be GREEN: the fix was implemented in audit-06.
+  it("A06-VERIFY-01: ledger.close() throws → signingErrors is 1 (CLOSE-01-A regression guard)", async () => {
+    const sessionId = "a06-verify-01-close-throws";
+    const task = makeAgentTask("a06-verify-01-task");
+    const plan = makePlan([task]);
+    const adapter = makeMockAdapter();
+    // adapter returns PASS; per-step append succeeds
+
+    const closeSpy = vi.spyOn(AppendOnlyLedger.prototype, "close").mockImplementation(() => {
+      throw new Error("close-fail-a06-verify");
+    });
+
+    try {
+      const result = await runPlan(plan, adapter, makeSignedOpts(sessionId));
+
+      // Step ran and PASSED — close failure must not corrupt step outcomes
+      expect(result.steps).toHaveLength(1);
+      expect(result.steps[0]!.status).toBe("PASS");
+      expect(result.overallStatus).toBe("PASS");
+
+      // Audit-06 fix: close() threw → signingErrors must be 1
+      expect(result.signingErrors).toBe(1);
+    } finally {
+      closeSpy.mockRestore();
+    }
+  });
+
+  // A06-VERIFY-02: closeSignature is a 64-char hex string on signed runs
+  // Mirrors SIGN-02-A from audit-06 — verify it still works.
+  // This MUST be GREEN: the fix was implemented in audit-06.
+  it("A06-VERIFY-02: signed run → RunResult.closeSignature is a 64-char hex string (SIGN-02-A regression guard)", async () => {
+    const sessionId = "a06-verify-02-close-sig";
+    const task = makeAgentTask("a06-verify-02-task");
+    const plan = makePlan([task], { plan_id: "plan-a06-verify-02" });
+    const adapter = makeMockAdapter();
+
+    const result = await runPlan(plan, adapter, makeSignedOpts(sessionId));
+
+    expect(result.overallStatus).toBe("PASS");
+    expect(result.steps).toHaveLength(1);
+
+    // Audit-06 fix: closeSignature must be a 64-char hex string
+    expect(result.closeSignature).toBeDefined();
+    expect(result.closeSignature).toMatch(/^[0-9a-f]{64}$/);
+  });
+});

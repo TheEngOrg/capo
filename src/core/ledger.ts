@@ -179,6 +179,9 @@ export interface AppendOnlyLedgerOptions {
 // AppendOnlyLedger
 // ---------------------------------------------------------------------------
 
+/** Maximum allowed length for a session_id (POSIX filename limit). */
+const MAX_SESSION_ID_LENGTH = 255;
+
 export class AppendOnlyLedger {
   private readonly session_id: string;
   private readonly ledgerDir: string;
@@ -197,6 +200,12 @@ export class AppendOnlyLedger {
       throw new LedgerPathError(
         `session_id "${session_id}" contains path separators or traversal sequences. ` +
           `Use a plain identifier with no slashes or dots.`
+      );
+    }
+    if (session_id.length > MAX_SESSION_ID_LENGTH) {
+      throw new LedgerPathError(
+        `session_id is too long (${session_id.length} chars; max ${MAX_SESSION_ID_LENGTH}). ` +
+          `Use a shorter identifier.`
       );
     }
 

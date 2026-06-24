@@ -1,7 +1,7 @@
 // =============================================================================
 // artifacts.test.ts — WS-00: artifact schema layer + repairJson() helper
 //
-// STATUS: FAILING — src/core/artifacts.ts does not yet exist. These tests
+// STATUS: PASSING — src/core/artifacts.ts implemented (WS-00). These tests
 // specify the contracts that dev must implement.
 //
 // Ordering: misuse → boundary → golden path (ADR-064 adversarial-first policy)
@@ -389,6 +389,24 @@ describe("validateArtifact() — boundary", () => {
     if (result.errors !== undefined) {
       expect(result.errors).toHaveLength(0);
     }
+  });
+
+  // B-VA9: strict: true with STEP_RESULT_ARTIFACT + extra field → { valid: false }
+  it("B-VA9. strict: true + STEP_RESULT_ARTIFACT with extra field → { valid: false }", () => {
+    const payload = { ...VALID_STEP_RESULT, extra_field: "should not be here" };
+    const result = validateArtifact({ type: "STEP_RESULT_ARTIFACT", payload, strict: true });
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toBeDefined();
+  });
+
+  // B-VA10: strict: true with PLAN_ARTIFACT + extra field → { valid: false }
+  it("B-VA10. strict: true + PLAN_ARTIFACT with extra field → { valid: false }", () => {
+    const payload = { ...VALID_PLAN_PAYLOAD, extra_field: "should not be here" };
+    const result = validateArtifact({ type: "PLAN_ARTIFACT", payload, strict: true });
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toBeDefined();
   });
 });
 

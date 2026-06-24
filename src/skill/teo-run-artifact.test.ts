@@ -1,7 +1,7 @@
 // =============================================================================
 // teo-run-artifact.test.ts — WS-00: validate-artifact CLI command integration tests
 //
-// STATUS: FAILING — teo-run-entry.ts does not yet handle 'validate-artifact'.
+// STATUS: PASSING — validate-artifact CLI implemented.
 // These tests specify the CLI contract that dev must add.
 //
 // CONTRACT (CLI arg protocol):

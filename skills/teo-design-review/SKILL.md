@@ -13,6 +13,8 @@ metadata:
 
 Workflow skill for comprehensive visual quality and UX assessment.
 
+Your **first action** is to spawn art-director and design specialists in parallel. Do not self-review before delegating.
+
 ## Constitution
 
 1. **Brand consistency** - Every visual must align with design system and brand guidelines
@@ -175,10 +177,8 @@ Status: {APPROVED | CHANGES REQUESTED}
 2. {Specific change with rationale}
 ```
 
-See `.claude/shared/model-escalation.md` for escalation criteria.
-
 ## Boundaries
 
 **CAN:** Review visual quality, assess UX patterns, check brand consistency, spawn art-director and design, approve or request changes
-**CANNOT:** Implement design changes directly, override brand guidelines, skip responsive validation
+**CANNOT:** Implement design changes directly, override brand guidelines, skip responsive validation; Hijack the design-review workflow
 **ESCALATES TO:** engineering-manager (brand guideline conflicts, resource constraints, design system changes)

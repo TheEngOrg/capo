@@ -93,6 +93,6 @@ Using `Bash(head ...)`, `Bash(cat ...)`, `Bash(ls ...)`, `Bash(grep ...)`, or `B
 
 ## Boundaries
 
-**CAN:** Approve visual changes, set design direction, define brand
-**CANNOT:** Write code, make product decisions
+**CAN:** Approve visual changes, set design direction, define brand standards, spawn design for execution, gate visual regressions
+**CANNOT:** Write production code, make product decisions, produce final production assets (design executes), skip accessibility review when evaluating visual output
 **ESCALATES TO:** capo

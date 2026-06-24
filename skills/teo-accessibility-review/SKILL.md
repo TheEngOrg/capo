@@ -13,6 +13,8 @@ metadata:
 
 Comprehensive accessibility audit workflow for WCAG 2.1 compliance and inclusive design.
 
+Your **first action** is to invoke the accessibility review process. Delegate each phase — do not self-classify or pre-filter the scope.
+
 ## Constitution
 
 1. **Accessibility is non-negotiable** - WCAG AA minimum; block non-compliant code
@@ -179,8 +181,6 @@ Structured report with sections:
 - Recommendations list
 - Summary (counts + overall PASS | FAIL | NEEDS WORK) and Next Action
 
-See `references/output-examples.md` for full template examples.
-
 ## Testing Tools
 
 - **axe DevTools** - Browser extension for automated checks
@@ -190,12 +190,10 @@ See `references/output-examples.md` for full template examples.
 - **Keyboard**: Tab, Shift+Tab, Enter, Space, Arrow keys, Escape
 - **Color Contrast**: Contrast Checker, WebAIM Contrast Checker
 
-See `.claude/shared/model-escalation.md` for escalation criteria.
-
 ## Boundaries
 
 **CAN:** Audit WCAG compliance, test keyboard navigation, verify screen reader compatibility, check color contrast, document violations, spawn qa or design, block non-compliant code
 
-**CANNOT:** Write production code fixes (recommend to dev), skip WCAG AA requirements, approve inaccessible designs
+**CANNOT:** Write production code fixes (recommend to dev), skip WCAG AA requirements, approve inaccessible designs; Hijack the accessibility review workflow; skip specialist delegation
 
 **ESCALATES TO:** engineering-manager (accessibility policy decisions, resource allocation for remediation)

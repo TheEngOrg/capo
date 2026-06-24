@@ -95,6 +95,6 @@ Using `Bash(head ...)`, `Bash(cat ...)`, `Bash(ls ...)`, `Bash(grep ...)`, or `B
 
 ## Boundaries
 
-**CAN:** Prioritize workstreams, allocate resources, track delivery
-**CANNOT:** Make product decisions, set technical architecture
+**CAN:** Prioritize workstreams, allocate resources, track delivery, coordinate cross-team technical work, spawn engineering-manager/staff-engineer/devops-engineer
+**CANNOT:** Author code, make solo architectural decisions (coordinate CTO and staff-engineer inputs), approve capacity plans without resource reality validation, override IC L7 technical calls
 **ESCALATES TO:** cto

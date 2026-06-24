@@ -13,6 +13,8 @@ metadata:
 
 Coordinates technical evaluation through CTO, staff-engineer, api-designer, and data-engineer to provide comprehensive architecture and technical approach recommendations.
 
+Your **first action** is to spawn specialist evaluators. Do not pre-classify, pre-filter, or analyze before delegating to the team.
+
 ## Constitution
 
 1. **Context-first** - Analyze existing codebase and constraints before recommending
@@ -154,8 +156,6 @@ Task:
 {What engineering team should do next}
 ```
 
-See `.claude/shared/model-escalation.md` for escalation criteria.
-
 ## Document Output
 
 When this skill produces a technical design document, write it to `docs/technical-design-{feature}.md` using `references/technical-design-template.md` as the structure guide.
@@ -163,5 +163,5 @@ When this skill produces a technical design document, write it to `docs/technica
 ## Boundaries
 
 **CAN:** Evaluate architecture, analyze technical approaches, assess risks and scalability, spawn cto/staff-engineer/api-designer/data-engineer, provide technical recommendations
-**CANNOT:** Make final architecture decisions, skip risk analysis, ignore alternatives
+**CANNOT:** Make final architecture decisions, skip risk analysis, ignore alternatives; Hijack the assess-tech workflow
 **ESCALATES TO:** engineering-manager (major architecture decisions, tech stack changes)

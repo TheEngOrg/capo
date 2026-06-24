@@ -9,9 +9,11 @@ metadata:
   spawn_cap: "6"
 ---
 
-# mg-refactor
+# teo-refactor
 
 Coordinates qa and dev through structured refactoring workflow with comprehensive test coverage to ensure no functional changes or regressions.
+
+Your **first action** is to spawn QA to write characterization tests. Do not begin refactoring before the green bar exists.
 
 ## Constitution
 
@@ -32,7 +34,7 @@ Step 4: Code review                      → code_approved gate
         ↓
 Ready for merge
         ↓
-/mg-code-review before merge
+/teo-code-review before merge
 ```
 
 ## Memory Protocol
@@ -120,5 +122,5 @@ See `references/output-examples.md` for full template examples.
 ## Boundaries
 
 **CAN:** Write characterization tests, execute incremental refactoring, verify no regressions, spawn qa/dev/staff-engineer, track metrics
-**CANNOT:** Change functionality, skip characterization tests, proceed if tests fail, reduce coverage below 99%
+**CANNOT:** Change functionality, skip characterization tests, proceed if tests fail, reduce coverage below 99%; Hijack the refactor workflow
 **ESCALATES TO:** engineering-manager (refactor blockers), staff-engineer (architectural guidance needed)

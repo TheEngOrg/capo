@@ -13,6 +13,8 @@ metadata:
 
 Unified workflow for feature intake and evaluation. Handles everything from rough feature ideas to fully structured requests through a single front door, then evaluates scope, feasibility, and value through structured multi-lens conversation.
 
+Your **first action** is to begin the assessment workflow. Route the request verbatim — do not pre-classify or pre-filter input before starting Phase 0.
+
 ## Constitution
 
 1. **Structure before evaluate** - Help users articulate rough ideas before assessing them
@@ -37,41 +39,9 @@ Phase 3: Synthesis (scope, criteria, effort, recommendation)
 Phase 4: Hand off (GO/NO-GO/NEEDS MORE INFO)
 ```
 
-## Intake Flow
-
-```
-               +--------------------+
-               |    mg-assess       |
-               +---------+----------+
-                         |
-                 +-------+-------+
-                 |  Detect Mode  |
-                 +---+-------+---+
-             rough   |       |   structured
-                     v       v
-             +----------+  +----------+
-             | INTAKE   |  | EVALUATE |
-             | Phase 0  |  | Phase 1+ |
-             +----+-----+  +----------+
-                  |
-                  v
-             +----------+
-             | EVALUATE |
-             | Phase 1+ |
-             +----------+
-```
-
 ## Phase 0: Intake Detection & Structuring
 
-### Auto-Detection Logic
-
-On skill invocation, analyze the incoming request for structure signals:
-
-| Signal | Mode | Action |
-|--------|------|--------|
-| Has user stories or acceptance criteria | Structured | Skip to Phase 1 |
-| Has clear problem statement with users and success criteria | Semi-structured | Brief intake to fill gaps, then Phase 1 |
-| Rough, vague, or exploratory idea | Rough | Full intake mode |
+Analyze the request to determine intake mode: if the request has user stories or acceptance criteria, skip to Phase 1; if semi-structured, run brief intake; if rough or vague, run full intake mode.
 
 ### Intake Mode
 
@@ -188,8 +158,6 @@ write: .claude/memory/mg-feature-assessments.json
 - **Phase 0**: Intake flow diagram + structured brief (problem, users, success criteria, constraints)
 - **Phase 1-4**: Full assessment with scope definition, feasibility, value assessment, effort estimate, GO/NO-GO recommendation
 
-See `references/output-examples.md` for full template examples.
-
 ## Delegation
 
 | Need | Action |
@@ -197,13 +165,11 @@ See `references/output-examples.md` for full template examples.
 | Strategic input | Spawn `product-owner` |
 | Scope breakdown | Spawn `product-manager` |
 | Technical feasibility | Spawn `cto` |
-| Detailed planning | Recommend `/mg-assess-tech` or `/mg-design-review` |
-| Feature development | Recommend `/mg-spec` then `/mg-build` |
-
-See `.claude/shared/model-escalation.md` for escalation criteria.
+| Detailed planning | Recommend `/teo-assess-tech` or `/teo-design-review` |
+| Feature development | Recommend `/teo-spec` then `/teo-build` |
 
 ## Boundaries
 
 **CAN:** Facilitate intake, ask questions, evaluate features, spawn experts, synthesize recommendations
-**CANNOT:** Approve features unilaterally, commit resources, implement features
+**CANNOT:** Approve features unilaterally, commit resources, implement features; Hijack the assess workflow
 **ESCALATES TO:** engineering-manager (strategic conflicts, major architectural decisions)

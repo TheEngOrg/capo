@@ -3,8 +3,7 @@
 //
 // WHAT THESE TESTS VERIFY:
 //   1. Source copy (skills/teo/SKILL.md) has the directive_gate YAML block removed.
-//   2. Both copies replace the old Dispatcher sentence with the new relay sentence.
-//   3. Both copies are byte-for-byte identical after the fix.
+//   2. Source copy replaces the old Dispatcher sentence with the new relay sentence.
 //
 // INTENTIONAL FAILURE STATE:
 //   All tests in this file FAIL against the current file content. They will PASS
@@ -13,9 +12,12 @@
 //
 // AFFECTED FILES:
 //   Source: skills/teo/SKILL.md  (directive_gate block present + old sentence)
-//   Mirror: .claude/skills/teo/SKILL.md  (old sentence, already missing block)
 //
-// Test order: misuse → boundary → golden path  (QA ADR-064 policy)
+// NOTE: Mirror path (.claude/skills/teo/SKILL.md) is gitignored and absent from
+//   fresh checkouts — tests for that path (formerly T-03/T-05/T-06) have been
+//   removed to prevent CI failures. Only the tracked source file is asserted here.
+//
+// Test order: misuse → golden path  (QA ADR-064 policy)
 // =============================================================================
 
 import { describe, it, expect } from "vitest";
@@ -29,14 +31,12 @@ import * as path from "node:path";
 const REPO_ROOT = path.resolve(__dirname, "..");
 
 const SOURCE_PATH = path.join(REPO_ROOT, "skills", "teo", "SKILL.md");
-const MIRROR_PATH = path.join(REPO_ROOT, ".claude", "skills", "teo", "SKILL.md");
 
 // ---------------------------------------------------------------------------
-// Load file contents once. If a file is missing the test will fail naturally
+// Load file content once. If the file is missing the test will fail naturally
 // with a clear ENOENT rather than a confusing "undefined" error.
 // ---------------------------------------------------------------------------
 const sourceContent = fs.readFileSync(SOURCE_PATH, "utf8");
-const mirrorContent = fs.readFileSync(MIRROR_PATH, "utf8");
 
 // ---------------------------------------------------------------------------
 // The exact strings the fix must remove / add.
@@ -66,14 +66,6 @@ describe("skill-teo-relay-fix — source copy cleanup", () => {
   });
 });
 
-describe("skill-teo-relay-fix — mirror copy cleanup", () => {
-  it("T-03: mirror copy does NOT contain the old Dispatcher sentence", () => {
-    // FAILS NOW:  old sentence is on line 15 of mirror
-    // PASSES AFTER: sentence is replaced
-    expect(mirrorContent).not.toContain(OLD_SENTENCE);
-  });
-});
-
 // ---------------------------------------------------------------------------
 // GOLDEN-PATH TESTS
 // These assert the desired post-fix state and will PASS after the fix.
@@ -83,25 +75,5 @@ describe("skill-teo-relay-fix — source copy post-fix content", () => {
     // FAILS NOW:  new sentence not present
     // PASSES AFTER: old sentence replaced with new
     expect(sourceContent).toContain(NEW_SENTENCE);
-  });
-});
-
-describe("skill-teo-relay-fix — mirror copy post-fix content", () => {
-  it("T-05: mirror copy CONTAINS the new relay sentence", () => {
-    // FAILS NOW:  new sentence not present
-    // PASSES AFTER: old sentence replaced with new
-    expect(mirrorContent).toContain(NEW_SENTENCE);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// PARITY TEST
-// Confirms both copies are byte-for-byte identical after the fix.
-// ---------------------------------------------------------------------------
-describe("skill-teo-relay-fix — source/mirror parity", () => {
-  it("T-06: source and mirror copies are byte-identical", () => {
-    // FAILS NOW:  source has extra directive_gate block (and both have old sentence)
-    // PASSES AFTER: both files identical
-    expect(sourceContent).toBe(mirrorContent);
   });
 });

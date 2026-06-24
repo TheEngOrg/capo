@@ -185,7 +185,9 @@ export function validatePlan(plan: Plan): ValidationResult {
     color.set(startId, GRAY);
 
     while (stack.length > 0) {
-      const [id, path, neighborIdx] = stack[stack.length - 1];
+      const top = stack[stack.length - 1];
+      if (!top) break;
+      const [id, path, neighborIdx] = top;
       const task = taskById.get(id);
       // taskById is keyed from seenIds (same set DFS iterates), so every id in
       // seenIds has an entry. This guard is a defensive fallback — unreachable
@@ -208,12 +210,14 @@ export function validatePlan(plan: Plan): ValidationResult {
       }
 
       const needsId = neighbors[neighborIdx];
-      stack[stack.length - 1][2]++; // advance neighbor index
+      top[2]++; // advance neighbor index
+
+      if (needsId === undefined) continue;
 
       const neighborColor = color.get(needsId);
       if (neighborColor === GRAY) {
         // Found a back-edge — reconstruct the cycle path from the current DFS stack
-        const cycleStart = path.findIndex((p) => p === needsId);
+        const cycleStart = path.findIndex((p: string) => p === needsId);
         const cyclePath = [...path.slice(cycleStart), id, needsId];
         // Normalize to a canonical form to avoid duplicate reports for the same cycle
         const cycleKey = cyclePath.join("→");

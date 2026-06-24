@@ -2502,3 +2502,80 @@ describe("WS-DEAD-01 — ProvisionResult exhaustiveness", () => {
     }
   });
 });
+
+// =============================================================================
+// WS-A07-02: REPROV — already_provisioned fast-path and revocation re-check gap
+//
+// Current code: when ledger/ AND keyring/ both exist, provision() returns
+// { status: "already_provisioned" } immediately WITHOUT calling checkRevocation().
+//
+// REPROV-01: regression guard — second provision() returns already_provisioned.
+//            Must stay GREEN before and after any fix.
+// REPROV-02: documents the current behavior where checkRevocation is NOT called
+//            on re-provision. GREEN today (documents the gap). If the policy
+//            changes to re-check revocation on re-provision, update this test.
+// =============================================================================
+
+describe("provision() — REPROV: already_provisioned fast-path and revocation re-check gap", () => {
+  // REPROV-01: Regression guard — first provision() succeeds, second provision()
+  // with the same bundleDir containing the same agents returns already_provisioned.
+  // This must stay GREEN on the current code AND after any audit-07 fix.
+  it("REPROV-01: first provision() ok → second provision() with same bundleDir returns already_provisioned", async () => {
+    const bundleDir = makeFixtureBundle(["alpha", "beta"]);
+    const homeDir = makeTempHome();
+
+    // First provision — creates ledger/ and keyring/
+    const first = await provision(makeOpts(bundleDir, homeDir));
+    expect(first.status).toBe("ok");
+
+    // Both data dirs must now exist (idempotency trigger for second call)
+    expect(fs.existsSync(path.join(homeDir, "ledger"))).toBe(true);
+    expect(fs.existsSync(path.join(homeDir, "keyring"))).toBe(true);
+
+    // Reset mock call count before second provision()
+    vi.mocked(checkRevocation).mockClear();
+
+    // Second provision with the same bundleDir → fast-path short-circuit
+    const second = await provision(makeOpts(bundleDir, homeDir));
+
+    // Must return already_provisioned without error
+    expect(second).toEqual({ status: "already_provisioned" });
+  });
+
+  // REPROV-02: Documents the CURRENT behavior: checkRevocation is NOT re-called
+  // on the already_provisioned fast-path, even when it would return BLOCKED.
+  //
+  // This is the policy gap identified in WS-A07-02. The test is GREEN on current
+  // code — it verifies the gap exists, not that it is correct.
+  //
+  // POLICY-NOTE: This test documents the current behavior. If the policy changes
+  // to re-check revocation on re-provision, this test must be updated.
+  it("REPROV-02: already_provisioned fast-path bypasses checkRevocation even when it would return BLOCKED (documents current behavior)", async () => {
+    const bundleDir = makeFixtureBundle(["alpha", "beta"]);
+    const homeDir = makeTempHome();
+
+    // Pre-create ledger/ and keyring/ — trigger the already_provisioned fast-path
+    // without running a full first provision() (avoids any revocation interaction).
+    fs.mkdirSync(path.join(homeDir, "ledger"), { recursive: true, mode: 0o700 });
+    fs.mkdirSync(path.join(homeDir, "keyring"), { recursive: true, mode: 0o700 });
+
+    // Configure checkRevocation to return BLOCKED — if it were called, provision()
+    // would return { status: "error", kind: "revocation_blocked", ... }.
+    vi.mocked(checkRevocation).mockResolvedValue({
+      verdict: "BLOCKED",
+      reason: "Key revoked (REPROV-02 test)",
+    });
+
+    // CURRENT BEHAVIOR: the fast-path returns already_provisioned without calling
+    // checkRevocation, so the BLOCKED verdict is never seen.
+    const result = await provision(makeOpts(bundleDir, homeDir));
+
+    // Documents the gap: result is already_provisioned, NOT revocation_blocked.
+    // POLICY-NOTE: This test documents the current behavior. If the policy changes
+    // to re-check revocation on re-provision, this test must be updated.
+    expect(result).toEqual({ status: "already_provisioned" });
+
+    // Verify checkRevocation was NOT called (the fast-path short-circuited).
+    expect(vi.mocked(checkRevocation)).not.toHaveBeenCalled();
+  });
+});

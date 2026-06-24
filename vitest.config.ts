@@ -178,6 +178,15 @@ export default defineConfig({
           branches: 100,
           statements: 100,
         },
+        // WS-00: artifacts.ts is critical-path — repairJson() + validateArtifact() + all
+        // three artifact schemas (GATE_RESULT, STEP_RESULT, PLAN). strict() branches for
+        // STEP_RESULT_ARTIFACT and PLAN_ARTIFACT must be covered. 100% branch coverage mandatory.
+        "src/core/artifacts.ts": {
+          statements: 100,
+          branches: 100,
+          functions: 100,
+          lines: 100,
+        },
       },
     },
   },

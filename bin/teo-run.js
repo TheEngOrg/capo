@@ -568,6 +568,7 @@ function isInstallSigFile(value) {
 }
 
 // src/bootstrap/revocation.ts
+var REVOCATION_FETCH_TIMEOUT_MS = 5e3;
 function blocked(reason) {
   return { verdict: "BLOCKED", reason };
 }
@@ -578,7 +579,18 @@ function isRevocationList(value) {
   const obj = value;
   return Array.isArray(obj["revoked_keys"]);
 }
-async function checkRevocationListOnly(keyId, revocationList, revocationListFetcher) {
+function makeFetchTimeout() {
+  const p = new Promise(
+    (_, reject) => setTimeout(
+      () => reject(new Error(`Revocation list fetch timed out after ${REVOCATION_FETCH_TIMEOUT_MS}ms`)),
+      REVOCATION_FETCH_TIMEOUT_MS
+    )
+  );
+  p.catch(() => {
+  });
+  return p;
+}
+async function checkRevocationListOnly(keyId, revocationList, revocationListFetcher, fetchTimeout) {
   if (revocationList === void 0 && revocationListFetcher === void 0) {
     return blocked(
       "No revocation list source provided. Provide either revocationList or revocationListFetcher to verify the key."
@@ -588,9 +600,10 @@ async function checkRevocationListOnly(keyId, revocationList, revocationListFetc
   if (revocationList !== void 0) {
     resolvedList = revocationList;
   } else {
+    const timeoutPromise = fetchTimeout ?? makeFetchTimeout();
     let fetched;
     try {
-      fetched = await revocationListFetcher();
+      fetched = await Promise.race([revocationListFetcher(), timeoutPromise]);
     } catch (err2) {
       const message = err2 instanceof Error ? err2.message : String(err2);
       return blocked(`Revocation list fetch failed: ${message}`);
@@ -616,6 +629,7 @@ async function checkRevocation(opts) {
   const pluginRoot = process.env["CLAUDE_PLUGIN_ROOT"];
   const isPluginContext = typeof pluginRoot === "string" && pluginRoot.length > 0;
   if ((signature === void 0 || signature === null) && isPluginContext) {
+    const fetchTimeout = revocationListFetcher !== void 0 ? makeFetchTimeout() : void 0;
     const readResult = readInstallSig(pluginRoot);
     if (!readResult.ok) {
       return blocked(readResult.reason);
@@ -625,7 +639,12 @@ async function checkRevocation(opts) {
       return blocked(verifyResult.reason);
     }
     const installKeyId = readResult.file.key_id;
-    return checkRevocationListOnly(installKeyId, revocationList, revocationListFetcher);
+    return checkRevocationListOnly(
+      installKeyId,
+      revocationList,
+      revocationListFetcher,
+      fetchTimeout
+    );
   }
   if (signature === void 0 || signature === null) {
     return blocked("Signature is missing (undefined or null). Cannot verify without a signature.");
@@ -648,9 +667,10 @@ async function checkRevocation(opts) {
   if (revocationList !== void 0) {
     resolvedList = revocationList;
   } else {
+    const timeoutPromise = makeFetchTimeout();
     let fetched;
     try {
-      fetched = await revocationListFetcher();
+      fetched = await Promise.race([revocationListFetcher(), timeoutPromise]);
     } catch (err2) {
       const message = err2 instanceof Error ? err2.message : String(err2);
       return blocked(`Revocation list fetch failed: ${message}`);
@@ -4911,6 +4931,672 @@ async function provision(opts) {
   return { status: "ok", ...revocationWarning ? { warning: revocationWarning } : {} };
 }
 
+// node_modules/jsonrepair/lib/esm/utils/JSONRepairError.js
+var JSONRepairError = class extends Error {
+  constructor(message, position) {
+    super(`${message} at position ${position}`);
+    this.position = position;
+  }
+};
+
+// node_modules/jsonrepair/lib/esm/utils/stringUtils.js
+var codeSpace = 32;
+var codeNewline = 10;
+var codeTab = 9;
+var codeReturn = 13;
+var codeNonBreakingSpace = 160;
+var codeMongolianVowelSeparator = 6158;
+var codeEnQuad = 8192;
+var codeZeroWidthSpace = 8203;
+var codeNarrowNoBreakSpace = 8239;
+var codeMediumMathematicalSpace = 8287;
+var codeIdeographicSpace = 12288;
+var codeZeroWidthNoBreakSpace = 65279;
+function isHex(char) {
+  return /^[0-9A-Fa-f]$/.test(char);
+}
+function isDigit(char) {
+  return char >= "0" && char <= "9";
+}
+function isValidStringCharacter(char) {
+  return char >= " ";
+}
+function isDelimiter(char) {
+  return ",:[]/{}()\n+".includes(char);
+}
+function isFunctionNameCharStart(char) {
+  return char >= "a" && char <= "z" || char >= "A" && char <= "Z" || char === "_" || char === "$";
+}
+function isFunctionNameChar(char) {
+  return char >= "a" && char <= "z" || char >= "A" && char <= "Z" || char === "_" || char === "$" || char >= "0" && char <= "9";
+}
+var regexUrlStart = /^(http|https|ftp|mailto|file|data|irc):\/\/$/;
+var regexUrlChar = /^[A-Za-z0-9-._~:/?#@!$&'()*+;=]$/;
+function isUnquotedStringDelimiter(char) {
+  return ",[]/{}\n+".includes(char);
+}
+function isStartOfValue(char) {
+  return isQuote(char) || regexStartOfValue.test(char);
+}
+var regexStartOfValue = /^[[{\w-]$/;
+function isControlCharacter(char) {
+  return char === "\n" || char === "\r" || char === "	" || char === "\b" || char === "\f";
+}
+function isWhitespace(text, index) {
+  const code = text.charCodeAt(index);
+  return code === codeSpace || code === codeNewline || code === codeTab || code === codeReturn;
+}
+function isWhitespaceExceptNewline(text, index) {
+  const code = text.charCodeAt(index);
+  return code === codeSpace || code === codeTab || code === codeReturn;
+}
+function isSpecialWhitespace(text, index) {
+  const code = text.charCodeAt(index);
+  return code === codeNonBreakingSpace || code === codeMongolianVowelSeparator || code >= codeEnQuad && code <= codeZeroWidthSpace || code === codeNarrowNoBreakSpace || code === codeMediumMathematicalSpace || code === codeIdeographicSpace || code === codeZeroWidthNoBreakSpace;
+}
+function isQuote(char) {
+  return isDoubleQuoteLike(char) || isSingleQuoteLike(char);
+}
+function isDoubleQuoteLike(char) {
+  return char === '"' || char === "\u201C" || char === "\u201D";
+}
+function isDoubleQuote(char) {
+  return char === '"';
+}
+function isSingleQuoteLike(char) {
+  return char === "'" || char === "\u2018" || char === "\u2019" || char === "`" || char === "\xB4";
+}
+function isSingleQuote(char) {
+  return char === "'";
+}
+function stripLastOccurrence(text, textToStrip) {
+  let stripRemainingText = arguments.length > 2 && arguments[2] !== void 0 ? arguments[2] : false;
+  const index = text.lastIndexOf(textToStrip);
+  return index !== -1 ? text.substring(0, index) + (stripRemainingText ? "" : text.substring(index + 1)) : text;
+}
+function insertBeforeLastWhitespace(text, textToInsert) {
+  let index = text.length;
+  if (!isWhitespace(text, index - 1)) {
+    return text + textToInsert;
+  }
+  while (isWhitespace(text, index - 1)) {
+    index--;
+  }
+  return text.substring(0, index) + textToInsert + text.substring(index);
+}
+function removeAtIndex(text, start, count) {
+  return text.substring(0, start) + text.substring(start + count);
+}
+function endsWithCommaOrNewline(text) {
+  return /[,\n][ \t\r]*$/.test(text);
+}
+
+// node_modules/jsonrepair/lib/esm/regular/jsonrepair.js
+var controlCharacters = {
+  "\b": "\\b",
+  "\f": "\\f",
+  "\n": "\\n",
+  "\r": "\\r",
+  "	": "\\t"
+};
+var escapeCharacters = {
+  '"': '"',
+  "\\": "\\",
+  "/": "/",
+  b: "\b",
+  f: "\f",
+  n: "\n",
+  r: "\r",
+  t: "	"
+  // note that \u is handled separately in parseString()
+};
+function jsonrepair(text) {
+  let i = 0;
+  let output = "";
+  parseMarkdownCodeBlock(["```", "[```", "{```"]);
+  const processed = parseValue();
+  if (!processed) {
+    throwUnexpectedEnd();
+  }
+  parseMarkdownCodeBlock(["```", "```]", "```}"]);
+  const processedComma = parseCharacter(",");
+  if (processedComma) {
+    parseWhitespaceAndSkipComments();
+  }
+  if (isStartOfValue(text[i]) && endsWithCommaOrNewline(output)) {
+    if (!processedComma) {
+      output = insertBeforeLastWhitespace(output, ",");
+    }
+    parseNewlineDelimitedJSON();
+  } else if (processedComma) {
+    output = stripLastOccurrence(output, ",");
+  }
+  while (text[i] === "}" || text[i] === "]") {
+    i++;
+    parseWhitespaceAndSkipComments();
+  }
+  if (i >= text.length) {
+    return output;
+  }
+  throwUnexpectedCharacter();
+  function parseValue() {
+    parseWhitespaceAndSkipComments();
+    const processed2 = parseObject() || parseArray() || parseString() || parseNumber() || parseKeywords() || parseUnquotedString(false) || parseRegex();
+    parseWhitespaceAndSkipComments();
+    return processed2;
+  }
+  function parseWhitespaceAndSkipComments() {
+    let skipNewline = arguments.length > 0 && arguments[0] !== void 0 ? arguments[0] : true;
+    const start = i;
+    let changed = parseWhitespace(skipNewline);
+    do {
+      changed = parseComment();
+      if (changed) {
+        changed = parseWhitespace(skipNewline);
+      }
+    } while (changed);
+    return i > start;
+  }
+  function parseWhitespace(skipNewline) {
+    const _isWhiteSpace = skipNewline ? isWhitespace : isWhitespaceExceptNewline;
+    let whitespace = "";
+    while (true) {
+      if (_isWhiteSpace(text, i)) {
+        whitespace += text[i];
+        i++;
+      } else if (isSpecialWhitespace(text, i)) {
+        whitespace += " ";
+        i++;
+      } else {
+        break;
+      }
+    }
+    if (whitespace.length > 0) {
+      output += whitespace;
+      return true;
+    }
+    return false;
+  }
+  function parseComment() {
+    if (text[i] === "/" && text[i + 1] === "*") {
+      while (i < text.length && !atEndOfBlockComment(text, i)) {
+        i++;
+      }
+      i += 2;
+      return true;
+    }
+    if (text[i] === "/" && text[i + 1] === "/") {
+      while (i < text.length && text[i] !== "\n") {
+        i++;
+      }
+      return true;
+    }
+    return false;
+  }
+  function parseMarkdownCodeBlock(blocks) {
+    if (skipMarkdownCodeBlock(blocks)) {
+      if (isFunctionNameCharStart(text[i])) {
+        while (i < text.length && isFunctionNameChar(text[i])) {
+          i++;
+        }
+      }
+      parseWhitespaceAndSkipComments();
+      return true;
+    }
+    return false;
+  }
+  function skipMarkdownCodeBlock(blocks) {
+    parseWhitespace(true);
+    for (const block of blocks) {
+      const end = i + block.length;
+      if (text.slice(i, end) === block) {
+        i = end;
+        return true;
+      }
+    }
+    return false;
+  }
+  function parseCharacter(char) {
+    if (text[i] === char) {
+      output += text[i];
+      i++;
+      return true;
+    }
+    return false;
+  }
+  function skipCharacter(char) {
+    if (text[i] === char) {
+      i++;
+      return true;
+    }
+    return false;
+  }
+  function skipEscapeCharacter() {
+    return skipCharacter("\\");
+  }
+  function skipEllipsis() {
+    parseWhitespaceAndSkipComments();
+    if (text[i] === "." && text[i + 1] === "." && text[i + 2] === ".") {
+      i += 3;
+      parseWhitespaceAndSkipComments();
+      skipCharacter(",");
+      return true;
+    }
+    return false;
+  }
+  function parseObject() {
+    if (text[i] === "{") {
+      output += "{";
+      i++;
+      parseWhitespaceAndSkipComments();
+      if (skipCharacter(",")) {
+        parseWhitespaceAndSkipComments();
+      }
+      let initial = true;
+      while (i < text.length && text[i] !== "}") {
+        let processedComma2;
+        if (!initial) {
+          processedComma2 = parseCharacter(",");
+          if (!processedComma2) {
+            output = insertBeforeLastWhitespace(output, ",");
+          }
+          parseWhitespaceAndSkipComments();
+        } else {
+          processedComma2 = true;
+          initial = false;
+        }
+        skipEllipsis();
+        const processedKey = parseString() || parseUnquotedString(true);
+        if (!processedKey) {
+          if (text[i] === "}" || text[i] === "{" || text[i] === "]" || text[i] === "[" || text[i] === void 0) {
+            output = stripLastOccurrence(output, ",");
+          } else {
+            throwObjectKeyExpected();
+          }
+          break;
+        }
+        parseWhitespaceAndSkipComments();
+        const processedColon = parseCharacter(":");
+        const truncatedText = i >= text.length;
+        if (!processedColon) {
+          if (isStartOfValue(text[i]) || truncatedText) {
+            output = insertBeforeLastWhitespace(output, ":");
+          } else {
+            throwColonExpected();
+          }
+        }
+        const processedValue = parseValue();
+        if (!processedValue) {
+          if (processedColon || truncatedText) {
+            output += "null";
+          } else {
+            throwColonExpected();
+          }
+        }
+      }
+      if (text[i] === "}") {
+        output += "}";
+        i++;
+      } else {
+        output = insertBeforeLastWhitespace(output, "}");
+      }
+      return true;
+    }
+    return false;
+  }
+  function parseArray() {
+    if (text[i] === "[") {
+      output += "[";
+      i++;
+      parseWhitespaceAndSkipComments();
+      if (skipCharacter(",")) {
+        parseWhitespaceAndSkipComments();
+      }
+      let initial = true;
+      while (i < text.length && text[i] !== "]") {
+        if (!initial) {
+          const processedComma2 = parseCharacter(",");
+          if (!processedComma2) {
+            output = insertBeforeLastWhitespace(output, ",");
+          }
+        } else {
+          initial = false;
+        }
+        skipEllipsis();
+        const processedValue = parseValue();
+        if (!processedValue) {
+          output = stripLastOccurrence(output, ",");
+          break;
+        }
+      }
+      if (text[i] === "]") {
+        output += "]";
+        i++;
+      } else {
+        output = insertBeforeLastWhitespace(output, "]");
+      }
+      return true;
+    }
+    return false;
+  }
+  function parseNewlineDelimitedJSON() {
+    let initial = true;
+    let processedValue = true;
+    while (processedValue) {
+      if (!initial) {
+        const processedComma2 = parseCharacter(",");
+        if (!processedComma2) {
+          output = insertBeforeLastWhitespace(output, ",");
+        }
+      } else {
+        initial = false;
+      }
+      processedValue = parseValue();
+    }
+    if (!processedValue) {
+      output = stripLastOccurrence(output, ",");
+    }
+    output = `[
+${output}
+]`;
+  }
+  function parseString() {
+    let stopAtDelimiter = arguments.length > 0 && arguments[0] !== void 0 ? arguments[0] : false;
+    let stopAtIndex = arguments.length > 1 && arguments[1] !== void 0 ? arguments[1] : -1;
+    let skipEscapeChars = text[i] === "\\";
+    if (skipEscapeChars) {
+      i++;
+      skipEscapeChars = true;
+    }
+    if (isQuote(text[i])) {
+      const isEndQuote = isDoubleQuote(text[i]) ? isDoubleQuote : isSingleQuote(text[i]) ? isSingleQuote : isSingleQuoteLike(text[i]) ? isSingleQuoteLike : isDoubleQuoteLike;
+      const iBefore = i;
+      const oBefore = output.length;
+      let str = '"';
+      i++;
+      while (true) {
+        if (i >= text.length) {
+          const iPrev = prevNonWhitespaceIndex(i - 1);
+          if (!stopAtDelimiter && isDelimiter(text.charAt(iPrev))) {
+            i = iBefore;
+            output = output.substring(0, oBefore);
+            return parseString(true);
+          }
+          str = insertBeforeLastWhitespace(str, '"');
+          output += str;
+          return true;
+        }
+        if (i === stopAtIndex) {
+          str = insertBeforeLastWhitespace(str, '"');
+          output += str;
+          return true;
+        }
+        if (isEndQuote(text[i])) {
+          const iQuote = i;
+          const oQuote = str.length;
+          str += '"';
+          i++;
+          output += str;
+          parseWhitespaceAndSkipComments(false);
+          if (stopAtDelimiter || i >= text.length || isDelimiter(text[i]) || isQuote(text[i]) || isDigit(text[i])) {
+            parseConcatenatedString();
+            return true;
+          }
+          const iPrevChar = prevNonWhitespaceIndex(iQuote - 1);
+          const prevChar = text.charAt(iPrevChar);
+          if (prevChar === ",") {
+            i = iBefore;
+            output = output.substring(0, oBefore);
+            return parseString(false, iPrevChar);
+          }
+          if (isDelimiter(prevChar)) {
+            i = iBefore;
+            output = output.substring(0, oBefore);
+            return parseString(true);
+          }
+          output = output.substring(0, oBefore);
+          i = iQuote + 1;
+          str = `${str.substring(0, oQuote)}\\${str.substring(oQuote)}`;
+        } else if (stopAtDelimiter && isUnquotedStringDelimiter(text[i])) {
+          if (text[i - 1] === ":" && regexUrlStart.test(text.substring(iBefore + 1, i + 2))) {
+            while (i < text.length && regexUrlChar.test(text[i])) {
+              str += text[i];
+              i++;
+            }
+          }
+          str = insertBeforeLastWhitespace(str, '"');
+          output += str;
+          parseConcatenatedString();
+          return true;
+        } else if (text[i] === "\\") {
+          const char = text.charAt(i + 1);
+          const escapeChar = escapeCharacters[char];
+          if (escapeChar !== void 0) {
+            str += text.slice(i, i + 2);
+            i += 2;
+          } else if (char === "u") {
+            let j = 2;
+            while (j < 6 && isHex(text[i + j])) {
+              j++;
+            }
+            if (j === 6) {
+              str += text.slice(i, i + 6);
+              i += 6;
+            } else if (i + j >= text.length) {
+              i = text.length;
+            } else {
+              throwInvalidUnicodeCharacter();
+            }
+          } else if (char === "\n") {
+            str += "\\n";
+            i += 2;
+          } else {
+            str += char;
+            i += 2;
+          }
+        } else {
+          const char = text.charAt(i);
+          if (char === '"' && text[i - 1] !== "\\") {
+            str += `\\${char}`;
+            i++;
+          } else if (isControlCharacter(char)) {
+            str += controlCharacters[char];
+            i++;
+          } else {
+            if (!isValidStringCharacter(char)) {
+              throwInvalidCharacter(char);
+            }
+            str += char;
+            i++;
+          }
+        }
+        if (skipEscapeChars) {
+          skipEscapeCharacter();
+        }
+      }
+    }
+    return false;
+  }
+  function parseConcatenatedString() {
+    let processed2 = false;
+    parseWhitespaceAndSkipComments();
+    while (text[i] === "+") {
+      processed2 = true;
+      i++;
+      parseWhitespaceAndSkipComments();
+      output = stripLastOccurrence(output, '"', true);
+      const start = output.length;
+      const parsedStr = parseString();
+      if (parsedStr) {
+        output = removeAtIndex(output, start, 1);
+      } else {
+        output = insertBeforeLastWhitespace(output, '"');
+      }
+    }
+    return processed2;
+  }
+  function parseNumber() {
+    const start = i;
+    if (text[i] === "-") {
+      i++;
+      if (atEndOfNumber()) {
+        repairNumberEndingWithNumericSymbol(start);
+        return true;
+      }
+      if (!isDigit(text[i])) {
+        i = start;
+        return false;
+      }
+    }
+    while (isDigit(text[i])) {
+      i++;
+    }
+    if (text[i] === ".") {
+      i++;
+      if (atEndOfNumber()) {
+        repairNumberEndingWithNumericSymbol(start);
+        return true;
+      }
+      if (!isDigit(text[i])) {
+        i = start;
+        return false;
+      }
+      while (isDigit(text[i])) {
+        i++;
+      }
+    }
+    if (text[i] === "e" || text[i] === "E") {
+      i++;
+      if (text[i] === "-" || text[i] === "+") {
+        i++;
+      }
+      if (atEndOfNumber()) {
+        repairNumberEndingWithNumericSymbol(start);
+        return true;
+      }
+      if (!isDigit(text[i])) {
+        i = start;
+        return false;
+      }
+      while (isDigit(text[i])) {
+        i++;
+      }
+    }
+    if (!atEndOfNumber()) {
+      i = start;
+      return false;
+    }
+    if (i > start) {
+      const num = text.slice(start, i);
+      const hasInvalidLeadingZero = /^0\d/.test(num);
+      output += hasInvalidLeadingZero ? `"${num}"` : num;
+      return true;
+    }
+    return false;
+  }
+  function parseKeywords() {
+    return parseKeyword("true", "true") || parseKeyword("false", "false") || parseKeyword("null", "null") || // repair Python keywords True, False, None
+    parseKeyword("True", "true") || parseKeyword("False", "false") || parseKeyword("None", "null");
+  }
+  function parseKeyword(name, value) {
+    if (text.slice(i, i + name.length) === name) {
+      output += value;
+      i += name.length;
+      return true;
+    }
+    return false;
+  }
+  function parseUnquotedString(isKey) {
+    const start = i;
+    if (isFunctionNameCharStart(text[i])) {
+      while (i < text.length && isFunctionNameChar(text[i])) {
+        i++;
+      }
+      let j = i;
+      while (isWhitespace(text, j)) {
+        j++;
+      }
+      if (text[j] === "(") {
+        i = j + 1;
+        parseValue();
+        if (text[i] === ")") {
+          i++;
+          if (text[i] === ";") {
+            i++;
+          }
+        }
+        return true;
+      }
+    }
+    while (i < text.length && !isUnquotedStringDelimiter(text[i]) && !isQuote(text[i]) && (!isKey || text[i] !== ":")) {
+      i++;
+    }
+    if (text[i - 1] === ":" && regexUrlStart.test(text.substring(start, i + 2))) {
+      while (i < text.length && regexUrlChar.test(text[i])) {
+        i++;
+      }
+    }
+    if (i > start) {
+      while (isWhitespace(text, i - 1) && i > 0) {
+        i--;
+      }
+      const symbol = text.slice(start, i);
+      output += symbol === "undefined" ? "null" : JSON.stringify(symbol);
+      if (text[i] === '"') {
+        i++;
+      }
+      return true;
+    }
+  }
+  function parseRegex() {
+    if (text[i] === "/") {
+      const start = i;
+      i++;
+      while (i < text.length && (text[i] !== "/" || text[i - 1] === "\\")) {
+        i++;
+      }
+      i++;
+      output += JSON.stringify(text.substring(start, i));
+      return true;
+    }
+  }
+  function prevNonWhitespaceIndex(start) {
+    let prev = start;
+    while (prev > 0 && isWhitespace(text, prev)) {
+      prev--;
+    }
+    return prev;
+  }
+  function atEndOfNumber() {
+    return i >= text.length || isDelimiter(text[i]) || isWhitespace(text, i);
+  }
+  function repairNumberEndingWithNumericSymbol(start) {
+    output += `${text.slice(start, i)}0`;
+  }
+  function throwInvalidCharacter(char) {
+    throw new JSONRepairError(`Invalid character ${JSON.stringify(char)}`, i);
+  }
+  function throwUnexpectedCharacter() {
+    throw new JSONRepairError(`Unexpected character ${JSON.stringify(text[i])}`, i);
+  }
+  function throwUnexpectedEnd() {
+    throw new JSONRepairError("Unexpected end of json string", text.length);
+  }
+  function throwObjectKeyExpected() {
+    throw new JSONRepairError("Object key expected", i);
+  }
+  function throwColonExpected() {
+    throw new JSONRepairError("Colon expected", i);
+  }
+  function throwInvalidUnicodeCharacter() {
+    const chars = text.slice(i, i + 6);
+    throw new JSONRepairError(`Invalid unicode character "${chars}"`, i);
+  }
+}
+function atEndOfBlockComment(text, i) {
+  return text[i] === "*" && text[i + 1] === "/";
+}
+
 // src/core/plan.ts
 var GateRefSchema = external_exports.object({
   name: external_exports.string().min(1),
@@ -4947,11 +5633,237 @@ var PlanSchema = external_exports.object({
   tasks: external_exports.array(TEOTaskSchema).min(1)
 });
 
+// src/core/artifacts.ts
+function repairJson(raw) {
+  const repaired = jsonrepair(raw);
+  if (!raw.trimStart().startsWith('"')) {
+    try {
+      const parsed = JSON.parse(repaired);
+      if (typeof parsed === "string" && repaired === JSON.stringify(raw)) {
+        throw new Error(`Input is not repairable JSON: ${raw}`);
+      }
+    } catch (e) {
+      if (e instanceof SyntaxError) {
+      } else {
+        throw e;
+      }
+    }
+  }
+  return repaired;
+}
+var GateResultArtifactSchema = external_exports.object({
+  task_id: external_exports.string(),
+  gate_name: external_exports.string(),
+  verdict: external_exports.enum(["PASS", "FAIL", "WARN", "UNENFORCED_MOCK"]),
+  timestamp: external_exports.string(),
+  details: external_exports.string().optional()
+});
+var StepResultArtifactSchema = external_exports.object({
+  task_id: external_exports.string(),
+  status: external_exports.enum(["COMPLETED", "FAILED", "SKIPPED"]),
+  timestamp: external_exports.string(),
+  agent_id: external_exports.string().optional()
+});
+var PlanArtifactSchema = PlanSchema;
+function validateArtifact(input) {
+  const { type, payload, strict = false } = input;
+  let schema;
+  switch (type) {
+    case "GATE_RESULT_ARTIFACT":
+      schema = strict ? GateResultArtifactSchema.strict() : GateResultArtifactSchema;
+      break;
+    case "STEP_RESULT_ARTIFACT":
+      schema = strict ? StepResultArtifactSchema.strict() : StepResultArtifactSchema;
+      break;
+    case "PLAN_ARTIFACT":
+      schema = strict ? PlanArtifactSchema.strict() : PlanArtifactSchema;
+      break;
+    default:
+      return {
+        valid: false,
+        errors: [`Unknown artifact type: ${type}`]
+      };
+  }
+  const result = schema.safeParse(payload);
+  if (result.success) {
+    return { valid: true };
+  }
+  return {
+    valid: false,
+    errors: result.error.issues.map((i) => i.message)
+  };
+}
+
 // src/core/sign.ts
-import * as crypto from "node:crypto";
+import * as crypto2 from "node:crypto";
+import * as fs5 from "node:fs";
+import * as path5 from "node:path";
+
+// src/core/ledger.ts
 import * as fs4 from "node:fs";
-import * as os2 from "node:os";
 import * as path4 from "node:path";
+import * as crypto from "node:crypto";
+var LedgerClosedError = class extends Error {
+  constructor(message = "Ledger is closed \u2014 no further events may be appended.") {
+    super(message);
+    this.name = "LedgerClosedError";
+  }
+};
+var LedgerSerializeError = class extends Error {
+  constructor(cause) {
+    super(`Cannot serialize event detail to JSON: ${cause}`);
+    this.name = "LedgerSerializeError";
+  }
+};
+var LedgerPathError = class extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "LedgerPathError";
+  }
+};
+var MAX_SESSION_ID_LENGTH = 255;
+function resolveDefaultLedgerBase() {
+  const envDir = process.env["TEO_LEDGER_DIR"];
+  if (envDir && envDir.length > 0) return envDir;
+  const homeDir = process.env["HOME"];
+  if (homeDir && homeDir.length > 0) return path4.join(homeDir, ".teo");
+  return path4.join(".teo-unresolved");
+}
+var AppendOnlyLedger = class {
+  session_id;
+  ledgerDir;
+  filePath;
+  seq = 0;
+  closed = false;
+  constructor(options) {
+    const { session_id, baseDir } = options;
+    if (!session_id || session_id.length === 0) {
+      throw new LedgerPathError("session_id must not be empty.");
+    }
+    if (session_id.includes("/") || session_id.includes("\\") || session_id.includes("..") || session_id.includes("\0")) {
+      throw new LedgerPathError(
+        `session_id "${session_id}" contains invalid characters (path separators, traversal sequences, or null bytes). Use a plain identifier with no slashes, dots, or null bytes.`
+      );
+    }
+    if (session_id.length > MAX_SESSION_ID_LENGTH) {
+      throw new LedgerPathError(
+        `session_id is too long (${session_id.length} chars; max ${MAX_SESSION_ID_LENGTH}). Use a shorter identifier.`
+      );
+    }
+    this.session_id = session_id;
+    const resolvedBase = baseDir ?? resolveDefaultLedgerBase();
+    this.ledgerDir = path4.join(resolvedBase, "ledger");
+    this.filePath = path4.join(this.ledgerDir, `${this.session_id}.jsonl`);
+  }
+  /**
+   * Append one event to the session JSONL file.
+   *
+   * - Assigns event_id (UUID v4), seq (auto-incremented), and ts (ISO-8601 UTC).
+   * - Creates <baseDir>/ledger/ if it does not exist.
+   * - Opens the file with the 'a' flag (creates if absent; never truncates).
+   * - Throws LedgerClosedError if the ledger is closed.
+   * - Throws LedgerSerializeError if `detail` is not JSON-serializable.
+   *
+   * @param input - The caller-provided semantic fields (no seq/event_id/ts).
+   * @returns The assigned seq (monotonically increasing sequence number) and ts
+   *   (ISO-8601 UTC timestamp) for this event. Callers that need to sign the event
+   *   (e.g. HmacSigner) must use these values to reproduce the canonical payload.
+   */
+  append(input) {
+    if (this.closed) {
+      throw new LedgerClosedError();
+    }
+    const detailJson = this.serializeDetail(input.detail);
+    this.seq += 1;
+    const event = {
+      event_id: this.generateUuidV4(),
+      seq: this.seq,
+      ts: (/* @__PURE__ */ new Date()).toISOString(),
+      session_id: input.session_id,
+      workflow_id: input.workflow_id,
+      task_id: input.task_id,
+      turn_id: input.turn_id,
+      actor_id: input.actor_id,
+      actor_type: input.actor_type,
+      phase: input.phase,
+      verdict: input.verdict,
+      detail: input.detail
+    };
+    void detailJson;
+    const line = JSON.stringify(event) + "\n";
+    if (!fs4.existsSync(this.ledgerDir)) {
+      fs4.mkdirSync(this.ledgerDir, { recursive: true });
+    }
+    fs4.appendFileSync(this.filePath, line, "utf8");
+    return { seq: this.seq, ts: event.ts };
+  }
+  /**
+   * Append the final CLOSE-phase event with a workflow summary, then seal the ledger.
+   *
+   * After close():
+   * - No further calls to append() or close() are permitted (both throw LedgerClosedError).
+   * - The CLOSE event is always the last line in the file.
+   *
+   * @param summary - Token/cost/step-count rollup for the workflow.
+   * @returns The assigned `seq` (monotonically increasing sequence number) and `ts`
+   *   (ISO-8601 UTC timestamp) for the CLOSE event. Callers that need to sign the
+   *   CLOSE event (e.g. HmacSigner) must use these values to reproduce the canonical
+   *   payload. Existing callers that ignore the return value are unaffected.
+   */
+  close(summary) {
+    if (this.closed) {
+      throw new LedgerClosedError("Ledger is already closed \u2014 close() may only be called once.");
+    }
+    const result = this.append({
+      session_id: this.session_id,
+      workflow_id: this.session_id,
+      // workflow_id defaults to session_id for the CLOSE event
+      task_id: null,
+      turn_id: null,
+      actor_id: "SYSTEM",
+      actor_type: "SYSTEM",
+      phase: "CLOSE",
+      verdict: null,
+      detail: {
+        task_count: summary.task_count,
+        pass: summary.pass,
+        fail: summary.fail,
+        skipped: summary.skipped,
+        tokens: summary.tokens,
+        cost_usd: summary.cost_usd,
+        ...summary.torn === true ? { torn: true } : {}
+      }
+    });
+    this.closed = true;
+    return result;
+  }
+  // ---------------------------------------------------------------------------
+  // Private helpers
+  // ---------------------------------------------------------------------------
+  /**
+   * Serialize `detail` to JSON to validate it is serializable.
+   * Throws LedgerSerializeError if JSON.stringify fails (circular ref, BigInt, etc.).
+   * The serialized string is returned for the caller's use.
+   */
+  serializeDetail(detail) {
+    if (detail === null) return "null";
+    try {
+      return JSON.stringify(detail);
+    } catch (err2) {
+      const reason = err2 instanceof Error ? err2.message : String(err2);
+      throw new LedgerSerializeError(reason);
+    }
+  }
+  /**
+   * Generate a UUID v4 using Node's crypto.randomUUID().
+   * Available natively since Node 15.6.0 / 14.17.0.
+   */
+  generateUuidV4() {
+    return crypto.randomUUID();
+  }
+};
+
+// src/core/sign.ts
 var SignKeyringError = class extends Error {
   constructor(message) {
     super(message);
@@ -4990,9 +5902,9 @@ var HmacSigner = class _HmacSigner {
         `keyring_id "${keyring_id}" contains path separators or traversal sequences. Use a plain identifier with no slashes, backslashes, or dots.`
       );
     }
-    const resolvedBase = options.baseDir ?? path4.join(os2.homedir(), ".teo");
-    const keyringDir = path4.join(resolvedBase, "keyring");
-    const keyPath = path4.join(keyringDir, `${keyring_id}.key`);
+    const resolvedBase = options.baseDir ?? resolveDefaultLedgerBase();
+    const keyringDir = path5.join(resolvedBase, "keyring");
+    const keyPath = path5.join(keyringDir, `${keyring_id}.key`);
     this.key = _HmacSigner.loadOrGenerateKey(keyringDir, keyPath);
   }
   // ---------------------------------------------------------------------------
@@ -5013,7 +5925,7 @@ var HmacSigner = class _HmacSigner {
    */
   sign(payload) {
     const canonical = _HmacSigner.buildCanonical(payload);
-    return crypto.createHmac("sha256", this.key).update(canonical).digest("hex");
+    return crypto2.createHmac("sha256", this.key).update(canonical).digest("hex");
   }
   /**
    * Verify a signature against a payload using constant-time comparison.
@@ -5033,7 +5945,7 @@ var HmacSigner = class _HmacSigner {
     const expected = this.sign(payload);
     const expectedBuf = Buffer.from(expected, "hex");
     const actualBuf = Buffer.from(signature, "hex");
-    return crypto.timingSafeEqual(expectedBuf, actualBuf);
+    return crypto2.timingSafeEqual(expectedBuf, actualBuf);
   }
   // ---------------------------------------------------------------------------
   // Static helpers
@@ -5077,171 +5989,24 @@ var HmacSigner = class _HmacSigner {
    * - Enforces 0600 on the key file and 0700 on the keyring directory after loading.
    */
   static loadOrGenerateKey(keyringDir, keyPath) {
-    if (!fs4.existsSync(keyringDir)) {
-      fs4.mkdirSync(keyringDir, { recursive: true, mode: 448 });
+    if (!fs5.existsSync(keyringDir)) {
+      fs5.mkdirSync(keyringDir, { recursive: true, mode: 448 });
     }
-    if (!fs4.existsSync(keyPath)) {
-      const key = crypto.randomBytes(KEY_BYTES);
-      fs4.writeFileSync(keyPath, key, { mode: 384 });
-      fs4.chmodSync(keyringDir, 448);
+    if (!fs5.existsSync(keyPath)) {
+      const key = crypto2.randomBytes(KEY_BYTES);
+      fs5.writeFileSync(keyPath, key, { mode: 384 });
+      fs5.chmodSync(keyringDir, 448);
       return key;
     }
-    const raw = fs4.readFileSync(keyPath);
+    const raw = fs5.readFileSync(keyPath);
     if (raw.length !== KEY_BYTES) {
       throw new SignKeyError(
         `Key file at "${keyPath}" is ${raw.length} bytes; expected exactly ${KEY_BYTES} bytes. The file may be corrupt or empty. Delete it to regenerate.`
       );
     }
-    fs4.chmodSync(keyPath, 384);
-    fs4.chmodSync(keyringDir, 448);
+    fs5.chmodSync(keyPath, 384);
+    fs5.chmodSync(keyringDir, 448);
     return raw;
-  }
-};
-
-// src/core/ledger.ts
-import * as fs5 from "node:fs";
-import * as os3 from "node:os";
-import * as path5 from "node:path";
-import * as crypto2 from "node:crypto";
-var LedgerClosedError = class extends Error {
-  constructor(message = "Ledger is closed \u2014 no further events may be appended.") {
-    super(message);
-    this.name = "LedgerClosedError";
-  }
-};
-var LedgerSerializeError = class extends Error {
-  constructor(cause) {
-    super(`Cannot serialize event detail to JSON: ${cause}`);
-    this.name = "LedgerSerializeError";
-  }
-};
-var LedgerPathError = class extends Error {
-  constructor(message) {
-    super(message);
-    this.name = "LedgerPathError";
-  }
-};
-var AppendOnlyLedger = class {
-  session_id;
-  ledgerDir;
-  filePath;
-  seq = 0;
-  closed = false;
-  constructor(options) {
-    const { session_id, baseDir } = options;
-    if (!session_id || session_id.length === 0) {
-      throw new LedgerPathError("session_id must not be empty.");
-    }
-    if (session_id.includes("/") || session_id.includes("\\") || session_id.includes("..")) {
-      throw new LedgerPathError(
-        `session_id "${session_id}" contains path separators or traversal sequences. Use a plain identifier with no slashes or dots.`
-      );
-    }
-    this.session_id = session_id;
-    const resolvedBase = baseDir ?? path5.join(os3.homedir(), ".teo");
-    this.ledgerDir = path5.join(resolvedBase, "ledger");
-    this.filePath = path5.join(this.ledgerDir, `${this.session_id}.jsonl`);
-  }
-  /**
-   * Append one event to the session JSONL file.
-   *
-   * - Assigns event_id (UUID v4), seq (auto-incremented), and ts (ISO-8601 UTC).
-   * - Creates <baseDir>/ledger/ if it does not exist.
-   * - Opens the file with the 'a' flag (creates if absent; never truncates).
-   * - Throws LedgerClosedError if the ledger is closed.
-   * - Throws LedgerSerializeError if `detail` is not JSON-serializable.
-   *
-   * @param input - The caller-provided semantic fields (no seq/event_id/ts).
-   * @returns The assigned seq (monotonically increasing sequence number) and ts
-   *   (ISO-8601 UTC timestamp) for this event. Callers that need to sign the event
-   *   (e.g. HmacSigner) must use these values to reproduce the canonical payload.
-   */
-  append(input) {
-    if (this.closed) {
-      throw new LedgerClosedError();
-    }
-    const detailJson = this.serializeDetail(input.detail);
-    this.seq += 1;
-    const event = {
-      event_id: this.generateUuidV4(),
-      seq: this.seq,
-      ts: (/* @__PURE__ */ new Date()).toISOString(),
-      session_id: input.session_id,
-      workflow_id: input.workflow_id,
-      task_id: input.task_id,
-      turn_id: input.turn_id,
-      actor_id: input.actor_id,
-      actor_type: input.actor_type,
-      phase: input.phase,
-      verdict: input.verdict,
-      detail: input.detail
-    };
-    void detailJson;
-    const line = JSON.stringify(event) + "\n";
-    if (!fs5.existsSync(this.ledgerDir)) {
-      fs5.mkdirSync(this.ledgerDir, { recursive: true });
-    }
-    fs5.appendFileSync(this.filePath, line, "utf8");
-    return { seq: this.seq, ts: event.ts };
-  }
-  /**
-   * Append the final CLOSE-phase event with a workflow summary, then seal the ledger.
-   *
-   * After close():
-   * - No further calls to append() or close() are permitted (both throw LedgerClosedError).
-   * - The CLOSE event is always the last line in the file.
-   *
-   * @param summary - Token/cost/step-count rollup for the workflow.
-   */
-  close(summary) {
-    if (this.closed) {
-      throw new LedgerClosedError("Ledger is already closed \u2014 close() may only be called once.");
-    }
-    this.append({
-      session_id: this.session_id,
-      workflow_id: this.session_id,
-      // workflow_id defaults to session_id for the CLOSE event
-      task_id: null,
-      turn_id: null,
-      actor_id: "SYSTEM",
-      actor_type: "SYSTEM",
-      phase: "CLOSE",
-      verdict: null,
-      detail: {
-        task_count: summary.task_count,
-        pass: summary.pass,
-        fail: summary.fail,
-        skipped: summary.skipped,
-        tokens: summary.tokens,
-        cost_usd: summary.cost_usd,
-        ...summary.torn === true ? { torn: true } : {}
-      }
-    });
-    this.closed = true;
-  }
-  // ---------------------------------------------------------------------------
-  // Private helpers
-  // ---------------------------------------------------------------------------
-  /**
-   * Serialize `detail` to JSON to validate it is serializable.
-   * Throws LedgerSerializeError if JSON.stringify fails (circular ref, BigInt, etc.).
-   * The serialized string is returned for the caller's use.
-   */
-  serializeDetail(detail) {
-    if (detail === null) return "null";
-    try {
-      return JSON.stringify(detail);
-    } catch (err2) {
-      const reason = err2 instanceof Error ? err2.message : String(err2);
-      throw new LedgerSerializeError(reason);
-    }
-  }
-  /**
-   * Generate a UUID v4 using Node's crypto.randomUUID().
-   * Available natively since Node 15.6.0 / 14.17.0.
-   */
-  generateUuidV4() {
-    return crypto2.randomUUID();
   }
 };
 
@@ -5292,6 +6057,43 @@ function handleValidatePlan(args) {
     });
   }
 }
+function handleValidateArtifact(rawJsonArg) {
+  let parsedArg;
+  try {
+    const repaired = repairJson(rawJsonArg);
+    parsedArg = JSON.parse(repaired);
+  } catch (err2) {
+    const msg = err2 instanceof Error ? err2.message : String(err2);
+    writeJson({ valid: false, errors: [`JSON repair/parse error: ${msg}`] });
+    return;
+  }
+  const a = parsedArg;
+  const type = a["type"];
+  const strictRaw = a["strict"];
+  let payload = a["payload"];
+  if (typeof payload === "string") {
+    let reparsed;
+    try {
+      const repairedPayload = repairJson(payload);
+      reparsed = JSON.parse(repairedPayload);
+    } catch (err2) {
+      const msg = err2 instanceof Error ? err2.message : String(err2);
+      writeJson({ valid: false, errors: [`JSON repair/parse error on payload: ${msg}`] });
+      return;
+    }
+    if (typeof reparsed === "string") {
+      writeJson({
+        valid: false,
+        errors: [`JSON repair/parse failed: payload string could not be parsed as a JSON object`]
+      });
+      return;
+    }
+    payload = reparsed;
+  }
+  const callArgs = typeof strictRaw === "boolean" ? { type, payload, strict: strictRaw } : { type, payload };
+  const result = validateArtifact(callArgs);
+  writeJson(result);
+}
 function handleSign(args) {
   const a = args;
   const baseDir = a["baseDir"];
@@ -5332,6 +6134,15 @@ async function main() {
   const [, , command, jsonArg] = process.argv;
   if (!command) {
     exitError({ error: "No command specified. Usage: teo-run <command> '<json>'" });
+  }
+  if (command === "validate-artifact") {
+    try {
+      handleValidateArtifact(jsonArg ?? "{}");
+    } catch (err2) {
+      const message = err2 instanceof Error ? err2.message : String(err2);
+      exitError({ error: message });
+    }
+    return;
   }
   let args;
   try {

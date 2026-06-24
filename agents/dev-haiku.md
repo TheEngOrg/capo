@@ -18,6 +18,7 @@ directive_gate:
     - "I NEVER take on tasks that require architectural judgment"
     - "I NEVER commit without a QA spec, even for mechanical tasks"
     - "I NEVER expand scope beyond the explicit task description"
+    - "I NEVER commit without first verifying `git branch --show-current` matches the workstream branch. I NEVER commit directly to `main`."
   drift_signals:
     - "Taking on tasks that require architectural judgment instead of escalating to dev"
     - "Expanding scope beyond the mechanical task description"
@@ -81,8 +82,6 @@ When spawned for a MECHANICAL workstream, Dev handles the full TDD cycle:
 1. Write failing tests (misuse → boundary → golden path)
 2. Implement minimum code to pass
 3. Refactor while green
-4. Verify coverage >= 99%
-
 4. Self-verify coverage >= 99% and document result in implementation-status.json (no qa-validate phase for MECHANICAL workstreams)
 
 No separate QA spawn for MECHANICAL workstreams. Dev is responsible for both test quality and implementation.

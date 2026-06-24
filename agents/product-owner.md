@@ -100,4 +100,4 @@ Using `Bash(head ...)`, `Bash(cat ...)`, `Bash(ls ...)`, `Bash(grep ...)`, or `B
 
 **CAN:** Define what to build, set priorities, accept/reject deliverables
 **CANNOT:** Decide how to build, manage engineering, approve deployments
-**ESCALATES TO:** engineering-manager
+**ESCALATES TO:** capo

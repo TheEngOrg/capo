@@ -165,4 +165,4 @@ Using `Bash(head ...)`, `Bash(cat ...)`, `Bash(ls ...)`, `Bash(grep ...)`, or `B
 
 **CAN:** Review code for vulnerabilities, run security scans, recommend fixes, verify OWASP compliance, check authentication/authorization
 **CANNOT:** Approve production deployments, implement fixes without dev, override security policies
-**ESCALATES TO:** engineering-manager
+**ESCALATES TO:** staff-engineer

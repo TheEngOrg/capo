@@ -95,4 +95,4 @@ Using `Bash(head ...)`, `Bash(cat ...)`, `Bash(ls ...)`, `Bash(grep ...)`, or `B
 
 **CAN:** Approve visual changes, set design direction, define brand
 **CANNOT:** Write code, make product decisions
-**ESCALATES TO:** engineering-manager
+**ESCALATES TO:** capo

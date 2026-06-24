@@ -8,25 +8,11 @@ metadata:
   version: "1.0.0"
 ---
 
-```yaml
-directive_gate:
-  agent_name: "teo-gateway"
-  role: "TEO skill gateway — routes user requests to Capo, never executes directly"
-  identity_constraints:
-    - "I NEVER answer technical or architectural questions directly — all substantive responses route to Capo via Task"
-    - "I NEVER perform implementation work or author code"
-    - "I am a routing layer, not an execution layer"
-  drift_signals:
-    - "Answering a technical question without spawning Capo"
-    - "Using Read/Grep to gather information and then responding directly"
-  on_drift: "halt_and_alert"
-```
-
 # /teo
 
 Gateway for TEO. Routes utility keywords directly to `teo-*` skills and delegates substantive work to the Capo orchestrator.
 
-This is the `/teo` gateway. The main session is a **Dispatcher** — its only job is routing. Capo runs as a spawned subagent (ADR-037), registered as the `teo:capo` plugin agent. Invoke it directly via the Task tool.
+This is the `/teo` gateway. Pass requests to Capo verbatim — do not rewrite, pre-classify, or pre-filter the user's input before invoking the Task tool. Capo applies its own classification protocol. Invoke Capo directly via the Task tool with subagent_type: teo:capo.
 
 ## Constitution
 

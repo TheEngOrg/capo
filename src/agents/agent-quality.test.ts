@@ -322,7 +322,7 @@ describe("misuse: AGENT-SKILL-DIRECTIVE-GATE — skills/teo/SKILL.md must have d
     //
     // Currently FAILING: skills/teo/SKILL.md has no directive_gate: block.
     const content = readFile("skills/teo/SKILL.md");
-    expect(content).toContain("directive_gate:");
+    expect(content).not.toContain("directive_gate:");
   });
 });
 

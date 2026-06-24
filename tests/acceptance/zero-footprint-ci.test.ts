@@ -149,6 +149,12 @@ describe("WS-P1-09 zero-footprint CI — misuse + boundary", () => {
 
 describe("WS-P1-09 zero-footprint CI — golden path", () => {
   it("5. single AGENT task end-to-end PASS — runPlan + StubAdapter returns PASS result", async () => {
+    // Capture homedir state BEFORE runPlan so the mtime comparison is
+    // deterministic — no wall-clock dependency.
+    const homedirTeoPath = path.join(os.homedir(), ".teo");
+    const existedBefore = fs.existsSync(homedirTeoPath);
+    const mtimeBefore = existedBefore ? fs.statSync(homedirTeoPath).mtimeMs : null;
+
     const plan = makePlan([makeAgentTask("p1-09-single-agent")], { plan_id: "p1-09-single-agent" });
     const adapter = new StubAdapter();
 
@@ -162,19 +168,14 @@ describe("WS-P1-09 zero-footprint CI — golden path", () => {
     // Zero network calls — StubAdapter is fully in-process
     expect(getNetworkCallCount()).toBe(0);
 
-    // Homedir untouched
-    const homedirTeoPath = path.join(os.homedir(), ".teo");
+    // Homedir untouched — if ~/.teo existed before the run, its mtime must be
+    // bit-for-bit identical after. A write would advance the mtime; an unchanged
+    // directory keeps the same value. This is deterministic, no wall-clock delta.
     const existsAfter = fs.existsSync(homedirTeoPath);
-    // If it didn't exist before the suite started we do not assert false here
-    // because test 4 already ran and could not have created it. We assert that
-    // whatever state it was in, the plan run didn't touch it — no write means
-    // mtime is stable. We use os.tmpdir() for any internal temp needs; the
-    // StubAdapter itself never writes to the filesystem.
-    if (existsAfter) {
-      // Stat it — mtime should be older than "just now" (no write in the last 5s)
-      const mtimeMs = fs.statSync(homedirTeoPath).mtimeMs;
-      const ageMs = Date.now() - mtimeMs;
-      expect(ageMs).toBeGreaterThan(5000);
+    if (existedBefore) {
+      expect(existsAfter).toBe(true);
+      const mtimeAfter = fs.statSync(homedirTeoPath).mtimeMs;
+      expect(mtimeAfter).toBe(mtimeBefore);
     }
   });
 

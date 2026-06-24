@@ -198,13 +198,15 @@ describe("verify-plugin-install.sh — boundary: structural validity", () => {
     expect(readVerifyScript()).toContain("[4/5]");
   });
 
-  it("Step 5 asset-count verification block is still present (21 agents, 15 skills, 5 hooks)", () => {
+  it("Step 5 asset-count verification block is still present (21 agents, 15 skills, 8 hooks)", () => {
     // The install gate counts must be unchanged — WS-GO-07-swap touches
     // marketplace source form only, not the plugin asset inventory.
+    // WS-SEC-02 updated hooks count from 5 to 7 (added Edit + Write PreToolUse entries).
+    // WS-HOOK-01 updated hooks count from 7 to 8 (added UserPromptSubmit/teo-prompt-router.sh).
     const script = readVerifyScript();
     expect(script).toContain('"21"');
     expect(script).toContain('"15"');
-    expect(script).toContain('"5"');
+    expect(script).toContain('"8"');
   });
 
   it("teo@teo-marketplace install command is still present (install target unchanged)", () => {

@@ -136,6 +136,46 @@ elif [[ "$FILE_PATH_NORM" == "$PROJECT_ROOT" ]]; then
   FILE_PATH_NORM=""
 fi
 
+# Canonicalize path to close traversal bypass (WS-SEC-03).
+# Resolves .. segments without requiring the path to exist on disk.
+# After canonicalization, re-relativize against PROJECT_ROOT to get a clean repo-relative path.
+# Fail-open: if no canonicalization tool is available, continue with existing FILE_PATH_NORM.
+#
+# Tool priority:
+#   1. realpath --canonicalize-missing  (GNU coreutils — Linux/CI)
+#   2. python3 os.path.normpath         (portable fallback — macOS)
+_canon_path() {
+  local p="$1"
+  # Try GNU realpath first (resolves symlinks + .. without path existing)
+  if command -v realpath > /dev/null 2>&1 && \
+     realpath --canonicalize-missing / > /dev/null 2>&1; then
+    realpath --canonicalize-missing "$p" 2>/dev/null || printf '%s' "$p"
+  elif command -v python3 > /dev/null 2>&1; then
+    # os.path.normpath collapses .. without requiring path to exist (no symlink resolution)
+    printf '%s' "$p" | python3 -c "import os.path,sys; print(os.path.normpath(sys.stdin.read().strip()),end='')" 2>/dev/null || printf '%s' "$p"
+  else
+    printf '%s' "$p"
+  fi
+}
+
+# Build absolute path for canonicalization: if already absolute, use as-is; else prefix PROJECT_ROOT
+if [[ "$FILE_PATH_NORM" == /* ]]; then
+  _ABS_FOR_CANON="$FILE_PATH_NORM"
+else
+  _ABS_FOR_CANON="${PROJECT_ROOT}/${FILE_PATH_NORM}"
+fi
+_CANON="$(_canon_path "$_ABS_FOR_CANON")"
+# Re-relativize: strip PROJECT_ROOT prefix
+if [[ "$_CANON" == "$PROJECT_ROOT/"* ]]; then
+  FILE_PATH_NORM="${_CANON#"$PROJECT_ROOT/"}"
+elif [[ "$_CANON" == "$PROJECT_ROOT" ]]; then
+  FILE_PATH_NORM=""
+else
+  # Resolved outside project root — treat as non-protected (no prefix match possible)
+  FILE_PATH_NORM="$_CANON"
+fi
+unset _ABS_FOR_CANON _CANON
+
 # ─── Check extension enforcement paths ───────────────────────────────────────
 
 ALLOWLIST_CONFIG="${PROJECT_ROOT}/.claude/config/teo-allowlist.json"

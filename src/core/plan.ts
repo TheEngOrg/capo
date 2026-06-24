@@ -58,6 +58,7 @@ const AgentTaskSchema = BaseTaskSchema.extend({
   type: z.literal("AGENT"),
   agent_id: z.string().min(1),
   prompt: z.string().min(1),
+  target_dir: z.string().optional(), // WS-CRYPTO-01: directory to hash for content_hash
 });
 
 // ---------------------------------------------------------------------------

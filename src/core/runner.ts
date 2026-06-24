@@ -164,7 +164,9 @@ export class TopologicalRunner {
    * - Per-step timeout: steps exceeding the timeout are FAILED, not hung.
    * - Per-step exception isolation: throws are caught and converted to FAILED.
    * - RED-halt: downstream steps of a FAILED step are marked SKIPPED.
-   * - Independent branches continue despite a failure in another branch.
+   * - Abort-on-first-failure (WS-ARCH-01): when any task returns FAILED, all
+   *   subsequent dispatches are SKIPPED. In-flight tasks already dispatched
+   *   drain to completion — they are not cancelled.
    */
   async run(plan: Plan): Promise<RunResult> {
     const tasks = plan.tasks;
@@ -239,6 +241,7 @@ export class TopologicalRunner {
     const results = new Map<string, StepResult>();
     const dispatched = new Set<string>(); // tasks dispatched or pre-resolved
     const inFlight = new Set<Promise<void>>();
+    let abortSignalled = false;
 
     const isCompleted = (id: string): boolean => results.has(id);
 
@@ -250,10 +253,17 @@ export class TopologicalRunner {
         return r !== undefined && (r.status === "FAILED" || r.status === "SKIPPED");
       });
 
-    const dispatchTask = (task: TEOTask): void => {
+    // abortRef.failedTaskId lets .then() callbacks record the failing task ID in
+    // a way that ESLint can track across the await boundary (property mutation on
+    // a const object). Empty string "" is the null sentinel; a non-empty value
+    // means abort fired in this iteration and names the failing task.
+    const abortRef: { failedTaskId: string } = { failedTaskId: "" };
+
+    const dispatchTask = (task: TEOTask, passOrder: string[]): void => {
       dispatched.add(task.id);
       if (hasFailedDep(task)) {
-        // Synchronously mark as SKIPPED — no async needed.
+        // Dep-cascade SKIP: upstream dependency failed — give this a distinct reason
+        // so callers can distinguish it from an abort-signal SKIP (e.g. for TORN detection).
         results.set(task.id, {
           taskId: task.id,
           status: "SKIPPED",
@@ -261,8 +271,24 @@ export class TopologicalRunner {
         });
         return;
       }
+      if (abortSignalled) {
+        // Abort-on-first-failure: a prior task failed — skip all new dispatches.
+        // Only tasks with NO failed dep reach here (independent tasks blocked by abort).
+        results.set(task.id, {
+          taskId: task.id,
+          status: "SKIPPED",
+          detail: "Skipped due to plan abort (earlier task failed)",
+        });
+        return;
+      }
+      // Track dispatch order within this pass for same-batch abort override logic.
+      passOrder.push(task.id);
       const p: Promise<void> = this.runStep(task, context).then((stepResult) => {
         results.set(task.id, stepResult);
+        if (stepResult.status === "FAILED") {
+          abortSignalled = true;
+          abortRef.failedTaskId = task.id;
+        }
         inFlight.delete(p);
       });
       inFlight.add(p);
@@ -271,13 +297,15 @@ export class TopologicalRunner {
     // Drive: scan the topo-sorted queue repeatedly until all tasks are done.
     while (results.size < order.length) {
       let dispatched_this_pass = 0;
+      // Ordered list of task IDs actually dispatched (not synchronously SKIPPED) this pass.
+      const passOrder: string[] = [];
 
       for (const task of order) {
         if (dispatched.has(task.id)) continue; // already handled
         if (!isReady(task)) continue; // deps not done yet
         if (inFlight.size >= this.maxParallel) break; // at capacity
 
-        dispatchTask(task);
+        dispatchTask(task, passOrder);
         dispatched_this_pass++;
       }
 
@@ -289,8 +317,40 @@ export class TopologicalRunner {
       }
 
       if (inFlight.size > 0) {
+        // Snapshot result keys before awaiting so we can detect same-batch completions.
+        const preAwaitKeys = new Set(results.keys());
+        // Reset per-iteration abort tracking before the await.
+        abortRef.failedTaskId = "";
+
         // Wait for at least one task to finish, then re-scan for newly ready tasks.
         await Promise.race(inFlight);
+
+        // If abort fired during this await, some tasks may have completed in the
+        // same microtask batch as the FAILED task. Override tasks dispatched AFTER
+        // the failed task (in this pass's dispatch order) that completed as PASS.
+        //
+        // "Dispatched after" means they appear later in `passOrder`, which reflects
+        // topo-sorted dispatch order. Tasks dispatched BEFORE the failed task (e.g.
+        // B dispatched before C which fails) are left as PASS — they ran cleanly.
+        // Tasks still in-flight (not yet in `results`) are left to drain normally.
+        //
+        // See BOUNDARY-1: B is dispatched before A's abort fires AND still in-flight
+        // when A fails (30ms timer) — it drains to PASS in the next iteration.
+        if (abortRef.failedTaskId !== "") {
+          const failedIdx = passOrder.indexOf(abortRef.failedTaskId);
+          if (failedIdx >= 0) {
+            for (const taskId of passOrder.slice(failedIdx + 1)) {
+              const r = results.get(taskId);
+              if (r !== undefined && !preAwaitKeys.has(taskId) && r.status === "PASS") {
+                results.set(taskId, {
+                  taskId,
+                  status: "SKIPPED",
+                  detail: "Skipped due to plan abort (earlier task failed)",
+                });
+              }
+            }
+          }
+        }
       }
     }
 

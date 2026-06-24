@@ -149,6 +149,11 @@ export interface WorkflowSummary {
   tokens: number;
   /** Estimated cost in USD. 0 for SCRIPT-only workflows. */
   cost_usd: number;
+  /**
+   * True when the workflow was aborted mid-run (a task failed and one or more
+   * independent tasks were skipped as a result). Absent or false for clean runs.
+   */
+  torn?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -293,6 +298,7 @@ export class AppendOnlyLedger {
         skipped: summary.skipped,
         tokens: summary.tokens,
         cost_usd: summary.cost_usd,
+        ...(summary.torn === true ? { torn: true } : {}),
       },
     });
 

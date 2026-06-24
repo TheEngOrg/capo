@@ -20,6 +20,12 @@
 //   not a directory path. This guard exists so that regression cannot recur
 //   silently: if validate rejects, this suite fails loudly before any release.
 //
+// HOOKS DOUBLE-LOAD REGRESSION (M-04 guard):
+//   Claude Code v2+ auto-discovers hooks/hooks.json. Declaring `"hooks"` in
+//   plugin.json on top of auto-discovery causes a duplicate-load error at
+//   install time. The field must be absent from the manifest entirely.
+//   M-04 is the regression guard — it fails loudly if the field comes back.
+//
 // AGENTS SUBDIRECTORY BUG:
 //   TEO's agents live at agents/<name>/agent.md (subdirectories), but Claude
 //   Code's default auto-discovery for agents expects agents/*.md (flat files).
@@ -69,7 +75,7 @@ try {
 }
 
 /** Path-typed fields that must never contain `../` and must start with `./`. */
-const PATH_FIELDS = ["skills", "hooks"] as const;
+const PATH_FIELDS = ["skills"] as const;
 // `agents` is intentionally kept separate — after the fix it may be an array,
 // not a bare string. Each branch is tested explicitly below.
 
@@ -162,6 +168,22 @@ describe("plugin.json misuse guards", () => {
         }
       }
     }
+  });
+
+  it('M-04: manifest must NOT declare a "hooks" field (auto-discovered — duplicate-load error if present)', () => {
+    // Claude Code v2+ auto-discovers hooks/hooks.json. Declaring "hooks" in
+    // plugin.json on top of that auto-discovery causes a duplicate-load error
+    // at install time. The field MUST be absent from the manifest entirely.
+    //
+    // This guard passes when the field is absent (current state). It will fail
+    // loudly if a "hooks" field is ever added back to plugin.json, preventing
+    // regression of the duplicate-load error.
+    expect(
+      "hooks" in manifest,
+      '"hooks" field must NOT be present in plugin.json — ' +
+        "Claude Code auto-discovers hooks/hooks.json; declaring it explicitly " +
+        "causes a duplicate-load error at plugin install time."
+    ).toBe(false);
   });
 });
 

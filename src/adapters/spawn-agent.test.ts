@@ -112,7 +112,6 @@ import { describe, it, expect } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
-import type { AgentDefinition } from "../agents/load.js";
 import type { TEOTask } from "../core/plan.js";
 import type { AgentContext } from "./types.js";
 
@@ -1275,6 +1274,51 @@ describe("ClaudeCodeAdapter.spawnAgent — boundary: errored flag", () => {
       expect(result.status).toBe("FAILED");
       // Must be the plain no-verdict BLOCKED path, not the errored path
       expect(result.detail).toMatch(/BLOCKED: no verdict in output/);
+    } finally {
+      cleanupTempRoster(rosterDir);
+    }
+  });
+
+  // -------------------------------------------------------------------------
+  // WS-ADAPTER-01 Part A — regression guard for errored-flag inversion.
+  //
+  // Audit finding: "raw.errored check inversion means a spawner error produces
+  // a PASS result instead of FAILED." This guard verifies the finding is a
+  // false positive against the CURRENT code — the errored check at line 437
+  // correctly gates on (errored === true && verdict === null && passCount === 0
+  // && failCount === 0), so it only fires when there is NO parseable verdict.
+  //
+  // This test covers the one boundary the existing suite doesn't hit:
+  // errored: true with CONFLICTING verdicts (both VERDICT: PASS and VERDICT:
+  // FAIL present). The errored guard must NOT intercept this — the conflicting-
+  // verdicts BLOCKED path owns it. If someone later inverts the errored guard
+  // (e.g., changes === true to !== true), this guard catches that regression.
+  // -------------------------------------------------------------------------
+  it("WS-ADAPTER-01-A: errored:true with conflicting verdicts is NOT intercepted by the errored guard — falls through to BLOCKED:conflicting", async () => {
+    const rosterDir = makeTempRoster([{ id: "test-agent" }]);
+    try {
+      const { spawner } = makeMockSpawner({
+        // Both VERDICT lines present — passCount > 0, failCount > 0
+        output: "VERDICT: PASS\nVERDICT: FAIL\n",
+        errored: true,
+      });
+      const adapter = new ClaudeCodeAdapter({
+        runner: NO_OP_RUNNER,
+        spawner,
+        agentsDir: rosterDir,
+      });
+
+      const task = makeAgentTask({ id: "errored-conflicting-verdict-task" });
+      const result = await adapter.spawnAgent(task, VALID_AGENT_CONTEXT);
+
+      expect(result.taskId).toBe("errored-conflicting-verdict-task");
+      expect(result.status).toBe("FAILED");
+      // Must be the conflicting-verdicts path — NOT the "spawner errored" path.
+      // The errored guard only fires when passCount === 0 && failCount === 0;
+      // with both PASS and FAIL present it must fall through to the conflict path.
+      expect(result.detail).toMatch(/BLOCKED: conflicting verdicts/i);
+      // Guard against inversion: must NOT say "spawner errored"
+      expect(result.detail).not.toMatch(/spawner errored/i);
     } finally {
       cleanupTempRoster(rosterDir);
     }

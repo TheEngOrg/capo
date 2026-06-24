@@ -158,7 +158,8 @@ export async function runPlan(
 
         // Compute content hash for target_dir (if present on task).
         const target_dir = task.type === "AGENT" ? task.target_dir : undefined;
-        const content_hash = target_dir !== undefined ? await computeContentHash(target_dir) : null;
+        const hashResult = target_dir !== undefined ? await computeContentHash(target_dir) : null;
+        const content_hash = hashResult?.hash ?? null;
 
         const { seq, ts } = ledger.append({
           session_id: opts!.sessionId!,

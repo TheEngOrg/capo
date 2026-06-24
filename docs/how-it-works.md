@@ -2,14 +2,14 @@
 
 CAPO is a team of agents coordinated by one orchestrator, running inside your Claude Code session. This page explains the moving parts.
 
-## The dispatcher and Capo
+## The /teo skill and Capo
 
-The main Claude Code session acts as a **dispatcher**. Its only job is routing: it matches your `/teo` request and either handles a utility command directly or hands the work to Capo.
+The `/teo` skill is the entry point. When you invoke it, the skill routes your request to Capo via `Task()`. There is no intermediate dispatcher layer.
 
-**Capo** is the orchestrator. Capo does not write code. Capo classifies the request, scopes and sequences the work, and dispatches each piece to the right specialist. Every artifact — tests, code, specs, reviews, commits — is produced by a named specialist, never by Capo directly. Capo runs as a spawned subagent, not as the main session.
+**Capo** is the orchestrator. Capo does not write code. Capo classifies the request, scopes and sequences the work, and dispatches each piece to the right specialist via `Task()` directly. Every artifact — tests, code, specs, reviews, commits — is produced by a named specialist, never by Capo directly. Capo runs as a spawned subagent.
 
 ```
-You → /teo → Dispatcher → Capo → specialists (qa, dev, staff-engineer, …)
+You → /teo → Capo → specialists (qa, dev, staff-engineer, …)
 ```
 
 ## The CAD pipeline

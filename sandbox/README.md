@@ -64,12 +64,12 @@ PASS: all checks passed
 /teo fix the typo in sandbox/fixtures/broken-readme.md
 ```
 
-**Expected pass output:** Capo pipeline fires. The Dispatcher routes on the Tier-1 `/teo *` trigger. A MECHANICAL workstream is classified and dev agent edits `sandbox/fixtures/broken-readme.md`, replacing "teh" with "the". After the task completes:
+**Expected pass output:** Capo pipeline fires on the `/teo *` trigger. A MECHANICAL workstream is classified and dev agent edits `sandbox/fixtures/broken-readme.md`, replacing "teh" with "the". After the task completes:
 
 - `.claude/memory/pipeline/capo-result.json` exists
 - `sandbox/fixtures/broken-readme.md` no longer contains the string "teh "
 
-**On failure:** If `capo-result.json` is not written, the pipeline did not fire. Confirm the TEO plugin is installed (`claude plugin list`) and the Dispatcher CLAUDE.md is active in this session. Check `.claude/memory/traces/` for error output.
+**On failure:** If `capo-result.json` is not written, the pipeline did not fire. Confirm the TEO plugin is installed (`claude plugin list`) and the Capo agent is active (check `.claude/agents/capo.md` is present). Check `.claude/memory/traces/` for error output.
 
 ---
 

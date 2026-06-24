@@ -246,9 +246,27 @@ export async function runPlan(
         const wasTorn =
           result.overallStatus === "FAILED" &&
           result.steps.some((s) => s.status === "SKIPPED" && s.detail?.includes("plan abort"));
-        ledger.close({ task_count, pass, fail, skipped, tokens: 0, cost_usd: 0, torn: wasTorn });
+        const { seq: closeSeq, ts: closeTs } = ledger.close({
+          task_count,
+          pass,
+          fail,
+          skipped,
+          tokens: 0,
+          cost_usd: 0,
+          torn: wasTorn,
+        });
+        // Sign the CLOSE event (signer is always defined when ledger is defined).
+        result.closeSignature = signer!.sign({
+          plan_id: plan.plan_id,
+          task_id: null,
+          actor_id: "SYSTEM",
+          verdict: null,
+          ts: closeTs,
+          seq: closeSeq,
+          content_hash: null,
+        });
       } catch {
-        // Surface close failures as a signing error: audit trail is incomplete.
+        // Surface close/signing failures as a signing error: audit trail is incomplete.
         // result.signingErrors is always set at line 235 before this catch runs.
         result.signingErrors = result.signingErrors + 1;
       }

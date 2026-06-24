@@ -276,13 +276,17 @@ export class AppendOnlyLedger {
    * - The CLOSE event is always the last line in the file.
    *
    * @param summary - Token/cost/step-count rollup for the workflow.
+   * @returns The assigned `seq` (monotonically increasing sequence number) and `ts`
+   *   (ISO-8601 UTC timestamp) for the CLOSE event. Callers that need to sign the
+   *   CLOSE event (e.g. HmacSigner) must use these values to reproduce the canonical
+   *   payload. Existing callers that ignore the return value are unaffected.
    */
-  close(summary: WorkflowSummary): void {
+  close(summary: WorkflowSummary): { seq: number; ts: string } {
     if (this.closed) {
       throw new LedgerClosedError("Ledger is already closed — close() may only be called once.");
     }
 
-    this.append({
+    const result = this.append({
       session_id: this.session_id,
       workflow_id: this.session_id, // workflow_id defaults to session_id for the CLOSE event
       task_id: null,
@@ -303,6 +307,7 @@ export class AppendOnlyLedger {
     });
 
     this.closed = true;
+    return result;
   }
 
   // ---------------------------------------------------------------------------

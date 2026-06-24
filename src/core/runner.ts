@@ -95,6 +95,12 @@ export interface RunResult {
    * A non-zero value means the audit trail has gaps — the run itself is unaffected.
    */
   signingErrors?: number;
+  /**
+   * HMAC-SHA-256 hex signature over the CLOSE event payload.
+   * Present only on signed runs (sessionId provided) when the CLOSE event
+   * was signed successfully. Absent on unsigned runs or if CLOSE signing failed.
+   */
+  closeSignature?: string;
 }
 
 /**

@@ -209,6 +209,14 @@ describe("plugin.json boundary checks", () => {
       `version must match semver /^\\d+\\.\\d+\\.\\d+/ — found: "${version}"`
     ).toMatch(/^\d+\.\d+\.\d+/);
   });
+
+  it('B-03: version is "1.0.1" (current release — update on each release bump)', () => {
+    const version = manifest["version"] as string;
+    expect(
+      version,
+      `version must be "1.0.1" for this release — found: "${version}". Update this assertion when bumping the version.`
+    ).toBe("1.0.1");
+  });
 });
 
 // =============================================================================

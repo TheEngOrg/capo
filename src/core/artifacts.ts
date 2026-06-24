@@ -30,7 +30,6 @@ export function repairJson(raw: string): string {
       }
     } catch (e) {
       /* c8 ignore next 3 */
-      // c8 ignore next 3 — jsonrepair always produces valid JSON; SyntaxError here is unreachable in practice
       if (e instanceof SyntaxError) {
         // repaired result isn't valid JSON — that's fine, let caller handle
       } else {

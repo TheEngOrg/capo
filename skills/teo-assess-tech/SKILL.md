@@ -45,7 +45,7 @@ read:
   - .claude/memory/agent-product-decisions.json
   - .claude/memory/technical-standards.json
 
-write: .claude/memory/agent-mg-assess-tech-decisions.json
+write: .claude/memory/agent-teo-assess-tech-decisions.json
   workstream_id: <id>
   phase: analysis | evaluation | recommendation
   approaches_evaluated:

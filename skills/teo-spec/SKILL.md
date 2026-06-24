@@ -31,7 +31,7 @@ Your **first action** is to spawn product-owner, product-manager, and design. Do
 3. Designer: UX requirements, wireframes, accessibility
 4. [GATE] Spike Validation: If external dependencies exist, validate via spike
         ↓
-Write to memory → Hand off to /mg-build
+Write to memory → Hand off to /teo-build
 ```
 
 ## Memory Protocol
@@ -41,7 +41,7 @@ read:
   - .claude/memory/agent-leadership-decisions.json
   - .claude/memory/workstream-{id}-state.json
 
-write: .claude/memory/agent-mg-spec-decisions.json
+write: .claude/memory/agent-teo-spec-decisions.json
   workstream_id: <id>
   product_vision: <PO input>
   user_stories:
@@ -112,7 +112,7 @@ write: .claude/memory/agent-mg-spec-decisions.json
 ### Ready for Engineering
 Priority: {high|medium|low}
 External Dependencies Validated: {yes|no|n/a}
-Next: /mg-build
+Next: /teo-build
 ```
 
 ## Document Output

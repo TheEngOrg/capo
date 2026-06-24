@@ -29,7 +29,7 @@ Your **first action** is to spawn art-director for creative direction. Do not pr
 1. Art Director: Creative direction, brand constraints
 2. Designer: Wireframes, mockups, interaction specs
 3. Art Director: Review and approve
-4. Hand off to engineering or /frontend-design
+4. Hand off to engineering or dev
 ```
 
 ## Memory Protocol
@@ -88,7 +88,7 @@ When QA detects visual changes:
 - Contrast: Verified
 
 ### Status
-{APPROVED | Ready for /frontend-design | Changes needed}
+{APPROVED | Ready for dev | Changes needed}
 ```
 
 ## Brand Kit Mode

@@ -45,7 +45,7 @@ read:
   - .claude/memory/agent-leadership-decisions.json
 
 write: .claude/memory/refactor-{id}-status.json
-  agent_id: mg-refactor
+  agent_id: teo-refactor
   phase: characterization | refactoring | verification | review
   delegated_to: qa | dev | staff-engineer
   tests_baseline: {count before refactor}

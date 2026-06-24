@@ -45,7 +45,7 @@ read:
   - .claude/memory/agent-leadership-decisions.json
 
 write: .claude/memory/bug-{id}-status.json
-  agent_id: mg-debug
+  agent_id: teo-debug
   phase: reproduction | investigation | fixing | verification
   delegated_to: qa | dev | security-engineer
   root_cause: {description when identified}

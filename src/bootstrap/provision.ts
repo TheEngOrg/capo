@@ -41,7 +41,6 @@ export type ProvisionErrorKind =
 export type ProvisionResult =
   | { status: "ok"; warning?: string }
   | { status: "already_provisioned"; warning?: string }
-  | { status: "repaired"; warning?: string }
   | { status: "error"; kind: ProvisionErrorKind; reason: string };
 
 // ---------------------------------------------------------------------------

@@ -289,23 +289,6 @@ describe("invokeSkill() — boundary: non-error provision statuses proceed to sa
     expect(mockRunPlan).toHaveBeenCalledOnce();
   });
 
-  // Test 8: provision repaired — treated as success, sagePlan and runPlan called.
-  it("8. provision repaired (repairedFiles:['eng']) → sagePlan called, runPlan called, returns ok", async () => {
-    mockProvision.mockResolvedValue({
-      status: "repaired",
-      repairedFiles: ["eng"],
-    } satisfies ProvisionResult);
-
-    const adapter = new StubAdapter();
-    const sagePlanSpy = vi.spyOn(adapter, "sagePlan");
-
-    const result = await invokeSkill(makeOpts({ adapter }));
-
-    expect(result.status).toBe("ok");
-    expect(sagePlanSpy).toHaveBeenCalledOnce();
-    expect(mockRunPlan).toHaveBeenCalledOnce();
-  });
-
   // Test 9: runPlan returns overallStatus:'FAILED' → invokeSkill still returns
   // { status:'ok', result } with the FAILED result nested inside.
   // FAILED is NOT a separate discriminant on SkillResult — callers inspect result.overallStatus.

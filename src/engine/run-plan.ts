@@ -9,9 +9,11 @@
 //
 // LEDGER + SIGNER (WS-GO-01): when opts.sessionId is provided, each step result
 // is signed via HmacSigner and appended to an AppendOnlyLedger JSONL file at
-// <ledgerBaseDir>/ledger/<sessionId>.jsonl. Errors in ledger/signer operations
-// are swallowed — they never propagate to the RunResult. When sessionId is absent,
-// behavior is identical to pre-WS-GO-01 (zero-footprint, no filesystem writes).
+// <ledgerBaseDir>/ledger/<sessionId>.jsonl. Gate exceptions fail-closed (step
+// forced to FAILED). Errors in ledger/signer operations are swallowed — they
+// never propagate to the RunResult. However, signing failures are counted and
+// surfaced as RunResult.signingErrors. When sessionId is absent, behavior is
+// identical to pre-WS-GO-01 (zero-footprint, no filesystem writes).
 // =============================================================================
 
 import type { Plan, TEOTask } from "../core/plan.js";
@@ -133,10 +135,10 @@ export async function runPlan(
 
     // Signed run path: append to ledger and sign the verdict.
     if (ledger !== undefined && signer !== undefined) {
+      // Gate evaluation runs in its OWN try/catch — exceptions fail-closed.
+      // This block must NOT be inside the ledger try/catch.
+      // Gate can override adapter PASS → FAIL; never promotes FAILED → PASS.
       try {
-        // Evaluate gate inline (signed path only).
-        // Gate can override adapter PASS → FAIL; never promotes FAILED → PASS.
-        // Wrapped in the same try/catch as the ledger so gate errors are swallowed.
         const gateVerdict = await evaluateGateModule.evaluateGate(task, stepResult, runContext);
         if (gateVerdict === "FAIL" && stepResult.status !== "FAILED") {
           stepResult = {
@@ -145,6 +147,17 @@ export async function runPlan(
             detail: `gate override: gate returned FAIL; original adapter status: ${stepResult.status}${stepResult.detail ? "; " + stepResult.detail : ""}`,
           };
         }
+      } catch (gateErr) {
+        // Gate threw — fail-closed: force FAILED status.
+        stepResult = {
+          ...stepResult,
+          status: "FAILED",
+          detail: `gate exception: ${gateErr instanceof Error ? gateErr.message : String(gateErr)}`,
+        };
+      }
+
+      // Ledger/signer in their own try/catch — swallowed per design (audit trail is best-effort).
+      try {
         // Map StepResult.status to LedgerVerdict
         const verdictMap: Record<StepResult["status"], LedgerVerdict> = {
           PASS: "PASS",
@@ -217,6 +230,9 @@ export async function runPlan(
         step.signingStatus = "unsigned_by_design";
       }
     }
+
+    // Count steps where signing failed — surfaces audit trail gaps without halting.
+    result.signingErrors = result.steps.filter((s) => s.signingStatus === "signing_failed").length;
 
     // After all steps complete, close the ledger with the workflow summary.
     if (ledger !== undefined) {

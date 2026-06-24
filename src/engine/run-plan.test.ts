@@ -1073,199 +1073,6 @@ describe("runPlan() — signingStatus field (WS-GO-04)", () => {
 });
 
 // =============================================================================
-// WS-CRYPTO-02 — WorkstreamTree integration (passing, post-impl, CAD gate 2)
-//
-// runPlan() must:
-//   1. Accept backend?: Backend and workstreamBaseDir?: string in RunPlanOptions.
-//   2. Accept projectDir?: string in RunPlanOptions (defaults to process.cwd()).
-//   3. Allocate a WorkstreamTree handle at plan start using plan.project_id and
-//      plan.plan_id (sanitized to match SAFE_WS_ID_RE) as the wsId.
-//   4. Pass handle.cwd through AgentContext.cwd to every spawnAgent() call.
-//   5. Close the handle in a finally block — even when the adapter throws.
-//
-// Ordering: misuse → boundary → golden path
-// =============================================================================
-
-import { WorkstreamTree } from "../core/workstream-tree.js";
-
-describe("runPlan() — WS-CRYPTO-02: WorkstreamTree integration", () => {
-  let tmpWsBase: string; // injected workstreamBaseDir — never touches ~/.teo
-  let tmpProjectDir: string; // small synthetic project dir for sandbox tests
-
-  beforeEach(() => {
-    tmpWsBase = fs.mkdtempSync(path.join(os.tmpdir(), "teo-crypto02-wsbase-"));
-    tmpProjectDir = fs.mkdtempSync(path.join(os.tmpdir(), "teo-crypto02-proj-"));
-    // Seed the project dir with 1-2 real files so sandbox copy has content
-    fs.writeFileSync(path.join(tmpProjectDir, "main.ts"), "export const x = 1;\n");
-    fs.writeFileSync(path.join(tmpProjectDir, "README.md"), "# test\n");
-  });
-
-  afterEach(() => {
-    fs.rmSync(tmpWsBase, { recursive: true, force: true });
-    fs.rmSync(tmpProjectDir, { recursive: true, force: true });
-  });
-
-  // ---------------------------------------------------------------------------
-  // MISUSE
-  // ---------------------------------------------------------------------------
-
-  // WS-CRYPTO02-M1: backend: "none" (default behavior when explicitly set) —
-  // spawnAgent is called with AgentContext.cwd equal to projectDir.
-  // The "none" backend's handle.cwd IS the projectDir (shared tree, no copy).
-  it("WS-CRYPTO02-M1: backend 'none' — spawnAgent receives AgentContext.cwd equal to projectDir", async () => {
-    const task = makeAgentTask("crypto02-m1-task");
-    const plan = makePlan([task], { plan_id: "crypto02-m1", project_id: "proj-crypto02-m1" });
-    const adapter = makeMockAdapter();
-
-    await runPlan(plan, adapter, {
-      backend: "none",
-      projectDir: tmpProjectDir,
-      workstreamBaseDir: tmpWsBase,
-    });
-
-    expect(adapter.spawnAgent).toHaveBeenCalledTimes(1);
-    const [, ctx] = adapter.spawnAgent.mock.calls[0] as [TEOTask, AgentContext];
-    // "none" backend: cwd is the original projectDir (shared tree)
-    expect(ctx.cwd).toBe(tmpProjectDir);
-  });
-
-  // WS-CRYPTO02-M2: backend: "sandbox" — AgentContext.cwd is an isolated copy,
-  // not the original projectDir. The two paths must differ.
-  it("WS-CRYPTO02-M2: backend 'sandbox' — spawnAgent receives a cwd different from projectDir", async () => {
-    const task = makeAgentTask("crypto02-m2-task");
-    const plan = makePlan([task], { plan_id: "crypto02-m2", project_id: "proj-crypto02-m2" });
-    const adapter = makeMockAdapter();
-
-    await runPlan(plan, adapter, {
-      backend: "sandbox",
-      projectDir: tmpProjectDir,
-      workstreamBaseDir: tmpWsBase,
-    });
-
-    expect(adapter.spawnAgent).toHaveBeenCalledTimes(1);
-    const [, ctx] = adapter.spawnAgent.mock.calls[0] as [TEOTask, AgentContext];
-    // "sandbox" backend: cwd is an isolated copy — must NOT equal the original projectDir
-    expect(ctx.cwd).toBeDefined();
-    expect(ctx.cwd).not.toBe(tmpProjectDir);
-    // The sandbox dir must exist on disk
-    expect(fs.existsSync(ctx.cwd!)).toBe(true);
-  });
-
-  // ---------------------------------------------------------------------------
-  // BOUNDARY
-  // ---------------------------------------------------------------------------
-
-  // WS-CRYPTO02-B1: WorkstreamTree.close() is called in a finally block —
-  // even when the adapter throws. We spy on WorkstreamTree.prototype.close
-  // to verify it's called exactly once regardless of adapter outcome.
-  it("WS-CRYPTO02-B1: WorkstreamTree.close() is called in finally even when adapter throws", async () => {
-    const task = makeAgentTask("crypto02-b1-task");
-    const plan = makePlan([task], { plan_id: "crypto02-b1", project_id: "proj-crypto02-b1" });
-    const adapter = makeMockAdapter();
-    adapter.spawnAgent.mockRejectedValueOnce(new Error("adapter exploded"));
-
-    const closeSpy = vi.spyOn(WorkstreamTree.prototype, "close");
-
-    try {
-      const result = await runPlan(plan, adapter, {
-        backend: "none",
-        projectDir: tmpProjectDir,
-        workstreamBaseDir: tmpWsBase,
-      });
-      // runPlan must still resolve (not throw) — error is captured as FAILED step
-      expect(result.steps[0]?.status).toBe("FAILED");
-    } finally {
-      // close() must have been called once regardless of adapter throw
-      expect(closeSpy).toHaveBeenCalledTimes(1);
-      closeSpy.mockRestore();
-    }
-  });
-
-  // WS-CRYPTO02-B2: no backend in options (undefined) defaults to "none".
-  // AgentContext.cwd must equal projectDir — same result as M1.
-  it("WS-CRYPTO02-B2: no backend in options defaults to 'none' — cwd equals projectDir", async () => {
-    const task = makeAgentTask("crypto02-b2-task");
-    const plan = makePlan([task], { plan_id: "crypto02-b2", project_id: "proj-crypto02-b2" });
-    const adapter = makeMockAdapter();
-
-    // Deliberately omit backend — must default to "none"
-    await runPlan(plan, adapter, {
-      projectDir: tmpProjectDir,
-      workstreamBaseDir: tmpWsBase,
-    });
-
-    expect(adapter.spawnAgent).toHaveBeenCalledTimes(1);
-    const [, ctx] = adapter.spawnAgent.mock.calls[0] as [TEOTask, AgentContext];
-    expect(ctx.cwd).toBe(tmpProjectDir);
-  });
-
-  // ---------------------------------------------------------------------------
-  // GOLDEN PATH
-  // ---------------------------------------------------------------------------
-
-  // WS-CRYPTO02-G1: two concurrent tasks in "sandbox" backend both receive the
-  // SAME cwd. WorkstreamTree is allocated once per plan (not per task), so both
-  // tasks share the same isolated sandbox directory.
-  it("WS-CRYPTO02-G1: two tasks in 'sandbox' backend both see the same cwd (one allocation per plan)", async () => {
-    const taskA = makeAgentTask("crypto02-g1-a");
-    const taskB = makeAgentTask("crypto02-g1-b");
-    const plan = makePlan([taskA, taskB], {
-      plan_id: "crypto02-g1",
-      project_id: "proj-crypto02-g1",
-    });
-    const adapter = makeMockAdapter();
-
-    await runPlan(plan, adapter, {
-      backend: "sandbox",
-      projectDir: tmpProjectDir,
-      workstreamBaseDir: tmpWsBase,
-    });
-
-    expect(adapter.spawnAgent).toHaveBeenCalledTimes(2);
-    const [, ctxA] = adapter.spawnAgent.mock.calls[0] as [TEOTask, AgentContext];
-    const [, ctxB] = adapter.spawnAgent.mock.calls[1] as [TEOTask, AgentContext];
-
-    // Both tasks must see the SAME cwd — WorkstreamTree allocated once per plan
-    expect(ctxA.cwd).toBeDefined();
-    expect(ctxB.cwd).toBeDefined();
-    expect(ctxA.cwd).toBe(ctxB.cwd);
-    // And that cwd must not be the original projectDir (it's a sandbox copy)
-    expect(ctxA.cwd).not.toBe(tmpProjectDir);
-  });
-
-  // WS-CRYPTO02-G2: existing calls with NO WorkstreamTree options still work —
-  // backward compatibility. No cwd field required on older callers.
-  // spawnAgent must still be called and the plan must complete successfully.
-  it("WS-CRYPTO02-G2: existing callers with no backend/projectDir options still complete (backward compat)", async () => {
-    const task = makeAgentTask("crypto02-g2-task");
-    const plan = makePlan([task]);
-    const adapter = makeMockAdapter();
-
-    // No backend, no projectDir, no workstreamBaseDir — all omitted
-    const result = await runPlan(plan, adapter);
-
-    expect(result.overallStatus).toBe("PASS");
-    expect(result.steps).toHaveLength(1);
-    expect(result.steps[0]?.status).toBe("PASS");
-    expect(adapter.spawnAgent).toHaveBeenCalledTimes(1);
-  });
-
-  it("WS-CRYPTO02-B3: plan_id starting with underscore is sanitized to valid wsId (no throw)", async () => {
-    const task = makeAgentTask("crypto02-b3-task");
-    const plan = makePlan([task], { plan_id: "_underscore-plan" }); // starts with underscore
-    const adapter = makeMockAdapter();
-
-    // Must not throw — wsId sanitization must strip the leading underscore
-    const result = await runPlan(plan, adapter, {
-      workstreamBaseDir: tmpWsBase,
-      projectDir: tmpProjectDir,
-    });
-
-    expect(result.overallStatus).toBe("PASS");
-  });
-});
-
-// =============================================================================
 // WS-CRYPTO-01 — target_dir wired to content hash (signed path)
 //
 // Two bugs being fixed together:
@@ -1408,82 +1215,6 @@ describe("runPlan() — WS-CRYPTO-01: target_dir wired to content hash (signed p
     } finally {
       signSpy.mockRestore();
     }
-  });
-});
-
-// =============================================================================
-// BRANCH COVERAGE: run-plan.ts line 101 — `|| "plan"` fallback
-//
-// The sanitizedPlanId expression uses `|| "plan"` as a final fallback for when
-// the entire plan_id consists of non-alphanumeric, non-hyphen, non-underscore
-// characters (e.g. "!!!", "---", "@@@"). After all three .replace() calls, the
-// result is an empty string, so the `|| "plan"` branch fires.
-// =============================================================================
-
-describe('runPlan() — plan_id sanitization "plan" fallback (line 101)', () => {
-  let tmpWsBase: string;
-  let tmpProjectDir: string;
-
-  beforeEach(() => {
-    tmpWsBase = fs.mkdtempSync(path.join(os.tmpdir(), "teo-planid-fallback-"));
-    tmpProjectDir = fs.mkdtempSync(path.join(os.tmpdir(), "teo-planid-proj-"));
-  });
-
-  afterEach(() => {
-    fs.rmSync(tmpWsBase, { recursive: true, force: true });
-    fs.rmSync(tmpProjectDir, { recursive: true, force: true });
-  });
-
-  it('PLANID-FALLBACK-1: plan_id "!!!" (all non-alphanumeric) → sanitizes to "plan" fallback, runPlan succeeds', async () => {
-    // plan_id "!!!" → replace(/[^a-zA-Z0-9_-]/g, "-") → "---"
-    //               → replace(/^[^a-zA-Z0-9]+/, "")    → ""
-    //               → replace(/[^a-zA-Z0-9_-]+$/, "")  → ""
-    //               → || "plan"                         → "plan"
-    // WorkstreamTree must allocate wsId "plan-<random>" without throwing.
-    const task = makeAgentTask("fallback-task-1");
-    // Bypass PlanSchema validation (which requires valid plan_id format) by casting.
-    // We need to reach the sanitization logic inside runPlan(), not be rejected by validatePlan().
-    // Note: PlanSchema does not constrain plan_id format beyond being a string,
-    // so "!!!" will pass schema validation and reach sanitization.
-    const plan: Plan = {
-      plan_id: "!!!",
-      project_id: "proj-test",
-      created_at: "2026-06-18T00:00:00Z",
-      version: "1",
-      tasks: [task],
-    };
-    const adapter = makeMockAdapter();
-
-    // Must not throw — the "plan" fallback keeps wsId valid for WorkstreamTree
-    const result = await runPlan(plan, adapter, {
-      workstreamBaseDir: tmpWsBase,
-      projectDir: tmpProjectDir,
-    });
-
-    expect(result.overallStatus).toBe("PASS");
-    expect(result.steps).toHaveLength(1);
-    expect(result.steps[0]?.status).toBe("PASS");
-  });
-
-  it('PLANID-FALLBACK-2: plan_id "@@@" (all non-alphanumeric) → sanitizes to "plan" fallback, runPlan succeeds', async () => {
-    // Second variant to confirm the branch is hit regardless of the specific symbol.
-    const task = makeAgentTask("fallback-task-2");
-    const plan: Plan = {
-      plan_id: "@@@",
-      project_id: "proj-test",
-      created_at: "2026-06-18T00:00:00Z",
-      version: "1",
-      tasks: [task],
-    };
-    const adapter = makeMockAdapter();
-
-    const result = await runPlan(plan, adapter, {
-      workstreamBaseDir: tmpWsBase,
-      projectDir: tmpProjectDir,
-    });
-
-    expect(result.overallStatus).toBe("PASS");
-    expect(result.steps[0]?.status).toBe("PASS");
   });
 });
 
@@ -1952,22 +1683,18 @@ describe("WS-CLOSE-01 — ledger.close() failure increments signingErrors", () =
 
 describe("WS-SIGN-02 — CLOSE event signature in RunResult", () => {
   let tmpDir: string;
-  let tmpWsBase: string;
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "teo-sign02-"));
-    tmpWsBase = fs.mkdtempSync(path.join(os.tmpdir(), "teo-sign02-ws-"));
   });
 
   afterEach(() => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
-    fs.rmSync(tmpWsBase, { recursive: true, force: true });
   });
 
   const makeSignedOpts = (sessionId: string): RunPlanOptions => ({
     sessionId,
     ledgerBaseDir: tmpDir,
-    workstreamBaseDir: tmpWsBase,
   });
 
   // ---------------------------------------------------------------------------
@@ -2091,7 +1818,7 @@ describe("WS-SIGN-02 — CLOSE event signature in RunResult", () => {
     const adapter = makeMockAdapter();
 
     // No sessionId — unsigned path
-    const result = await runPlan(plan, adapter, { workstreamBaseDir: tmpWsBase });
+    const result = await runPlan(plan, adapter, {});
 
     expect(result.overallStatus).toBe("PASS");
     expect(result.steps).toHaveLength(1);

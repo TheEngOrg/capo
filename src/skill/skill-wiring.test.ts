@@ -1,27 +1,20 @@
 // =============================================================================
-// skill-wiring.test.ts — WS-SKILL-01 + WS-ISO-01 — gate-1 (ALL PASSING — WS-SKILL-01 + WS-ISO-01 implemented)
+// skill-wiring.test.ts — WS-SKILL-01 + WS-ISO-01 + WS-ISO-02 — gate-2 (ALL PASSING)
 //
 // Tests for RunPlanOptions wiring through invokeSkill().
 //
-// IMPLEMENTATION (WS-SKILL-01 + WS-ISO-01):
+// IMPLEMENTATION (WS-SKILL-01 + WS-ISO-01 + WS-ISO-02):
 //   - Auto-generates a UUID sessionId per invokeSkill() call
-//   - backend is UNCONDITIONALLY "none" unless caller explicitly passes opts.backend
-//     (WS-ISO-01 reverts the WS-SKILL-01 auto-detect heuristic that used target_dir)
-//   - Both are passed as RunPlanOptions (third argument) to runPlan()
-//   - SkillOptions exposes optional sessionId and backend overrides
+//   - sessionId is passed as RunPlanOptions (third argument) to runPlan()
+//   - SkillOptions exposes optional sessionId override
+//   - backend and WorkstreamTree removed (WS-ISO-02)
 //
 // TEST ORDERING: misuse → boundary → golden path → structural (ADR-064 policy)
 //
-// ALL TESTS PASS (WS-SKILL-01 + WS-ISO-01 implemented):
+// ALL TESTS PASS (WS-SKILL-01 + WS-ISO-01 + WS-ISO-02 implemented):
 //   - Test A: sessionId passed to runPlan as a non-empty UUID-format string
-//   - Test B: backend "none" even when plan has target_dir (unconditional)
-//   - Test B2: backend "none" in mixed plan with one target_dir task
-//   - Test C: backend "none" when no target_dir
-//   - Test C2: backend "none" for SCRIPT-only plan
 //   - Test D (ledger): sessionId satisfies AppendOnlyLedger construction constraints
-//   - Test D-iso: explicit opts.backend=undefined still "none"
 //   - Test E: SkillOptions.sessionId override flows through to runPlan
-//   - Test F: SkillOptions.backend override propagates to runPlan
 //   - Test R1: invokeSkill() returns { status:"ok" } on valid minimal plan
 //   - Test R2: invokeSkill() returns { status:"planning_error" } on sagePlan throw
 // =============================================================================
@@ -238,7 +231,7 @@ describe("WS-SKILL-01 — misuse: provision error still short-circuits before Ru
 // All tests pass post-WS-SKILL-01 + WS-ISO-01 implementation.
 // =============================================================================
 
-describe("WS-SKILL-01 + WS-ISO-01 — boundary: RunPlanOptions wiring (ALL PASSING post-WS-SKILL-01 + WS-ISO-01)", () => {
+describe("WS-SKILL-01 + WS-ISO-01 + WS-ISO-02 — boundary: RunPlanOptions wiring (ALL PASSING)", () => {
   // -------------------------------------------------------------------------
   // Test A — sessionId is passed to runPlan as a non-empty UUID-format string.
   // -------------------------------------------------------------------------
@@ -259,124 +252,6 @@ describe("WS-SKILL-01 + WS-ISO-01 — boundary: RunPlanOptions wiring (ALL PASSI
     expect(runOpts.sessionId).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
     );
-  });
-
-  // -------------------------------------------------------------------------
-  // Test B — backend is ALWAYS "none" regardless of target_dir presence.
-  //
-  // WS-ISO-01 DECISION: auto-detection reverted. The default is unconditionally
-  // "none" unless the caller explicitly passes opts.backend. target_dir in a
-  // plan task no longer influences the backend selection.
-  // -------------------------------------------------------------------------
-  it("B. backend is always 'none' regardless of target_dir in plan tasks", async () => {
-    await invokeSkill(makeOpts(PLAN_WITH_TARGET_DIR));
-
-    expect(mockRunPlan).toHaveBeenCalledOnce();
-    const callArgs = mockRunPlan.mock.calls[0]!;
-    // Third arg must exist
-    expect(callArgs).toHaveLength(3);
-    const runOpts = callArgs[2] as RunPlanOptions;
-    expect(runOpts.backend).toBe("none");
-  });
-
-  // -------------------------------------------------------------------------
-  // Test C — backend is "none" when NO task has target_dir.
-  //
-  // This already passed under the old auto-detect rule (no target_dir → "none").
-  // It continues to pass under the new unconditional rule (WS-ISO-01).
-  // -------------------------------------------------------------------------
-  it("C. backend is 'none' when no task has target_dir", async () => {
-    await invokeSkill(makeOpts(PLAN_WITHOUT_TARGET_DIR));
-
-    expect(mockRunPlan).toHaveBeenCalledOnce();
-    const callArgs = mockRunPlan.mock.calls[0]!;
-    expect(callArgs).toHaveLength(3);
-    const runOpts = callArgs[2] as RunPlanOptions;
-    expect(runOpts.backend).toBe("none");
-  });
-
-  // -------------------------------------------------------------------------
-  // Test C2 — backend is "none" for a SCRIPT-only plan (no AGENT tasks).
-  //
-  // SCRIPT tasks never have target_dir. This was already "none" under the old
-  // auto-detect rule and remains "none" under the new unconditional rule (WS-ISO-01).
-  // -------------------------------------------------------------------------
-  it("C2. backend is 'none' for a SCRIPT-only plan (no target_dir possible)", async () => {
-    await invokeSkill(makeOpts(PLAN_SCRIPT_ONLY));
-
-    expect(mockRunPlan).toHaveBeenCalledOnce();
-    const callArgs = mockRunPlan.mock.calls[0]!;
-    expect(callArgs).toHaveLength(3);
-    const runOpts = callArgs[2] as RunPlanOptions;
-    expect(runOpts.backend).toBe("none");
-  });
-
-  // -------------------------------------------------------------------------
-  // Test B2 — MIXED plan: backend is STILL "none" even when only one of two
-  // tasks has target_dir.
-  //
-  // WS-ISO-01 DECISION: the old "any AGENT with target_dir → sandbox" heuristic
-  // is removed. Mixed plans with some target_dir tasks are no longer treated
-  // differently from uniform plans. Backend is unconditionally "none".
-  // -------------------------------------------------------------------------
-  it("B2. backend is 'none' in a mixed plan where only one of two tasks has target_dir", async () => {
-    const mixedPlan: Plan = {
-      plan_id: "plan-mixed",
-      project_id: "test-project",
-      created_at: "2026-06-23T00:00:00.000Z",
-      version: "1",
-      tasks: [
-        {
-          id: "task-no-target",
-          type: "AGENT",
-          agent_id: "eng",
-          prompt: "review",
-          // no target_dir
-          needs: [],
-          gates: [],
-        },
-        {
-          id: "task-with-target",
-          type: "AGENT",
-          agent_id: "qa",
-          prompt: "write tests",
-          target_dir: "/tmp/workdir",
-          needs: ["task-no-target"],
-          gates: [],
-        },
-      ],
-    };
-
-    await invokeSkill(makeOpts(mixedPlan));
-
-    expect(mockRunPlan).toHaveBeenCalledOnce();
-    const callArgs = mockRunPlan.mock.calls[0]!;
-    expect(callArgs).toHaveLength(3);
-    const runOpts = callArgs[2] as RunPlanOptions;
-    expect(runOpts.backend).toBe("none");
-  });
-
-  // -------------------------------------------------------------------------
-  // Test D-iso — backend is "none" even when opts.backend is explicitly undefined.
-  //
-  // WS-ISO-01 DECISION: explicit `undefined` must not trigger sandbox.
-  // `opts.backend ?? "none"` treats undefined as a missing value and falls
-  // through to "none". This test rules out any implementation that checks
-  // `opts.backend === undefined` as a sentinel to re-enable auto-detection.
-  // -------------------------------------------------------------------------
-  it("D-iso. backend is 'none' even when opts.backend is explicitly undefined (explicit undefined does not trigger sandbox)", async () => {
-    // PLAN_WITH_TARGET_DIR has an AGENT task with target_dir set.
-    // Under the old rule this would have returned "sandbox".
-    // Passing opts.backend = undefined must still produce "none".
-    const opts = makeOpts(PLAN_WITH_TARGET_DIR, { backend: undefined } as Partial<SkillOptions>);
-
-    await invokeSkill(opts);
-
-    expect(mockRunPlan).toHaveBeenCalledOnce();
-    const callArgs = mockRunPlan.mock.calls[0]!;
-    expect(callArgs).toHaveLength(3);
-    const runOpts = callArgs[2] as RunPlanOptions;
-    expect(runOpts.backend).toBe("none");
   });
 
   // -------------------------------------------------------------------------
@@ -436,7 +311,7 @@ describe("WS-SKILL-01 + WS-ISO-01 — boundary: RunPlanOptions wiring (ALL PASSI
 // Both fields are present post-WS-SKILL-01 + WS-ISO-01.
 // =============================================================================
 
-describe("WS-SKILL-01 — structural: SkillOptions must accept sessionId and backend overrides", () => {
+describe("WS-SKILL-01 — structural: SkillOptions must accept sessionId override", () => {
   // -------------------------------------------------------------------------
   // Test E — caller-provided sessionId in SkillOptions overrides the auto-UUID.
   //
@@ -458,32 +333,6 @@ describe("WS-SKILL-01 — structural: SkillOptions must accept sessionId and bac
     expect(callArgs).toHaveLength(3);
     const runOpts = callArgs[2] as RunPlanOptions;
     expect(runOpts.sessionId).toBe(customSessionId);
-  });
-
-  // -------------------------------------------------------------------------
-  // Test F — caller-provided backend in SkillOptions overrides the default "none".
-  //
-  // SkillOptions has an optional backend field. When provided, it takes
-  // precedence over the default "none" value.
-  //
-  // Example: caller may explicitly set "none" even if plan has a target_dir
-  // agent task (the default is already "none", but explicit opts.backend
-  // propagates through regardless).
-  //
-  // PASSES: SkillOptions.backend? exists and explicit value propagates to runPlan.
-  // -------------------------------------------------------------------------
-  it("F. caller-provided SkillOptions.backend overrides default 'none' (explicit opts.backend propagates)", async () => {
-    // PLAN_WITH_TARGET_DIR has a target_dir task; caller explicitly passes backend: "none"
-    // confirming that explicit opts.backend propagates to runPlan unchanged.
-    const opts = makeOpts(PLAN_WITH_TARGET_DIR, { backend: "none" } as Partial<SkillOptions>);
-
-    await invokeSkill(opts);
-
-    expect(mockRunPlan).toHaveBeenCalledOnce();
-    const callArgs = mockRunPlan.mock.calls[0]!;
-    expect(callArgs).toHaveLength(3);
-    const runOpts = callArgs[2] as RunPlanOptions;
-    expect(runOpts.backend).toBe("none");
   });
 });
 

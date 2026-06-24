@@ -190,17 +190,3 @@ export const DEMO_11_PQ03_CAPO_REJECTION: unknown = {
     },
   ],
 };
-
-// ---------------------------------------------------------------------------
-// Demo 12: WorkstreamTree none-backend isolation
-// Allocates and closes a "none" backend worktree, verifying lockfile goes to
-// temp dir and never touches the project dir or real ~/.teo.
-// This demo runs validatePlan + WorkstreamTree only (no full pipeline run).
-// ---------------------------------------------------------------------------
-export const DEMO_12_WORKTREE_NONE: Plan = {
-  plan_id: "demo-12-worktree-none",
-  project_id: "golden-harness",
-  created_at: "2026-06-18T00:00:00.000Z",
-  version: "1",
-  tasks: [scriptTask("ws-task-a"), scriptTask("ws-task-b", ["ws-task-a"])],
-};

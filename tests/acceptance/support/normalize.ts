@@ -4,7 +4,7 @@
 // Golden snapshots must be stable across runs. These fields vary per run:
 //   - event_id (UUID v4 — random)
 //   - ts (ISO-8601 timestamp — current time)
-//   - detail.timestamp (registry timestamps in workstream-tree records)
+//   - detail.timestamp (registry timestamps in records)
 //
 // HMAC signatures are not in the ledger events themselves; they are in
 // DemoResult.signatures. We normalize those separately to a shape assertion

@@ -7,6 +7,9 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   test: {
+    // Exclude compiled output from test discovery — vitest would otherwise pick up
+    // *.spec.js files in dist/ (spec files are not excluded by tsconfig).
+    exclude: ["dist/**", "node_modules/**"],
     // WS-CORE-09: Block all outbound network calls globally.
     // The no-network setup file monkey-patches http/https/fetch so any live-model
     // call throws immediately. Zero outbound HTTP across the full harness run.
@@ -45,13 +48,6 @@ export default defineConfig({
         // Gap found during WS-CORE-09 integration: threshold was missing despite
         // full coverage existing. Added per WS-CORE-08 fold-in mandate.
         "src/core/validate.ts": {
-          lines: 100,
-          functions: 100,
-          branches: 100,
-          statements: 100,
-        },
-        // WS-CORE-07: workstream-tree.ts is critical-path — isolation backend.
-        "src/core/workstream-tree.ts": {
           lines: 100,
           functions: 100,
           branches: 100,

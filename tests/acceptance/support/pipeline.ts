@@ -1,15 +1,14 @@
 // =============================================================================
 // pipeline.ts — End-to-end pipeline runner for golden harness demos
 //
-// Wires all 8 deterministic-core modules:
+// Wires the deterministic-core modules:
 //   validatePlan → TopologicalRunner → evaluateGate → AppendOnlyLedger → HmacSigner
-//   + WorkstreamTree (none backend, temp baseDir)
 //
 // ZERO live-model calls. All demos use SCRIPT tasks with an injected
 // CommandRunner stub — no real subprocess is spawned unless the scenario
 // explicitly opts into trivial commands (true/false). Default: stub runner.
 //
-// All temp state (ledger, keyring, worktrees) goes under os.tmpdir()/<uuid>.
+// All temp state (ledger, keyring) goes under os.tmpdir()/<uuid>.
 // NEVER writes to ~/.teo/ or the project dir.
 // =============================================================================
 
@@ -29,7 +28,6 @@ import {
 } from "../../../src/core/verification.js";
 import { AppendOnlyLedger, type LedgerEvent } from "../../../src/core/ledger.js";
 import { HmacSigner, type SignPayload } from "../../../src/core/sign.js";
-import { WorkstreamTree } from "../../../src/core/workstream-tree.js";
 import type { ValidationResult } from "../../../src/core/validate.js";
 
 // ---------------------------------------------------------------------------
@@ -183,16 +181,6 @@ export async function runDemo(options: DemoOptions): Promise<DemoResult> {
     // Signer: inject tmpDir as baseDir so keyring goes to tmpDir/keyring/
     const signer = new HmacSigner({ baseDir: tmpDir });
 
-    // WorkstreamTree: none backend, inject tmpDir as baseDir
-    const tree = new WorkstreamTree({
-      projectId: plan.project_id,
-      projectDir: tmpDir, // "none" backend just returns projectDir as cwd
-      baseDir: tmpDir,
-    });
-
-    // Allocate a workstream (none backend — no real git/copy needed)
-    const handle = await tree.allocate(sessionId, "none");
-
     // Signed verdicts accumulator
     const signedVerdicts: SignedVerdict[] = [];
 
@@ -225,7 +213,7 @@ export async function runDemo(options: DemoOptions): Promise<DemoResult> {
         commandRunner
       );
 
-      const verResult = await mechanism.verify(handle.cwd, { plan_id: plan.plan_id });
+      const verResult = await mechanism.verify(process.cwd(), { plan_id: plan.plan_id });
       const gateVerdict = evaluateGate(verResult);
 
       // Map gate verdict to step status
@@ -377,9 +365,6 @@ export async function runDemo(options: DemoOptions): Promise<DemoResult> {
     // 10. Read final events from JSONL
     const finalLines = fs.readFileSync(ledgerFilePath, "utf8").trim().split("\n").filter(Boolean);
     const events: LedgerEvent[] = finalLines.map((l) => JSON.parse(l) as LedgerEvent);
-
-    // 11. Close the workstream tree handle
-    await tree.close(sessionId);
 
     return {
       scenarioId,

@@ -1815,6 +1815,120 @@ describe("WS-GATE-01 — gate exception fail-closed", () => {
 });
 
 // =============================================================================
+// WS-CLOSE-01 — ledger.close() failure must increment signingErrors
+//
+// Bug: in run-plan.ts, `result.signingErrors` is computed BEFORE `ledger.close()`
+// runs. When `close()` throws, the catch block swallows the error and the
+// caller sees no record of it — the audit trail is silently incomplete.
+//
+// Fix (Option A, preferred): when `ledger.close()` throws, increment
+// `result.signingErrors` (treat close failure as an additional audit-trail error).
+//
+// These tests MUST FAIL against the current implementation:
+//   - CLOSE-01-A: close throws, but signingErrors stays 0 (bug: not incremented)
+//   - CLOSE-01-B: append throws once + close throws, but signingErrors stays 1 (bug: close not counted)
+//
+// CLOSE-01-C is explicitly NOT added here — AUDIT-01-C already asserts that a
+// clean close keeps signingErrors === 0, which is the regression guard required.
+//
+// Ordering: misuse → boundary → (golden path covered by AUDIT-01-C)
+// =============================================================================
+
+describe("WS-CLOSE-01 — ledger.close() failure increments signingErrors", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "teo-close01-"));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  const makeSignedOpts = (sessionId: string): RunPlanOptions => ({
+    sessionId,
+    ledgerBaseDir: tmpDir,
+  });
+
+  // CLOSE-01-A (misuse): ledger.close() throws → signingErrors is incremented
+  //
+  // Current behavior (BUG): close() throw is swallowed; signingErrors was already
+  // set before close() ran and remains 0.
+  // Expected behavior (FIX): close() throw must increment signingErrors to 1.
+  //
+  // The run has one PASS task with a clean per-step append — the only failure is
+  // the close() call. After the fix, signingErrors must be exactly 1.
+  // overallStatus must remain PASS — close failure does not corrupt step outcomes.
+  it("CLOSE-01-A (misuse): ledger.close() throws → signingErrors is incremented to 1", async () => {
+    const sessionId = "close01-a-close-throws";
+    const task = makeAgentTask("close01-a-task");
+    const plan = makePlan([task]);
+    const adapter = makeMockAdapter();
+    // adapter returns PASS (default); per-step append succeeds
+
+    const closeSpy = vi.spyOn(AppendOnlyLedger.prototype, "close").mockImplementation(() => {
+      throw new Error("close-fail");
+    });
+
+    try {
+      const result = await runPlan(plan, adapter, makeSignedOpts(sessionId));
+
+      // Step ran and PASSED — close failure must not corrupt step outcomes
+      expect(result.steps).toHaveLength(1);
+      expect(result.steps[0]!.status).toBe("PASS");
+      expect(result.overallStatus).toBe("PASS");
+
+      // PRIMARY ASSERTION: close() threw → signingErrors must be 1.
+      // FAILS today: signingErrors is set before close() runs and stays 0.
+      expect(result.signingErrors).toBe(1);
+    } finally {
+      closeSpy.mockRestore();
+    }
+  });
+
+  // CLOSE-01-B (boundary): ledger.close() throws + one per-step append fails →
+  // signingErrors is 2 (one per-step failure + one close failure)
+  //
+  // Current behavior (BUG): close() throw is swallowed; only the per-step append
+  // failure is counted — signingErrors stays 1.
+  // Expected behavior (FIX): signingErrors must be 2 after the fix.
+  it("CLOSE-01-B (boundary): per-step append failure + close() throws → signingErrors === 2", async () => {
+    const sessionId = "close01-b-append-and-close-throw";
+    const task = makeAgentTask("close01-b-task");
+    const plan = makePlan([task]);
+    const adapter = makeMockAdapter();
+    // adapter returns PASS (default)
+
+    // Spy on append() — throw on the first (and only) call → one per-step signing_failed
+    const appendSpy = vi.spyOn(AppendOnlyLedger.prototype, "append").mockImplementation(() => {
+      throw new Error("append-fail");
+    });
+
+    // Spy on close() — always throw → one close failure
+    const closeSpy = vi.spyOn(AppendOnlyLedger.prototype, "close").mockImplementation(() => {
+      throw new Error("close-fail");
+    });
+
+    try {
+      const result = await runPlan(plan, adapter, makeSignedOpts(sessionId));
+
+      // Step ran and PASSED — append failure must not corrupt step status
+      expect(result.steps).toHaveLength(1);
+      expect(result.steps[0]!.status).toBe("PASS");
+      // Per-step signing must have failed
+      expect(result.steps[0]!.signingStatus).toBe("signing_failed");
+
+      // PRIMARY ASSERTION: 1 per-step append failure + 1 close failure = 2.
+      // FAILS today: signingErrors is computed before close() runs → stays 1.
+      expect(result.signingErrors).toBe(2);
+    } finally {
+      appendSpy.mockRestore();
+      closeSpy.mockRestore();
+    }
+  });
+});
+
+// =============================================================================
 // WS-AUDIT-01 — signing failure surfaced in RunResult
 //
 // Finding 4 (MEDIUM) from audit-05: when ledger.append() or signer.sign() throw,

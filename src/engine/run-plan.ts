@@ -248,7 +248,9 @@ export async function runPlan(
           result.steps.some((s) => s.status === "SKIPPED" && s.detail?.includes("plan abort"));
         ledger.close({ task_count, pass, fail, skipped, tokens: 0, cost_usd: 0, torn: wasTorn });
       } catch {
-        // Swallow close errors — never propagate to RunResult.
+        // Surface close failures as a signing error: audit trail is incomplete.
+        // result.signingErrors is always set at line 235 before this catch runs.
+        result.signingErrors = result.signingErrors + 1;
       }
     }
   } finally {

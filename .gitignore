@@ -40,6 +40,12 @@ docs/spikes/SPIKE-002/sandbox/node_modules/
 /oq3-probe
 /oq3-case-*
 
+# Diagnostic probes — throwaway scripts + logs, not deliverables
+/probe/
+
+# Repo snapshot dumps — derivable, generated on demand
+/repomix-output.xml
+
 # Demo home — contains an HMAC signing key; never commit a key to a repo.
 # Regenerate locally with: TEO_HOME=demo/.teo-home npx tsx demo/build-plans.ts
 demo/.teo-home/

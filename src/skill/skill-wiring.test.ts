@@ -50,11 +50,16 @@ vi.mock("../engine/run-plan.js", () => ({
 // Note: runPlan.ts constructs AppendOnlyLedger internally; since runPlan is mocked
 // at the module level, the real AppendOnlyLedger is NOT called on the runPlan path.
 // Test D instead uses a direct import spy pattern — see its body for the approach.
+//
+// resolveDefaultLedgerBase is also exported so skill.ts can call it without FS access.
+// Return a known writable path so the probeWritable() pre-flight (when sessionId is
+// provided) doesn't fail during tests that supply a sessionId override.
 vi.mock("../core/ledger.js", () => ({
   AppendOnlyLedger: vi.fn().mockImplementation(() => ({
     append: vi.fn(),
     close: vi.fn(),
   })),
+  resolveDefaultLedgerBase: vi.fn().mockReturnValue("/tmp"),
 }));
 
 // ---------------------------------------------------------------------------

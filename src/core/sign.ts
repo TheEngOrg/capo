@@ -68,9 +68,9 @@
 
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
-import * as os from "node:os";
 import * as path from "node:path";
 import type { LedgerVerdict } from "./ledger.js";
+import { resolveDefaultLedgerBase } from "./ledger.js";
 
 // ---------------------------------------------------------------------------
 // Public error classes
@@ -189,9 +189,8 @@ export class HmacSigner {
       );
     }
 
-    // Resolve the base directory. Production: os.homedir()/.teo/. Tests: injected.
-    /* c8 ignore next */
-    const resolvedBase = options.baseDir ?? path.join(os.homedir(), ".teo");
+    // Resolve the base directory. Production: resolveDefaultLedgerBase(). Tests: injected.
+    const resolvedBase = options.baseDir ?? resolveDefaultLedgerBase();
     const keyringDir = path.join(resolvedBase, "keyring");
     const keyPath = path.join(keyringDir, `${keyring_id}.key`);
 

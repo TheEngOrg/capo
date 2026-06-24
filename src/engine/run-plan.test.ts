@@ -1600,3 +1600,438 @@ describe("runPlan() — gate override detail: both ternary branches at line 145"
     }
   });
 });
+
+// =============================================================================
+// WS-GATE-01 — gate exception fail-closed
+//
+// Finding 3 (HIGH) from audit-05: evaluateGate() is called INSIDE the
+// ledger/signer try/catch. If evaluateGate() throws, the catch block only sets
+// signingStatus = "signing_failed" and leaves stepResult.status unchanged.
+// If the adapter returned "PASS" before the gate crashed, the step continues
+// as "PASS" — a throwing gate fails OPEN.
+//
+// Required fix: evaluateGate() must run in its own try/catch OUTSIDE the
+// ledger/signer block. If it throws, status must be forced to "FAILED"
+// (fail-closed). The ledger/signer block then runs after and covers signing.
+//
+// Ordering: misuse → boundary → golden path (ADR-064 policy)
+//
+// These tests FAIL against the current implementation (gate throw is swallowed
+// inside the ledger catch, leaving status as "PASS") and PASS after dev applies
+// the fix described in the WS-GATE-01 spec.
+// =============================================================================
+
+describe("WS-GATE-01 — gate exception fail-closed", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "teo-gate01-failclosed-"));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  const makeSignedOpts = (sessionId: string): RunPlanOptions => ({
+    sessionId,
+    ledgerBaseDir: tmpDir,
+  });
+
+  // ---------------------------------------------------------------------------
+  // MISUSE — gate exception paths (these expose the fail-open bug)
+  // ---------------------------------------------------------------------------
+
+  // GATE-01-A: evaluateGate throws an Error → step must be FAILED (fail-closed)
+  //
+  // Current behavior (BUG): the throw is caught by the ledger try/catch, only
+  // signingStatus is set to "signing_failed", and status remains "PASS".
+  // Expected behavior (FIX): gate exception forces status to "FAILED" and detail
+  // must contain "gate exception" so operators can distinguish it from a genuine
+  // adapter failure.
+  it("GATE-01-A (misuse): evaluateGate throws → step forced to FAILED (fail-closed)", async () => {
+    const sessionId = "gate01-a-throw-error";
+    const task = makeAgentTask("gate01-a-task");
+    const plan = makePlan([task]);
+    const adapter = makeMockAdapter();
+    // adapter returns PASS — the gate exception is the sole cause of failure
+
+    const evaluateGateModule = await import("./evaluate-gate.js");
+    const gateSpy = vi
+      .spyOn(evaluateGateModule, "evaluateGate")
+      .mockRejectedValueOnce(new Error("gate internal error"));
+
+    try {
+      const result = await runPlan(plan, adapter, makeSignedOpts(sessionId));
+
+      expect(result.steps).toHaveLength(1);
+      const step = result.steps[0]!;
+
+      // Fail-closed: a throwing gate must force the step to FAILED, not leave it PASS
+      expect(step.status).toBe("FAILED");
+
+      // Detail must signal that the failure was caused by a gate exception, not a
+      // genuine adapter failure — operators need to distinguish these for triage
+      expect(step.detail).toMatch(/gate exception/i);
+    } finally {
+      gateSpy.mockRestore();
+    }
+  });
+
+  // GATE-01-B: evaluateGate throws a non-Error (plain string) → still fail-closed
+  //
+  // LLM agents sometimes throw plain strings rather than Error objects. The
+  // fail-closed logic must handle both forms. `String(gateErr)` in the catch
+  // branch covers this; verify the step is FAILED and detail still matches.
+  it("GATE-01-B (misuse): evaluateGate throws non-Error (string) → step forced to FAILED (fail-closed)", async () => {
+    const sessionId = "gate01-b-throw-string";
+    const task = makeAgentTask("gate01-b-task");
+    const plan = makePlan([task]);
+    const adapter = makeMockAdapter();
+
+    const evaluateGateModule = await import("./evaluate-gate.js");
+    const gateSpy = vi
+      .spyOn(evaluateGateModule, "evaluateGate")
+
+      .mockRejectedValueOnce("crash" as unknown as Error);
+
+    try {
+      const result = await runPlan(plan, adapter, makeSignedOpts(sessionId));
+
+      expect(result.steps).toHaveLength(1);
+      const step = result.steps[0]!;
+
+      // Must still fail-close even when the thrown value is not an Error instance
+      expect(step.status).toBe("FAILED");
+      expect(step.detail).toMatch(/gate exception/i);
+    } finally {
+      gateSpy.mockRestore();
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // BOUNDARY — signing still attempted after gate fail-close
+  // ---------------------------------------------------------------------------
+
+  // GATE-01-C: evaluateGate throws → signing path is still attempted
+  //
+  // After the gate fail-close, the ledger/signer block should still run so the
+  // failure is recorded in the audit trail. signingStatus must be "signed" or
+  // "signing_failed" — never "unsigned_by_design" (which is the unsigned path).
+  it("GATE-01-C (boundary): evaluateGate throws → signingStatus reflects signing attempt (not unsigned_by_design)", async () => {
+    const sessionId = "gate01-c-signing-attempt";
+    const task = makeAgentTask("gate01-c-task");
+    const plan = makePlan([task]);
+    const adapter = makeMockAdapter();
+
+    const evaluateGateModule = await import("./evaluate-gate.js");
+    const gateSpy = vi
+      .spyOn(evaluateGateModule, "evaluateGate")
+      .mockRejectedValueOnce(new Error("gate internal error"));
+
+    try {
+      const result = await runPlan(plan, adapter, makeSignedOpts(sessionId));
+
+      expect(result.steps).toHaveLength(1);
+      const step = result.steps[0]!;
+
+      // Status must be FAILED (fail-closed — covered by GATE-01-A)
+      expect(step.status).toBe("FAILED");
+
+      // Signing must have been attempted: "signed" if ledger succeeded, "signing_failed" if not.
+      // "unsigned_by_design" is ONLY for the no-sessionId path — never valid here.
+      expect(step.signingStatus).not.toBe("unsigned_by_design");
+      expect(["signed", "signing_failed"]).toContain(step.signingStatus);
+    } finally {
+      gateSpy.mockRestore();
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // GOLDEN PATH REGRESSION — normal FAIL and normal PASS paths unchanged
+  // ---------------------------------------------------------------------------
+
+  // GATE-01-D: evaluateGate returns FAIL normally → status is FAILED (existing behavior)
+  //
+  // The restructuring must not break the normal gate-FAIL → step-FAILED path.
+  // This is a direct regression guard on the pre-existing SEC01-S3 behavior.
+  it("GATE-01-D (golden path regression): evaluateGate returns FAIL normally → status is FAILED with 'gate override' detail", async () => {
+    const sessionId = "gate01-d-normal-fail";
+    const task = makeAgentTask("gate01-d-task");
+    const plan = makePlan([task]);
+    const adapter = makeMockAdapter();
+    // adapter returns PASS; gate returns FAIL (normal override, no throw)
+
+    const evaluateGateModule = await import("./evaluate-gate.js");
+    const gateSpy = vi
+      .spyOn(evaluateGateModule, "evaluateGate")
+      .mockResolvedValueOnce("FAIL" as import("./evaluate-gate.js").GateVerdict);
+
+    try {
+      const result = await runPlan(plan, adapter, makeSignedOpts(sessionId));
+
+      expect(result.steps).toHaveLength(1);
+      const step = result.steps[0]!;
+
+      // Normal gate FAIL override must still produce FAILED status
+      expect(step.status).toBe("FAILED");
+
+      // Normal override uses "gate override" phrasing, not "gate exception"
+      expect(step.detail).toMatch(/gate override/i);
+      expect(result.overallStatus).toBe("FAILED");
+    } finally {
+      gateSpy.mockRestore();
+    }
+  });
+
+  // GATE-01-E: evaluateGate returns PASS → status remains PASS (existing behavior)
+  //
+  // When adapter and gate both agree on PASS, the step must remain PASS.
+  // Restructuring the try/catch must not disturb this golden path.
+  it("GATE-01-E (golden path regression): evaluateGate returns PASS → status remains PASS", async () => {
+    const sessionId = "gate01-e-normal-pass";
+    const task = makeAgentTask("gate01-e-task");
+    const plan = makePlan([task]);
+    const adapter = makeMockAdapter();
+    // adapter returns PASS; gate returns PASS — no override, no exception
+
+    const evaluateGateModule = await import("./evaluate-gate.js");
+    const gateSpy = vi
+      .spyOn(evaluateGateModule, "evaluateGate")
+      .mockResolvedValueOnce("PASS" as import("./evaluate-gate.js").GateVerdict);
+
+    try {
+      const result = await runPlan(plan, adapter, makeSignedOpts(sessionId));
+
+      expect(result.steps).toHaveLength(1);
+      const step = result.steps[0]!;
+
+      // Both agree on PASS — nothing to override
+      expect(step.status).toBe("PASS");
+      expect(result.overallStatus).toBe("PASS");
+    } finally {
+      gateSpy.mockRestore();
+    }
+  });
+});
+
+// =============================================================================
+// WS-AUDIT-01 — signing failure surfaced in RunResult
+//
+// Finding 4 (MEDIUM) from audit-05: when ledger.append() or signer.sign() throw,
+// the catch block sets signingStatus = "signing_failed" on the step but never
+// surfaces this at the RunResult level. A caller inspecting only RunResult cannot
+// know signing failed without iterating every step.
+//
+// Policy: audit trail is best-effort — a signing failure must NOT halt the run.
+// However, the count of signing failures MUST be surfaced as RunResult.signingErrors
+// so callers can detect partial audit-trail corruption without inspecting each step.
+//
+// The fix (dev will implement):
+//   1. Add optional `signingErrors?: number` to RunResult in src/core/runner.ts
+//   2. After all steps complete in runPlan(), count steps where
+//      signingStatus === "signing_failed" and populate runResult.signingErrors
+//   3. The run still completes normally — overallStatus is NOT forced to FAILED
+//
+// These tests MUST FAIL against the current implementation (RunResult has no
+// signingErrors field) and PASS after dev applies the fix.
+//
+// Ordering: misuse → boundary → golden path (ADR-064 policy)
+// =============================================================================
+
+describe("WS-AUDIT-01 — signing failure surfaced in RunResult", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "teo-audit01-signerr-"));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  const makeSignedOpts = (sessionId: string): RunPlanOptions => ({
+    sessionId,
+    ledgerBaseDir: tmpDir,
+  });
+
+  // ---------------------------------------------------------------------------
+  // MISUSE — paths where signing fails (these expose the missing RunResult field)
+  // ---------------------------------------------------------------------------
+
+  // AUDIT-01-A (misuse): ledger.append() throws → step signingStatus is "signing_failed"
+  //
+  // Regression guard on existing per-step behavior: the catch block must continue
+  // to set signingStatus = "signing_failed" after the fix. The step's execution
+  // status must be unchanged — swallowing is intentional, the adapter result
+  // (PASS or FAILED) must survive the signing failure.
+  //
+  // This test exercises the EXISTING behavior that must remain intact. It will
+  // PASS today against the current impl (signingStatus is already set) but is
+  // included here as a regression guard for the WS-AUDIT-01 refactor.
+  it("AUDIT-01-A (misuse): ledger.append() throws → step signingStatus is 'signing_failed', step.status unchanged", async () => {
+    const sessionId = "audit01-a-append-throw";
+    const task = makeAgentTask("audit01-a-task");
+    const plan = makePlan([task]);
+    const adapter = makeMockAdapter();
+    // adapter returns PASS — the signing failure must not corrupt the step status
+
+    const appendSpy = vi.spyOn(AppendOnlyLedger.prototype, "append").mockImplementation(() => {
+      throw new Error("simulated ledger I/O failure");
+    });
+
+    try {
+      const result = await runPlan(plan, adapter, makeSignedOpts(sessionId));
+
+      expect(result.steps).toHaveLength(1);
+      const step = result.steps[0]!;
+
+      // Signing failed — per-step flag must reflect this
+      expect(step.signingStatus).toBe("signing_failed");
+
+      // Swallow is intentional: adapter returned PASS, that must be preserved
+      // even though signing failed. The step status must NOT be forced to FAILED.
+      expect(step.status).toBe("PASS");
+    } finally {
+      appendSpy.mockRestore();
+    }
+  });
+
+  // AUDIT-01-B (misuse): ledger.append() throws on one step → RunResult.signingErrors === 1
+  //
+  // This is the primary new assertion. With a 2-step plan where only the first
+  // step's ledger.append() throws, the RunResult must surface signingErrors === 1.
+  // overallStatus must reflect actual step outcomes (PASS for both tasks), not be
+  // forced to FAILED by the signing error alone.
+  //
+  // FAILS today: RunResult has no signingErrors field — it will be undefined.
+  it("AUDIT-01-B (misuse): ledger.append() throws for one step → RunResult.signingErrors === 1, overallStatus reflects step outcomes", async () => {
+    const sessionId = "audit01-b-one-signing-failure";
+    const taskA = makeAgentTask("audit01-b-task-a");
+    const taskB = makeAgentTask("audit01-b-task-b", ["audit01-b-task-a"]);
+    const plan = makePlan([taskA, taskB]);
+    const adapter = makeMockAdapter();
+    // Both tasks return PASS from the adapter
+
+    // Make append() throw only on the first call (task-a), succeed on the second (task-b)
+    let appendCallCount = 0;
+    const appendSpy = vi.spyOn(AppendOnlyLedger.prototype, "append").mockImplementation(function (
+      this: AppendOnlyLedger,
+      ...args
+    ) {
+      appendCallCount++;
+      if (appendCallCount === 1) {
+        throw new Error("ledger I/O failure on first step");
+      }
+      // Restore original for subsequent calls so the second step signs normally
+      appendSpy.mockRestore();
+      return AppendOnlyLedger.prototype.append.apply(this, args);
+    });
+
+    try {
+      const result = await runPlan(plan, adapter, makeSignedOpts(sessionId));
+
+      // Both steps completed via the adapter — neither was aborted
+      expect(result.steps).toHaveLength(2);
+
+      // Task-a's signing failed; task-b signed normally
+      const stepA = result.steps.find((s) => s.taskId === "audit01-b-task-a");
+      const stepB = result.steps.find((s) => s.taskId === "audit01-b-task-b");
+      expect(stepA?.signingStatus).toBe("signing_failed");
+      // stepB may be "signed" or "signing_failed" depending on restore timing,
+      // but at least one step has signing_failed — verified via signingErrors below
+
+      // overallStatus must reflect step results, not the signing failure
+      // Both tasks PASSED the adapter → overallStatus must be PASS
+      expect(stepA?.status).toBe("PASS");
+      expect(stepB?.status).toBe("PASS");
+      expect(result.overallStatus).toBe("PASS");
+
+      // PRIMARY ASSERTION: RunResult.signingErrors must be >= 1 (the count of
+      // steps where signingStatus === "signing_failed"). FAILS today.
+      expect((result as RunResult & { signingErrors?: number }).signingErrors).toBeGreaterThan(0);
+    } finally {
+      // appendSpy may already be restored inside the mock — safe to call again
+      try {
+        appendSpy.mockRestore();
+      } catch {
+        /* already restored */
+      }
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // BOUNDARY — clean run produces signingErrors === 0
+  // ---------------------------------------------------------------------------
+
+  // AUDIT-01-C (boundary): all steps signed cleanly → RunResult.signingErrors === 0
+  //
+  // When no signing errors occur, signingErrors must be 0 (not undefined, not
+  // omitted). The field must be present and zero on a clean signed run.
+  //
+  // FAILS today: RunResult has no signingErrors field — it will be undefined.
+  it("AUDIT-01-C (boundary): all steps signed cleanly → RunResult.signingErrors === 0", async () => {
+    const sessionId = "audit01-c-clean-run";
+    const taskA = makeAgentTask("audit01-c-task-a");
+    const taskB = makeAgentTask("audit01-c-task-b", ["audit01-c-task-a"]);
+    const plan = makePlan([taskA, taskB]);
+    const adapter = makeMockAdapter();
+    // No mocked failures — all steps sign normally
+
+    const result = await runPlan(plan, adapter, makeSignedOpts(sessionId));
+
+    expect(result.overallStatus).toBe("PASS");
+    expect(result.steps).toHaveLength(2);
+    // All steps should be signed successfully
+    for (const step of result.steps) {
+      // SKIPPED steps are unsigned_by_design; only executed steps matter here
+      if (step.signingStatus !== "unsigned_by_design") {
+        expect(step.signingStatus).toBe("signed");
+      }
+    }
+
+    // signingErrors must be 0 — no failures occurred. FAILS today.
+    expect((result as RunResult & { signingErrors?: number }).signingErrors).toBe(0);
+  });
+
+  // ---------------------------------------------------------------------------
+  // GOLDEN PATH — signer.sign() throws, run continues, signingErrors incremented
+  // ---------------------------------------------------------------------------
+
+  // AUDIT-01-D (golden path): signer.sign() throws → signingErrors incremented, run continues
+  //
+  // signer.sign() throwing (as opposed to ledger.append()) must also be counted
+  // in signingErrors. The run must still complete normally with overallStatus
+  // reflecting the adapter step results.
+  //
+  // FAILS today: RunResult has no signingErrors field.
+  it("AUDIT-01-D (golden path): signer.sign() throws → signingErrors > 0, overallStatus reflects step results", async () => {
+    const sessionId = "audit01-d-signer-throw";
+    const task = makeAgentTask("audit01-d-task");
+    const plan = makePlan([task]);
+    const adapter = makeMockAdapter();
+    // adapter returns PASS
+
+    const signSpy = vi.spyOn(HmacSigner.prototype, "sign").mockImplementation(() => {
+      throw new Error("simulated signer key I/O failure");
+    });
+
+    try {
+      const result = await runPlan(plan, adapter, makeSignedOpts(sessionId));
+
+      expect(result.steps).toHaveLength(1);
+      const step = result.steps[0]!;
+
+      // Signing failed at the signer.sign() call — per-step flag must reflect this
+      expect(step.signingStatus).toBe("signing_failed");
+
+      // The run must not halt — adapter returned PASS, step status is preserved
+      expect(step.status).toBe("PASS");
+      expect(result.overallStatus).toBe("PASS");
+
+      // RunResult.signingErrors must be > 0 (1 step failed to sign). FAILS today.
+      expect((result as RunResult & { signingErrors?: number }).signingErrors).toBeGreaterThan(0);
+    } finally {
+      signSpy.mockRestore();
+    }
+  });
+});

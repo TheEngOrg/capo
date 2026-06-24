@@ -89,6 +89,12 @@ export interface StepResult {
 export interface RunResult {
   steps: StepResult[];
   overallStatus: "PASS" | "FAILED";
+  /**
+   * Count of steps where signing was attempted but failed (signingStatus === "signing_failed").
+   * Present only on signed runs (sessionId provided); 0 means all steps signed cleanly.
+   * A non-zero value means the audit trail has gaps — the run itself is unaffected.
+   */
+  signingErrors?: number;
 }
 
 /**

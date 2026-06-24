@@ -1804,7 +1804,7 @@ describe("provision() — WS-GO-02: data-dir bootstrap (ledger/ and keyring/ cre
     // Must NOT return already_provisioned — partial state triggers fresh provision
     expect(result.status).not.toBe("already_provisioned");
     // Fresh provision must succeed (ok) or fail with an error — not already_provisioned
-    expect(["ok", "repaired", "error"]).toContain(result.status);
+    expect(["ok", "error"]).toContain(result.status);
 
     // checkRevocation must have been called (fresh provision gate)
     expect(vi.mocked(checkRevocation)).toHaveBeenCalledTimes(1);
@@ -1857,7 +1857,7 @@ describe("provision() — WS-GO-02: HostContext and bundleDir defaults", () => {
       expect(result.reason).not.toContain("bundleDir is required");
     }
     // Should succeed (ok or already_provisioned) since pluginRoot/agents is valid
-    expect(["ok", "already_provisioned", "repaired"]).toContain(result.status);
+    expect(["ok", "already_provisioned"]).toContain(result.status);
   });
 
   // T12: bundleDir required in standalone → no host.pluginRoot + no bundleDir →
@@ -2278,5 +2278,227 @@ describe("provision() — WS-BOOTSTRAP-01: symlink bypass in pluginRoot containm
     // fs.realpathSync DOES follow the symlink — returns the real target path
     const resolvedViaRealpath = fs.realpathSync(symlinkPath);
     expect(resolvedViaRealpath.startsWith(resolvedPluginRoot + path.sep)).toBe(false); // correct: caught
+  });
+});
+
+// =============================================================================
+// WS-DEAD-01: ProvisionResult exhaustiveness — "repaired" variant is dead code
+//
+// The `{ status: "repaired" }` arm in ProvisionResult is declared but provision()
+// never returns it. These tests are defensive regression guards: they pass both
+// before AND after the dead arm is removed (since "repaired" is never returned),
+// and they guard against future regressions where someone adds it back.
+//
+// TEST ORDERING: misuse first (what callers should NOT see), then golden path.
+//   DEAD-01-A: runtime exhaustiveness — collect statuses across all branches,
+//              assert none equal "repaired"
+//   DEAD-01-B: 3-arm union membership — assert every result status is one of the
+//              3 valid arms: "ok" | "already_provisioned" | "error"
+//   DEAD-01-C: misuse guard on error paths — trigger error branches and confirm
+//              none emit status "repaired"
+// =============================================================================
+
+describe("WS-DEAD-01 — ProvisionResult exhaustiveness", () => {
+  it("DEAD-01-A: provision() only returns ok | already_provisioned | error — never 'repaired'", async () => {
+    // Exercise the three reachable non-error result branches:
+    //   Branch 1: fresh provision — homeDir empty → ok
+    //   Branch 2: idempotency hot path — both ledger/ and keyring/ present → already_provisioned
+    //   Branch 3: revocation BLOCKED before any writes → error (revocation_blocked)
+    //
+    // Collect every returned status and assert none equal "repaired".
+
+    const collectedStatuses: string[] = [];
+
+    // Branch 1: fresh provision → ok
+    {
+      const bundleDir = makeFixtureBundle(["alpha", "beta"]);
+      const homeDir = makeTempHome();
+      const result = await provision(makeOpts(bundleDir, homeDir));
+      collectedStatuses.push(result.status);
+    }
+
+    // Branch 2: already_provisioned path — both ledger/ and keyring/ exist
+    {
+      const bundleDir = makeFixtureBundle(["alpha"]);
+      const homeDir = makeTempHome();
+      fs.mkdirSync(path.join(homeDir, "ledger"), { recursive: true, mode: 0o700 });
+      fs.mkdirSync(path.join(homeDir, "keyring"), { recursive: true, mode: 0o700 });
+      const result = await provision(makeOpts(bundleDir, homeDir));
+      collectedStatuses.push(result.status);
+    }
+
+    // Branch 3: error path (revocation blocked)
+    {
+      vi.mocked(checkRevocation).mockResolvedValueOnce({
+        verdict: "BLOCKED",
+        reason: "DEAD-01-A revocation block",
+      });
+      const bundleDir = makeFixtureBundle(["alpha"]);
+      const homeDir = makeTempHome();
+      const result = await provision(makeOpts(bundleDir, homeDir));
+      collectedStatuses.push(result.status);
+    }
+
+    // None of the collected statuses must equal "repaired"
+    for (const status of collectedStatuses) {
+      expect(status).not.toBe("repaired");
+    }
+
+    // Sanity: we exercised all three expected statuses
+    expect(collectedStatuses).toContain("ok");
+    expect(collectedStatuses).toContain("already_provisioned");
+    expect(collectedStatuses).toContain("error");
+  });
+
+  it("DEAD-01-B: provision() result status is always a member of the 3-arm union", async () => {
+    // The ValidStatus type is the exhaustive set of arms that provision() is
+    // documented to return. "repaired" is NOT in this set.
+    //
+    // This test calls provision() across multiple scenarios and asserts that every
+    // returned status satisfies the 3-arm constraint. It will catch any future
+    // regression where a new return path emits an undocumented status.
+    type ValidStatus = "ok" | "already_provisioned" | "error";
+    const validStatuses: ReadonlySet<string> = new Set<ValidStatus>([
+      "ok",
+      "already_provisioned",
+      "error",
+    ]);
+
+    const scenarios: Array<{
+      label: string;
+      setup: () => Promise<{
+        bundleDir: string;
+        homeDir: string;
+        extra?: Partial<ProvisionOptions>;
+      }>;
+    }> = [
+      {
+        label: "fresh provision",
+        setup: async () => ({
+          bundleDir: makeFixtureBundle(["alpha"]),
+          homeDir: makeTempHome(),
+        }),
+      },
+      {
+        label: "already_provisioned (ledger+keyring both present)",
+        setup: async () => {
+          const bundleDir = makeFixtureBundle(["alpha"]);
+          const homeDir = makeTempHome();
+          fs.mkdirSync(path.join(homeDir, "ledger"), { recursive: true, mode: 0o700 });
+          fs.mkdirSync(path.join(homeDir, "keyring"), { recursive: true, mode: 0o700 });
+          return { bundleDir, homeDir };
+        },
+      },
+      {
+        label: "partial state — only keyring present",
+        setup: async () => {
+          const bundleDir = makeFixtureBundle(["alpha"]);
+          const homeDir = makeTempHome();
+          fs.mkdirSync(path.join(homeDir, "keyring"), { recursive: true, mode: 0o700 });
+          return { bundleDir, homeDir };
+        },
+      },
+      {
+        label: "conflict — homeDir is a file",
+        setup: async () => {
+          const parent = makeTempHome();
+          const homeDirAsFile = path.join(parent, "not-a-dir");
+          fs.writeFileSync(homeDirAsFile, "I am a file");
+          return { bundleDir: makeFixtureBundle(["alpha"]), homeDir: homeDirAsFile };
+        },
+      },
+    ];
+
+    for (const scenario of scenarios) {
+      const { bundleDir, homeDir, extra } = await scenario.setup();
+      const result = await provision(makeOpts(bundleDir, homeDir, extra));
+
+      // Every result.status must be one of the 3 valid arms
+      expect(
+        validStatuses.has(result.status),
+        `Scenario "${scenario.label}" returned unexpected status: "${result.status}"`
+      ).toBe(true);
+
+      // Explicit negative: "repaired" must never appear
+      expect(result.status).not.toBe("repaired");
+    }
+  });
+
+  it("DEAD-01-C: provision() never returns status 'repaired' even on error paths", async () => {
+    // Trigger multiple distinct error paths and assert each returns status "error",
+    // NOT "repaired". This is the key misuse-case guard: if someone adds a return
+    // path that emits "repaired" by mistake, this test catches it.
+
+    type ErrorResult = Extract<
+      ReturnType<typeof provision> extends Promise<infer R> ? R : never,
+      { status: "error" }
+    >;
+
+    const errorResults: Array<{ label: string; result: Awaited<ReturnType<typeof provision>> }> =
+      [];
+
+    // Error path 1: revocation BLOCKED
+    {
+      vi.mocked(checkRevocation).mockResolvedValueOnce({
+        verdict: "BLOCKED",
+        reason: "DEAD-01-C blocked",
+      });
+      const bundleDir = makeFixtureBundle(["alpha"]);
+      const homeDir = makeTempHome();
+      const result = await provision(makeOpts(bundleDir, homeDir));
+      errorResults.push({ label: "revocation_blocked", result });
+    }
+
+    // Error path 2: homeDir is a file → conflict
+    {
+      const parent = makeTempHome();
+      const homeDirAsFile = path.join(parent, "dead01c-conflict");
+      fs.writeFileSync(homeDirAsFile, "conflict file");
+      const result = await provision(makeOpts(makeFixtureBundle(["alpha"]), homeDirAsFile));
+      errorResults.push({ label: "conflict", result });
+    }
+
+    // Error path 3: mkdirSync EACCES on homeDir → permission_denied
+    {
+      const parent = makeTempHome();
+      const homeDir = path.join(parent, "dead01c-eacces");
+      vi.spyOn(fs, "mkdirSync").mockImplementationOnce(() => {
+        throw Object.assign(new Error("Permission denied"), { code: "EACCES" });
+      });
+      const result = await provision(makeOpts(makeFixtureBundle(["alpha"]), homeDir));
+      errorResults.push({ label: "permission_denied", result });
+      vi.restoreAllMocks();
+    }
+
+    // Error path 4: manifest write failure → io_error
+    {
+      const bundleDir = makeFixtureBundle(["alpha"]);
+      const homeDir = makeTempHome();
+      const manifestTmpPath = path.join(homeDir, "manifest.json.tmp");
+      const realWriteFileSync = fs.writeFileSync.bind(fs);
+      vi.spyOn(fs, "writeFileSync").mockImplementation(
+        (p: Parameters<typeof fs.writeFileSync>[0], ...rest: unknown[]) => {
+          if (String(p) === manifestTmpPath) {
+            throw Object.assign(new Error("DEAD-01-C manifest EIO"), { code: "EIO" });
+          }
+          return (realWriteFileSync as (...args: unknown[]) => unknown)(p, ...rest) as ReturnType<
+            typeof fs.writeFileSync
+          >;
+        }
+      );
+      const result = await provision(makeOpts(bundleDir, homeDir));
+      errorResults.push({ label: "manifest_io_error", result });
+      vi.restoreAllMocks();
+    }
+
+    // Assert all error paths: status is "error", NOT "repaired"
+    for (const { label, result } of errorResults) {
+      expect(result.status, `Error path "${label}" must return "error", not "repaired"`).toBe(
+        "error"
+      );
+      expect(result.status, `Error path "${label}" must not return "repaired"`).not.toBe(
+        "repaired"
+      );
+    }
   });
 });

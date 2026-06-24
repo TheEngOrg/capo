@@ -186,6 +186,7 @@ export function validatePlan(plan: Plan): ValidationResult {
 
     while (stack.length > 0) {
       const top = stack[stack.length - 1];
+      /* c8 ignore next -- while (stack.length > 0) guarantees top is defined; guard satisfies noUncheckedIndexedAccess */
       if (!top) break;
       const [id, path, neighborIdx] = top;
       const task = taskById.get(id);
@@ -212,6 +213,7 @@ export function validatePlan(plan: Plan): ValidationResult {
       const needsId = neighbors[neighborIdx];
       top[2]++; // advance neighbor index
 
+      /* c8 ignore next -- neighborIdx < neighbors.length check above guarantees needsId is defined; guard satisfies noUncheckedIndexedAccess */
       if (needsId === undefined) continue;
 
       const neighborColor = color.get(needsId);

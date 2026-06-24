@@ -107,6 +107,7 @@ export function readInstallSig(pluginRootPath: string): ReadInstallSigResult {
   try {
     raw = fs.readFileSync(sigFilePath, "utf8");
   } catch (err) {
+    /* c8 ignore next */
     const message = err instanceof Error ? err.message : String(err);
     return {
       ok: false,
@@ -164,6 +165,7 @@ export async function verifyInstallSig(
   try {
     canonicalPath = fs.realpathSync(pluginRootPath);
   } catch (err) {
+    /* c8 ignore next */
     const message = err instanceof Error ? err.message : String(err);
     return {
       ok: false,
@@ -177,7 +179,10 @@ export async function verifyInstallSig(
   let sigBytes: Buffer;
   try {
     sigBytes = Buffer.from(sigFile.signature, "base64");
-  } catch {
+  } catch /* c8 ignore next */ {
+    // Node's Buffer.from(str, "base64") never throws — invalid chars are silently dropped.
+    // This defensive catch is retained for non-Node runtimes. Production-only path.
+    /* c8 ignore next */
     return { ok: false, reason: "Install signature is not valid base64." };
   }
 

@@ -104,6 +104,17 @@ export default defineConfig({
           branches: 100,
           statements: 100,
         },
+        // WS-REVOKE-01: install-sig.ts is critical-path — plugin install-time signing and
+        // load-time verification. signPluginRoot(), readInstallSig(), verifyInstallSig() all
+        // participate in the fail-closed plugin-context path. 100% branch coverage is mandatory.
+        // The Buffer.from(str, "base64") catch (line ~181) is annotated /* c8 ignore next */
+        // — Node's Buffer.from never throws on base64; the branch is unreachable in practice.
+        "src/bootstrap/install-sig.ts": {
+          lines: 100,
+          functions: 100,
+          branches: 100,
+          statements: 100,
+        },
         // WS-P1-06: load.ts is critical-path — agent roster loader with path-traversal
         // guard, frontmatter parser, Zod validation, and agent_id mismatch detection.
         // 100% branch coverage is mandatory.

@@ -1641,3 +1641,313 @@ describe("checkRevocation — WS-REVOKE-01: security invariants hold in plugin c
     expect((result.reason as string).trim().length).toBeGreaterThan(0);
   });
 });
+
+// =============================================================================
+// WS-REVOKE-01: checkRevocationListOnly via install-sig plugin-context path
+//
+// checkRevocationListOnly is internal and only reachable when:
+//   1. CLAUDE_PLUGIN_ROOT is set to a real directory
+//   2. signature is undefined/null (plugin-context branch in checkRevocation)
+//   3. readInstallSig() succeeds (real sig file present)
+//   4. verifyInstallSig() succeeds (real sig file is valid)
+//
+// These tests use a real temp dir + real signPluginRoot() call so no mocking
+// is needed to satisfy the readInstallSig / verifyInstallSig guards.
+//
+// Coverage targets:
+//   revocation.ts line 130: resolvedList = fetched  (fetcher returns valid list)
+//   revocation.ts line 135: detail = revokedEntry.reason ? ...  (revoked key in fetched list)
+//   revocation.ts line 136: return blocked(...)  (BLOCKED for revoked key via fetcher path)
+//   revocation.ts line 189: return checkRevocationListOnly(...)  (install-sig PASS → rev check)
+//
+// Test ordering: misuse → boundary → golden path
+// =============================================================================
+
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+import * as ed from "@noble/ed25519";
+import { signPluginRoot } from "./install-sig.js";
+
+describe("checkRevocation — WS-REVOKE-01: checkRevocationListOnly via install-sig plugin-context path", () => {
+  // @noble/ed25519 private key = 32-byte seed (NOT Node crypto KeyObject)
+  let nobleSecretKey: Uint8Array;
+  let noblePublicKey: Uint8Array;
+
+  let tmpDir: string;
+  let savedPluginRoot: string | undefined;
+
+  beforeEach(async () => {
+    // Generate ephemeral @noble keypair — secretKey is the 32-byte seed signPluginRoot needs
+    const { secretKey, publicKey } = await ed.keygenAsync();
+    nobleSecretKey = new Uint8Array(secretKey);
+    noblePublicKey = new Uint8Array(publicKey);
+
+    // Create a real temp dir; use realpathSync so macOS /tmp → /private/tmp is resolved
+    const rawTmp = fs.mkdtempSync(path.join(os.tmpdir(), "teo-revoke-listonly-"));
+    tmpDir = fs.realpathSync(rawTmp);
+
+    // Write a real install sig file so readInstallSig + verifyInstallSig succeed
+    await signPluginRoot(tmpDir, "test-install-key", nobleSecretKey);
+
+    // Set CLAUDE_PLUGIN_ROOT to the canonical path so verifyInstallSig path matches
+    savedPluginRoot = process.env["CLAUDE_PLUGIN_ROOT"];
+    process.env["CLAUDE_PLUGIN_ROOT"] = tmpDir;
+  });
+
+  afterEach(() => {
+    // Restore CLAUDE_PLUGIN_ROOT
+    if (savedPluginRoot === undefined) {
+      delete process.env["CLAUDE_PLUGIN_ROOT"];
+    } else {
+      process.env["CLAUDE_PLUGIN_ROOT"] = savedPluginRoot;
+    }
+
+    // Clean up temp dir
+    try {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    } catch {
+      // best-effort
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // MISUSE: install sig file absent in plugin context → BLOCKED
+  // Exercises the readInstallSig failure branch at revocation.ts lines 182-183.
+  // ---------------------------------------------------------------------------
+
+  it("LISTONLY-M1. plugin context + sig file absent → BLOCKED (readInstallSig fails)", async () => {
+    requireImpl("LISTONLY-M1: sig file absent → BLOCKED");
+
+    // Remove the sig file that was written in beforeEach
+    const { INSTALL_SIG_FILENAME } = await import("./install-sig.js");
+    const sigFilePath = path.join(tmpDir, INSTALL_SIG_FILENAME);
+    fs.rmSync(sigFilePath);
+
+    const result = await (
+      checkRevocation as (opts: CheckRevocationOptions) => Promise<RevocationResult>
+    )({
+      data: new Uint8Array([0x01]),
+      signature: undefined, // triggers plugin-context path
+      publicKey: noblePublicKey,
+      keyId: "test-install-key",
+      revocationList: { revoked_keys: [] },
+    });
+
+    expect(result.verdict).toBe("BLOCKED");
+    expect(result.reason).toBeTruthy();
+  });
+
+  // ---------------------------------------------------------------------------
+  // MISUSE: install sig file present but verifyInstallSig fails (wrong pubkey) → BLOCKED
+  // Exercises revocation.ts lines 187-189 (verifyResult.ok === false → BLOCKED).
+  // ---------------------------------------------------------------------------
+
+  it("LISTONLY-M2. plugin context + sig file present but wrong public key → BLOCKED (verifyInstallSig fails)", async () => {
+    requireImpl("LISTONLY-M2: wrong pubkey → BLOCKED");
+
+    // The sig file was written with nobleSecretKey; use a DIFFERENT public key for verification
+    const { secretKey: otherSecret, publicKey: otherPublic } = await ed.keygenAsync();
+    const wrongPublicKey = new Uint8Array(otherPublic);
+    // suppress unused warning
+    void otherSecret;
+
+    const result = await (
+      checkRevocation as (opts: CheckRevocationOptions) => Promise<RevocationResult>
+    )({
+      data: new Uint8Array([0x01]),
+      signature: undefined, // triggers plugin-context path
+      publicKey: wrongPublicKey, // doesn't match the key that signed the install sig
+      keyId: "test-install-key",
+      revocationList: { revoked_keys: [] },
+    });
+
+    expect(result.verdict).toBe("BLOCKED");
+    expect(result.reason).toBeTruthy();
+  });
+
+  // ---------------------------------------------------------------------------
+  // BOUNDARY: install sig valid + revocationListFetcher returns invalid list → BLOCKED
+  // Exercises checkRevocationListOnly with a fetcher that returns a bad shape.
+  // ---------------------------------------------------------------------------
+
+  it("LISTONLY-B1. plugin context + valid install sig + fetcher returns malformed list → BLOCKED", async () => {
+    requireImpl("LISTONLY-B1: fetcher malformed list → BLOCKED");
+
+    const result = await (
+      checkRevocation as (opts: CheckRevocationOptions) => Promise<RevocationResult>
+    )({
+      data: new Uint8Array([0x01]),
+      signature: undefined, // triggers plugin-context path → checkRevocationListOnly
+      publicKey: noblePublicKey,
+      keyId: "test-install-key",
+      revocationListFetcher: async () => ({ not_revoked_keys: [] }), // wrong shape
+    });
+
+    expect(result.verdict).toBe("BLOCKED");
+    expect(result.reason).toBeTruthy();
+  });
+
+  // ---------------------------------------------------------------------------
+  // BOUNDARY: install sig valid + revocationListFetcher throws → BLOCKED
+  // Exercises the fetcher error branch inside checkRevocationListOnly.
+  // ---------------------------------------------------------------------------
+
+  it("LISTONLY-B2. plugin context + valid install sig + fetcher throws → BLOCKED", async () => {
+    requireImpl("LISTONLY-B2: fetcher throws → BLOCKED");
+
+    const result = await (
+      checkRevocation as (opts: CheckRevocationOptions) => Promise<RevocationResult>
+    )({
+      data: new Uint8Array([0x01]),
+      signature: undefined, // triggers plugin-context path → checkRevocationListOnly
+      publicKey: noblePublicKey,
+      keyId: "test-install-key",
+      revocationListFetcher: async () => {
+        throw new Error("revocation list fetch failed in test");
+      },
+    });
+
+    expect(result.verdict).toBe("BLOCKED");
+    expect(result.reason).toBeTruthy();
+  });
+
+  // ---------------------------------------------------------------------------
+  // BOUNDARY: install sig valid + key in fetched list (with reason) → BLOCKED
+  // Covers revocation.ts lines 130 (resolvedList = fetched), 135 (detail = reason),
+  // and 136 (return blocked(...)) — the revoked-key-in-fetched-list branch.
+  // ---------------------------------------------------------------------------
+
+  it("LISTONLY-B3. plugin context + valid install sig + key revoked in fetched list (with reason) → BLOCKED", async () => {
+    requireImpl("LISTONLY-B3: revoked key in fetched list → BLOCKED");
+
+    const result = await (
+      checkRevocation as (opts: CheckRevocationOptions) => Promise<RevocationResult>
+    )({
+      data: new Uint8Array([0x01]),
+      signature: undefined, // triggers plugin-context path → checkRevocationListOnly
+      publicKey: noblePublicKey,
+      keyId: "test-install-key",
+      // Fetcher returns a list where test-install-key is revoked — covers lines 130, 135, 136
+      revocationListFetcher: async () => ({
+        revoked_keys: [{ key_id: "test-install-key", reason: "key compromised in test" }],
+      }),
+    });
+
+    expect(result.verdict).toBe("BLOCKED");
+    expect(result.reason).toBeTruthy();
+    // Confirm the reason string includes the revocation reason
+    expect(result.reason).toMatch(/revoked/i);
+    expect(result.reason).toMatch(/test-install-key/);
+  });
+
+  it("LISTONLY-B4. plugin context + valid install sig + key revoked in fetched list (without reason) → BLOCKED", async () => {
+    requireImpl("LISTONLY-B4: revoked key no reason → BLOCKED");
+
+    const result = await (
+      checkRevocation as (opts: CheckRevocationOptions) => Promise<RevocationResult>
+    )({
+      data: new Uint8Array([0x01]),
+      signature: undefined,
+      publicKey: noblePublicKey,
+      keyId: "test-install-key",
+      revocationListFetcher: async () => ({
+        // no reason field — exercises the `revokedEntry.reason ? ...` false branch (line 135)
+        revoked_keys: [{ key_id: "test-install-key" }],
+      }),
+    });
+
+    expect(result.verdict).toBe("BLOCKED");
+    expect(result.reason).toBeTruthy();
+  });
+
+  // ---------------------------------------------------------------------------
+  // GOLDEN PATH: valid install sig + clean injected revocation list → PASS
+  // Covers revocation.ts line 189 (return checkRevocationListOnly(...)) and the
+  // resolvedList = revocationList branch (injected list, not fetcher).
+  // ---------------------------------------------------------------------------
+
+  it("LISTONLY-G1. plugin context + valid install sig + injected clean list → PASS", async () => {
+    requireImpl("LISTONLY-G1: valid install sig + clean injected list → PASS");
+
+    const result = await (
+      checkRevocation as (opts: CheckRevocationOptions) => Promise<RevocationResult>
+    )({
+      data: new Uint8Array([0x01]),
+      signature: undefined, // triggers plugin-context path → checkRevocationListOnly
+      publicKey: noblePublicKey,
+      keyId: "test-install-key",
+      revocationList: { revoked_keys: [] }, // injected list — clean
+    });
+
+    expect(result.verdict).toBe("PASS");
+  });
+
+  // ---------------------------------------------------------------------------
+  // GOLDEN PATH: valid install sig + revocationListFetcher returns clean list → PASS
+  // Covers revocation.ts line 130 (resolvedList = fetched) and the PASS return
+  // via checkRevocationListOnly when key is NOT in the fetched list.
+  // ---------------------------------------------------------------------------
+
+  it("LISTONLY-G2. plugin context + valid install sig + fetcher returns clean list → PASS", async () => {
+    requireImpl("LISTONLY-G2: valid install sig + fetcher clean list → PASS");
+
+    const result = await (
+      checkRevocation as (opts: CheckRevocationOptions) => Promise<RevocationResult>
+    )({
+      data: new Uint8Array([0x01]),
+      signature: undefined, // triggers plugin-context path → checkRevocationListOnly
+      publicKey: noblePublicKey,
+      keyId: "test-install-key",
+      // Fetcher returns valid list — covers line 130 (resolvedList = fetched)
+      revocationListFetcher: async () => ({ revoked_keys: [] }),
+    });
+
+    expect(result.verdict).toBe("PASS");
+  });
+
+  it("LISTONLY-G3. plugin context + valid install sig + fetcher clean list with other revoked keys → PASS", async () => {
+    requireImpl("LISTONLY-G3: fetcher list has other revoked keys but not ours → PASS");
+
+    const result = await (
+      checkRevocation as (opts: CheckRevocationOptions) => Promise<RevocationResult>
+    )({
+      data: new Uint8Array([0x01]),
+      signature: undefined,
+      publicKey: noblePublicKey,
+      keyId: "test-install-key",
+      revocationListFetcher: async () => ({
+        revoked_keys: [
+          { key_id: "some-other-key", reason: "compromised" },
+          { key_id: "yet-another-key" },
+        ],
+      }),
+    });
+
+    expect(result.verdict).toBe("PASS");
+  });
+
+  // ---------------------------------------------------------------------------
+  // BOUNDARY: fetcher returns a non-object primitive (number) via the
+  // checkRevocationListOnly path — exercises line 122 false branch
+  // (fetchedType !== "object") → BLOCKED with primitive description.
+  // ---------------------------------------------------------------------------
+
+  it("LISTONLY-B5. plugin context + valid install sig + fetcher returns a number (primitive) → BLOCKED", async () => {
+    requireImpl("LISTONLY-B5: fetcher returns primitive (number) → BLOCKED");
+
+    const result = await (
+      checkRevocation as (opts: CheckRevocationOptions) => Promise<RevocationResult>
+    )({
+      data: new Uint8Array([0x01]),
+      signature: undefined,
+      publicKey: noblePublicKey,
+      keyId: "test-install-key",
+      // A number is not an object — exercises the String(fetched) branch on line 124
+      revocationListFetcher: async () => 42 as unknown,
+    });
+
+    expect(result.verdict).toBe("BLOCKED");
+    expect(result.reason).toBeTruthy();
+  });
+});

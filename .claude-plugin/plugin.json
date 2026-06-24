@@ -1,7 +1,7 @@
 {
   "name": "teo",
   "displayName": "TEO — The Engineering Org",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Multi-agent orchestration for Claude Code. Enforces QA-first CAD development, HMAC-signed audit ledger, and deterministic plan execution.",
   "author": {
     "name": "TheEngOrg",

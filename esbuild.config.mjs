@@ -8,7 +8,7 @@ await esbuild.build({
   format: "esm",
   outfile: "bin/teo-run.js",
   external: ["node:*"],
-  define: { TEO_VERSION: JSON.stringify("0.1.0") },
+  define: { TEO_VERSION: JSON.stringify("1.0.0") },
   banner: { js: "#!/usr/bin/env node" },
   minify: false,
 });

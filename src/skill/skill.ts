@@ -18,6 +18,8 @@
 // =============================================================================
 
 import { randomUUID } from "node:crypto";
+import * as fs from "node:fs";
+import * as path from "node:path";
 import type { TEOAdapter, PlanningContext } from "../adapters/types.js";
 import type { RunResult } from "../core/runner.js";
 import type { ProvisionErrorKind } from "../bootstrap/provision.js";
@@ -40,12 +42,73 @@ export interface SkillOptions {
   revocationOpts: Omit<CheckRevocationOptions, "data">;
   /** Override the auto-generated UUID session identifier passed to runPlan(). */
   sessionId?: string;
+  /** Override the ledger base directory. When unset, resolves via TEO_LEDGER_DIR or os.homedir()/.teo/. */
+  ledgerBaseDir?: string;
 }
 
 export type SkillResult =
   | { status: "ok"; result: RunResult }
   | { status: "provision_error"; kind: ProvisionErrorKind; reason: string }
-  | { status: "planning_error"; message: string };
+  | { status: "planning_error"; message: string }
+  | { status: "ledger_error"; reason: string };
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolve the effective ledger base directory for pre-flight checks and runPlan wiring.
+ * Mirrors the logic in resolveDefaultLedgerBase() in core/ledger.ts — duplicated here
+ * so skill.ts can function correctly even when ledger.ts is mocked in tests.
+ * Honors TEO_LEDGER_DIR env var first, then HOME env var (not os.homedir() directly,
+ * to surface misconfiguration when HOME is empty or unset).
+ */
+function resolveEffectiveLedgerBase(override?: string): string {
+  if (override !== undefined) return override;
+  const envDir = process.env["TEO_LEDGER_DIR"];
+  if (envDir && envDir.length > 0) return envDir;
+  const homeDir = process.env["HOME"];
+  if (homeDir && homeDir.length > 0) return path.join(homeDir, ".teo");
+  return path.join(".teo-unresolved");
+}
+
+/**
+ * Check whether a directory is writable by attempting to create it (if absent)
+ * or write + delete a probe file (if present). Returns an error string if not
+ * writable, or null if writable.
+ */
+function probeWritable(dir: string): string | null {
+  try {
+    // Reject relative paths — a non-absolute path means HOME or TEO_LEDGER_DIR
+    // resolved to something unusable (e.g. HOME="").
+    if (!path.isAbsolute(dir)) {
+      return `TEO ledger dir "${dir}" is not an absolute path; set TEO_LEDGER_DIR to a writable absolute directory path`;
+    }
+
+    // Check if path exists and is actually a directory (not /dev/null etc.)
+    if (fs.existsSync(dir)) {
+      const stat = fs.statSync(dir);
+      if (!stat.isDirectory()) {
+        return `TEO ledger dir "${dir}" is not a directory; set TEO_LEDGER_DIR to a writable directory path`;
+      }
+      // Dir exists — write + delete a probe file to verify real writability.
+      // fs.accessSync(W_OK) can false-positive on FUSE/NFS mounts.
+      const probeFile = path.join(dir, ".write_probe");
+      fs.writeFileSync(probeFile, "");
+      fs.unlinkSync(probeFile);
+    } else {
+      // Dir doesn't exist — try to create it (this is the real probe).
+      fs.mkdirSync(dir, { recursive: true });
+      // After creating the dir, verify it's actually writable.
+      fs.accessSync(dir, fs.constants.W_OK);
+    }
+    return null;
+  } catch (err) {
+    // c8 ignore next — Node always throws Error instances; String(err) is a defensive fallback.
+    const msg = err instanceof Error ? err.message : String(err);
+    return `TEO ledger dir "${dir}" is not writable; set TEO_LEDGER_DIR to a writable path. (${msg})`;
+  }
+}
 
 // ---------------------------------------------------------------------------
 // invokeSkill()
@@ -77,6 +140,20 @@ export async function invokeSkill(opts: SkillOptions): Promise<SkillResult> {
   }
 
   // -------------------------------------------------------------------------
+  // Pre-flight write-check (Step 1.5) — only when sessionId is explicitly
+  // provided by the caller (signed path). If the ledger dir is not writable,
+  // abort before sagePlan or runPlan start.
+  // -------------------------------------------------------------------------
+  const sessionId = opts.sessionId ?? randomUUID();
+  const effectiveLedgerBase = resolveEffectiveLedgerBase(opts.ledgerBaseDir);
+  if (opts.sessionId !== undefined) {
+    const writeError = probeWritable(effectiveLedgerBase);
+    if (writeError !== null) {
+      return { status: "ledger_error", reason: writeError };
+    }
+  }
+
+  // -------------------------------------------------------------------------
   // Step 2 — Build planning context and call sagePlan.
   // directive is only set if provided — absence vs. undefined are distinct
   // (exactOptionalPropertyTypes compliance).
@@ -105,7 +182,20 @@ export async function invokeSkill(opts: SkillOptions): Promise<SkillResult> {
   // FAILED overallStatus propagates inside the 'ok' wrapper — not a separate
   // discriminant on SkillResult.
   // -------------------------------------------------------------------------
-  const sessionId = opts.sessionId ?? randomUUID();
-  const result = await runPlan(plan, opts.adapter, { sessionId });
+  const result = await runPlan(plan, opts.adapter, {
+    sessionId,
+    ...(opts.sessionId !== undefined ? { ledgerBaseDir: effectiveLedgerBase } : {}),
+  });
+
+  // If signingErrors > 0 on a signed run, the audit trail was partially dropped.
+  // Emit a console.warn — never silent.
+  if (result.signingErrors !== undefined && result.signingErrors > 0) {
+    console.warn(
+      `[TEO] WARNING: ${result.signingErrors} ledger signing error(s) detected. ` +
+        `Ledger dir: "${effectiveLedgerBase}". ` +
+        `Set TEO_LEDGER_DIR to a writable path to ensure a complete audit trail.`
+    );
+  }
+
   return { status: "ok", result };
 }

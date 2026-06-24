@@ -38,7 +38,6 @@
 // =============================================================================
 
 import * as fs from "node:fs";
-import * as os from "node:os";
 import * as path from "node:path";
 import * as crypto from "node:crypto";
 
@@ -182,6 +181,26 @@ export interface AppendOnlyLedgerOptions {
 /** Maximum allowed length for a session_id (POSIX filename limit). */
 const MAX_SESSION_ID_LENGTH = 255;
 
+/**
+ * Resolve the default ledger base directory.
+ * Honors TEO_LEDGER_DIR env var when set and non-empty.
+ * Falls back to HOME/.teo/ when HOME is set and non-empty.
+ * Returns a non-absolute sentinel path when neither is available —
+ * callers (e.g. probeWritable) treat non-absolute paths as errors.
+ */
+export function resolveDefaultLedgerBase(): string {
+  const envDir = process.env["TEO_LEDGER_DIR"];
+  if (envDir && envDir.length > 0) return envDir;
+  // Explicitly read HOME env var so tests can control it.
+  // os.homedir() may fall back to system records (getpwuid) when HOME is
+  // unset — that masks misconfiguration. Use HOME directly instead.
+  const homeDir = process.env["HOME"];
+  if (homeDir && homeDir.length > 0) return path.join(homeDir, ".teo");
+  // Neither TEO_LEDGER_DIR nor HOME is set/non-empty — return a relative
+  // sentinel so callers that check path.isAbsolute() can surface the issue.
+  return path.join(".teo-unresolved");
+}
+
 export class AppendOnlyLedger {
   private readonly session_id: string;
   private readonly ledgerDir: string;
@@ -216,10 +235,9 @@ export class AppendOnlyLedger {
 
     this.session_id = session_id;
 
-    // Resolve the base directory. Production: os.homedir()/.teo/. Tests: injected.
-    // The right-hand side of ?? is only reached in production (tests always inject baseDir).
-    /* c8 ignore next */
-    const resolvedBase = baseDir ?? path.join(os.homedir(), ".teo");
+    // Resolve the base directory. Production: resolveDefaultLedgerBase(). Tests: injected.
+    // c8 ignore next — production-only path: tests always inject baseDir.
+    const resolvedBase = baseDir ?? resolveDefaultLedgerBase();
     this.ledgerDir = path.join(resolvedBase, "ledger");
     this.filePath = path.join(this.ledgerDir, `${this.session_id}.jsonl`);
   }

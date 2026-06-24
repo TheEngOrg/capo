@@ -844,6 +844,129 @@ describe("TopologicalRunner — abort failedIdx < 0 branch (line 341 else path)"
 });
 
 // =============================================================================
+// WS-A08-03 Fix A — RUNNER-TIMEOUT-CTX-01/02
+//
+// runStep() must use context.stepTimeoutMs for the actual timer, not
+// this.defaultStepTimeoutMs. Both are equal today (context is constructed from
+// defaultStepTimeoutMs at line ~237 of runner.ts), so there is no functional
+// defect yet — but the contract must be locked now before per-step overrides
+// are possible.
+//
+// Because runStep() is private and the RunContext is built internally in run(),
+// the testable path is:
+//
+//   RUNNER-TIMEOUT-CTX-01: verify the RunContext delivered to executors carries
+//     stepTimeoutMs === defaultStepTimeoutMs. This locks the contract that
+//     the field is populated from the right source.
+//
+//   RUNNER-TIMEOUT-CTX-02: verify the timer fires at ~stepTimeoutMs (not some
+//     other value). We construct a runner with defaultStepTimeoutMs:50 and a
+//     hanging executor. The step must time out at ~50ms with "timed out" in
+//     detail. This will be the direct regression guard once runStep() is changed
+//     to read context.stepTimeoutMs — if it reads this.defaultStepTimeoutMs
+//     instead (which is identical today), the test passes. After the fix the
+//     test still passes because both are equal. The real guard is that a future
+//     per-step override would use context.stepTimeoutMs from the executor's
+//     injected context, and this test ensures the plumbing is correct.
+//
+// CURRENTLY FAILING? These tests pass today because defaultStepTimeoutMs and
+// context.stepTimeoutMs are identical. They are written to lock the contract,
+// not to demonstrate a current failure. The FAILING test scenario (per-step
+// override) would require a RunContext injection point that does not yet exist.
+// =============================================================================
+
+describe("RUNNER-TIMEOUT-CTX: runStep must honor context.stepTimeoutMs (WS-A08-03 Fix A)", () => {
+  it("RUNNER-TIMEOUT-CTX-01: RunContext passed to executor has stepTimeoutMs === defaultStepTimeoutMs", async () => {
+    // Arrange: capture the context the runner delivers to each executor call.
+    // This verifies the contract: context.stepTimeoutMs is populated from
+    // defaultStepTimeoutMs, and runStep() must use context.stepTimeoutMs
+    // (not a separate read of this.defaultStepTimeoutMs) to close the gap.
+    const capturedContexts: RunContext[] = [];
+
+    const capturingExecutor: Executor = async (
+      task: TEOTask,
+      ctx: RunContext
+    ): Promise<StepResult> => {
+      capturedContexts.push({ ...ctx });
+      return { taskId: task.id, status: "PASS" };
+    };
+
+    const TIMEOUT = 500;
+    const runner = new TopologicalRunner({
+      executor: capturingExecutor,
+      defaultStepTimeoutMs: TIMEOUT,
+    });
+
+    const plan = makePlan([makeTask("ctx-test")]);
+    await runner.run(plan);
+
+    // The executor must have been called once
+    expect(capturedContexts).toHaveLength(1);
+
+    // context.stepTimeoutMs must equal the configured defaultStepTimeoutMs
+    // This locks the contract: the runner sets stepTimeoutMs on every RunContext.
+    // The fix (using context.stepTimeoutMs in runStep) ensures the timer
+    // reads the same value the executor sees — closing the contract gap.
+    expect(capturedContexts[0]!.stepTimeoutMs).toBe(TIMEOUT);
+  });
+
+  it("RUNNER-TIMEOUT-CTX-02: timer fires at ~context.stepTimeoutMs, not at a stale defaultStepTimeoutMs", async () => {
+    // Arrange: short timeout, hanging executor. The step must time out at ~50ms.
+    // This test passes today (defaultStepTimeoutMs === context.stepTimeoutMs).
+    // After the fix: runStep reads context.stepTimeoutMs directly — the behavior
+    // is unchanged for default runs but the path is correct for future per-step overrides.
+    const SHORT_TIMEOUT_MS = 50;
+    const runner = new TopologicalRunner({
+      executor: makeHangingExecutor(),
+      defaultStepTimeoutMs: SHORT_TIMEOUT_MS,
+    });
+
+    const plan = makePlan([makeTask("hang-ctx")]);
+    const start = Date.now();
+    const result = await runner.run(plan);
+    const elapsed = Date.now() - start;
+
+    // Step must be FAILED with timeout detail
+    expect(result.overallStatus).toBe("FAILED");
+    const step = result.steps.find((s) => s.taskId === "hang-ctx");
+    expect(step?.status).toBe("FAILED");
+    expect(step?.detail).toMatch(/timed out/i);
+
+    // Timer must fire at ~SHORT_TIMEOUT_MS, not at DEFAULT_STEP_TIMEOUT_MS (60_000).
+    // Allow 5x headroom for slow CI environments, but must be well under 60_000.
+    expect(elapsed).toBeLessThan(SHORT_TIMEOUT_MS * 5);
+  });
+
+  it("RUNNER-TIMEOUT-CTX-03: context.planId and context.projectId are populated from the plan", async () => {
+    // Belt-and-suspenders: verify the rest of RunContext is also correct.
+    // This guards against a future refactor accidentally swapping context fields.
+    const capturedContexts: RunContext[] = [];
+
+    const capturingExecutor: Executor = async (
+      task: TEOTask,
+      ctx: RunContext
+    ): Promise<StepResult> => {
+      capturedContexts.push({ ...ctx });
+      return { taskId: task.id, status: "PASS" };
+    };
+
+    const plan: Plan = {
+      plan_id: "p-ctx-03",
+      project_id: "proj-ctx-03",
+      created_at: "2026-06-23T00:00:00Z",
+      version: "1",
+      tasks: [makeTask("t1")],
+    };
+
+    const runner = new TopologicalRunner({ executor: capturingExecutor });
+    await runner.run(plan);
+
+    expect(capturedContexts[0]!.planId).toBe("p-ctx-03");
+    expect(capturedContexts[0]!.projectId).toBe("proj-ctx-03");
+  });
+});
+
+// =============================================================================
 // WS-GO-04: runtime guard — missing/invalid status coercion
 //
 // These tests will FAIL today — runner.ts does not yet have a runtime guard

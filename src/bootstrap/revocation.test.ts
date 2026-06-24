@@ -38,7 +38,7 @@
 // ZERO live network — all fetchers are injected stubs.
 // =============================================================================
 
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import * as crypto from "node:crypto";
 
 // ---------------------------------------------------------------------------
@@ -96,6 +96,12 @@ export interface CheckRevocationOptions {
 
 const { checkRevocation } = await import("./revocation.js").catch(() => ({
   checkRevocation: undefined,
+}));
+
+// Import REVOCATION_FETCH_TIMEOUT_MS with a fallback so tests can load even before
+// the constant is exported. REVOC-TIMEOUT-CONST asserts it exists and is > 1000.
+const { REVOCATION_FETCH_TIMEOUT_MS } = await import("./revocation.js").catch(() => ({
+  REVOCATION_FETCH_TIMEOUT_MS: undefined,
 }));
 
 // ---------------------------------------------------------------------------
@@ -1949,5 +1955,278 @@ describe("checkRevocation — WS-REVOKE-01: checkRevocationListOnly via install-
 
     expect(result.verdict).toBe("BLOCKED");
     expect(result.reason).toBeTruthy();
+  });
+});
+
+// =============================================================================
+// WS-A08-02: Timeout wrapper on revocationListFetcher()
+//
+// STATUS: FAILING — implementation does not yet wrap fetcher calls in a timeout.
+//
+// THE BUG:
+//   Both checkRevocation() and checkRevocationListOnly() call
+//   `await revocationListFetcher!()` with no timeout. If the fetcher never
+//   resolves (slow DNS, unreachable CRL endpoint, TCP half-open), the entire
+//   CLI startup hangs indefinitely.
+//
+// THE FIX:
+//   Wrap `revocationListFetcher!()` in a Promise.race() with a setTimeout.
+//   Timeout duration = REVOCATION_FETCH_TIMEOUT_MS (exported named constant).
+//   On timeout → return blocked("Revocation list fetch timed out after Xms").
+//   Both call sites (checkRevocation + checkRevocationListOnly) must be wrapped.
+//
+// TEST ORDER: misuse → boundary → golden path
+// =============================================================================
+
+describe("checkRevocation — WS-A08-02: fetcher timeout (REVOC-TIMEOUT-CONST)", () => {
+  // ---------------------------------------------------------------------------
+  // REVOC-TIMEOUT-CONST: The exported constant must exist and be > 1000ms.
+  //
+  // A sub-second timeout would cause false-positive blocks on loaded-but-slow
+  // corporate proxies. 1000ms is the minimum sane production value.
+  // ---------------------------------------------------------------------------
+
+  it("REVOC-TIMEOUT-CONST. REVOCATION_FETCH_TIMEOUT_MS is exported and greater than 1000", () => {
+    // This test fails before the constant is added to revocation.ts.
+    if (REVOCATION_FETCH_TIMEOUT_MS === undefined) {
+      throw new Error(
+        "[WS-A08-02] REVOC-TIMEOUT-CONST: REVOCATION_FETCH_TIMEOUT_MS is not exported " +
+          "from src/bootstrap/revocation.ts. Dev must export it as a named constant."
+      );
+    }
+    expect(typeof REVOCATION_FETCH_TIMEOUT_MS).toBe("number");
+    expect(REVOCATION_FETCH_TIMEOUT_MS).toBeGreaterThan(1000);
+  });
+});
+
+describe("checkRevocation — WS-A08-02: never-resolving fetcher → BLOCKED with 'timed out' (REVOC-TIMEOUT-01)", () => {
+  // ---------------------------------------------------------------------------
+  // REVOC-TIMEOUT-01: checkRevocation() wraps fetcher in a timeout.
+  //
+  // A fetcher that returns new Promise(() => {}) — permanently pending — must
+  // cause checkRevocation() to return BLOCKED with "timed out" in the reason,
+  // rather than hanging indefinitely.
+  //
+  // Strategy:
+  //   - vi.useFakeTimers() so the test does not wait real wall-clock time
+  //   - Start the call (store promise, do NOT await yet)
+  //   - vi.advanceTimersByTimeAsync(5000) fires the implementation's setTimeout
+  //     (REVOCATION_FETCH_TIMEOUT_MS is >1000ms, so 5000ms covers any value)
+  //   - Await the now-resolved promise and assert BLOCKED + "timed out"
+  //
+  // Before the fix: implementation has no setTimeout, so advanceTimersByTimeAsync
+  // fires nothing, the promise stays pending, and `await callPromise` hangs.
+  // The test-level timeout (1000ms real time) then kills the test → FAIL. ✓
+  //
+  // After the fix: advanceTimersByTimeAsync fires the implementation's timer,
+  // the promise resolves with BLOCKED, assertions pass → PASS. ✓
+  // ---------------------------------------------------------------------------
+
+  let kp: EphemeralKeyPair;
+  const data = new Uint8Array([0x01, 0x02, 0x03]);
+
+  beforeEach(() => {
+    kp = generateEphemeralKeyPair();
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("REVOC-TIMEOUT-01. checkRevocation(): never-resolving fetcher → BLOCKED with 'timed out'", async () => {
+    requireImpl("REVOC-TIMEOUT-01: checkRevocation() + never-resolving fetcher → BLOCKED");
+
+    const sig = signData(data, kp.privateKeyObject);
+
+    // A fetcher that never resolves — simulates TCP half-open / DNS hang
+    const neverResolvingFetcher = (): Promise<never> => new Promise<never>(() => {});
+
+    // Start the call but do NOT await — we need to advance timers first
+    const callPromise = (
+      checkRevocation as (opts: CheckRevocationOptions) => Promise<RevocationResult>
+    )({
+      data,
+      signature: sig,
+      publicKey: kp.publicKeyBytes,
+      keyId: "timeout-test-key",
+      revocationListFetcher: neverResolvingFetcher,
+    });
+
+    // Advance fake timers well past any reasonable REVOCATION_FETCH_TIMEOUT_MS value.
+    // This fires the implementation's setTimeout if it exists.
+    await vi.advanceTimersByTimeAsync(5000);
+
+    // Now the promise should have resolved (if the fix is in place)
+    const result = await callPromise;
+
+    // Must be BLOCKED — a never-resolving fetcher must not allow indefinite hang
+    expect(result.verdict).toBe("BLOCKED");
+
+    // Reason must mention "timed out" so operators can diagnose CRL endpoint issues
+    expect(result.reason).toBeTruthy();
+    expect(result.reason).toMatch(/timed out/i);
+  }, 1000); // 1 second real-time cap: failing test times out fast rather than hanging CI
+});
+
+describe("checkRevocation — WS-A08-02: never-resolving fetcher in install-sig path → BLOCKED (REVOC-TIMEOUT-02)", () => {
+  // ---------------------------------------------------------------------------
+  // REVOC-TIMEOUT-02: checkRevocationListOnly() (the install-sig path) also
+  // wraps the fetcher in a timeout.
+  //
+  // checkRevocationListOnly() is the SECOND call site — reached when
+  // CLAUDE_PLUGIN_ROOT is set, signature is absent, and the install-sig
+  // verification succeeds. It has its own `await revocationListFetcher!()` call
+  // that is currently unwrapped.
+  //
+  // Setup: use a real temp dir + real signPluginRoot() so the install-sig path
+  // runs through to checkRevocationListOnly, same pattern as the LISTONLY tests.
+  // ---------------------------------------------------------------------------
+
+  let nobleSecretKey: Uint8Array;
+  let noblePublicKey: Uint8Array;
+  let tmpDir: string;
+  let savedPluginRoot: string | undefined;
+
+  beforeEach(async () => {
+    // Generate ephemeral @noble keypair
+    const { secretKey, publicKey } = await ed.keygenAsync();
+    nobleSecretKey = new Uint8Array(secretKey);
+    noblePublicKey = new Uint8Array(publicKey);
+
+    // Real temp dir for install-sig
+    const rawTmp = fs.mkdtempSync(path.join(os.tmpdir(), "teo-revoke-timeout-"));
+    tmpDir = fs.realpathSync(rawTmp);
+    await signPluginRoot(tmpDir, "timeout-test-install-key", nobleSecretKey);
+
+    savedPluginRoot = process.env["CLAUDE_PLUGIN_ROOT"];
+    process.env["CLAUDE_PLUGIN_ROOT"] = tmpDir;
+
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+
+    if (savedPluginRoot === undefined) {
+      delete process.env["CLAUDE_PLUGIN_ROOT"];
+    } else {
+      process.env["CLAUDE_PLUGIN_ROOT"] = savedPluginRoot;
+    }
+
+    try {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    } catch {
+      // best-effort
+    }
+  });
+
+  it("REVOC-TIMEOUT-02. checkRevocationListOnly() (install-sig path): never-resolving fetcher → BLOCKED with 'timed out'", async () => {
+    requireImpl("REVOC-TIMEOUT-02: checkRevocationListOnly() + never-resolving fetcher → BLOCKED");
+
+    // Trigger checkRevocationListOnly via plugin-context path:
+    //   - CLAUDE_PLUGIN_ROOT is set (done in beforeEach)
+    //   - signature is undefined (triggers install-sig path)
+    //   - install-sig file is valid (written in beforeEach)
+    // Then checkRevocationListOnly() tries to call revocationListFetcher — which never resolves.
+    const neverResolvingFetcher = (): Promise<never> => new Promise<never>(() => {});
+
+    const callPromise = (
+      checkRevocation as (opts: CheckRevocationOptions) => Promise<RevocationResult>
+    )({
+      data: new Uint8Array([0x01]),
+      signature: undefined, // triggers plugin-context path → checkRevocationListOnly
+      publicKey: noblePublicKey,
+      keyId: "timeout-test-install-key",
+      revocationListFetcher: neverResolvingFetcher,
+    });
+
+    // Advance fake timers well past any REVOCATION_FETCH_TIMEOUT_MS value
+    await vi.advanceTimersByTimeAsync(5000);
+
+    const result = await callPromise;
+
+    // checkRevocationListOnly must also be protected — second call site must time out
+    expect(result.verdict).toBe("BLOCKED");
+    expect(result.reason).toBeTruthy();
+    expect(result.reason).toMatch(/timed out/i);
+  }, 1000);
+});
+
+describe("checkRevocation — WS-A08-02: fetcher that resolves quickly is NOT blocked by timeout (REVOC-TIMEOUT-03)", () => {
+  // ---------------------------------------------------------------------------
+  // REVOC-TIMEOUT-03: A fetcher that resolves quickly must NOT be blocked.
+  //
+  // The timeout must only fire when the fetcher is slower than
+  // REVOCATION_FETCH_TIMEOUT_MS. A fast-resolving fetcher must proceed through
+  // the normal validation path and return the correct pass/fail verdict based
+  // on the revocation list contents — not a "timed out" block.
+  //
+  // Uses real timers (no vi.useFakeTimers). The fetcher resolves synchronously
+  // via a resolved promise, which is guaranteed to complete before any timeout.
+  // This test should pass BOTH before and after the fix — it is a regression
+  // guard confirming the timeout does not trigger on normal fast responses.
+  // ---------------------------------------------------------------------------
+
+  let kp: EphemeralKeyPair;
+  const data = new Uint8Array([0x05, 0x06, 0x07, 0x08]);
+
+  beforeEach(() => {
+    kp = generateEphemeralKeyPair();
+  });
+
+  it("REVOC-TIMEOUT-03a. fetcher resolves immediately (microtask) with clean list → PASS (not 'timed out')", async () => {
+    requireImpl(
+      "REVOC-TIMEOUT-03a: fast-resolving clean fetcher must not be timeout-blocked → PASS"
+    );
+
+    const sig = signData(data, kp.privateKeyObject);
+
+    // Resolves synchronously (next microtask) — always beats any timeout
+    const fastCleanFetcher = (): Promise<RevocationList> => Promise.resolve({ revoked_keys: [] });
+
+    const result = await (
+      checkRevocation as (opts: CheckRevocationOptions) => Promise<RevocationResult>
+    )({
+      data,
+      signature: sig,
+      publicKey: kp.publicKeyBytes,
+      keyId: "fast-key",
+      revocationListFetcher: fastCleanFetcher,
+    });
+
+    // Fast fetcher must not be blocked with "timed out" — should follow normal path
+    expect(result.verdict).toBe("PASS");
+    // Must not be a timeout block
+    expect(result.reason ?? "").not.toMatch(/timed out/i);
+  });
+
+  it("REVOC-TIMEOUT-03b. fetcher resolves immediately with revoked key list → BLOCKED for revocation, NOT for timeout", async () => {
+    requireImpl(
+      "REVOC-TIMEOUT-03b: fast-resolving revoked fetcher must produce revocation BLOCKED, not timeout BLOCKED"
+    );
+
+    const sig = signData(data, kp.privateKeyObject);
+
+    // Resolves immediately with a list that has our key revoked
+    const fastRevokedFetcher = (): Promise<RevocationList> =>
+      Promise.resolve({ revoked_keys: [{ key_id: "fast-key", reason: "test revocation" }] });
+
+    const result = await (
+      checkRevocation as (opts: CheckRevocationOptions) => Promise<RevocationResult>
+    )({
+      data,
+      signature: sig,
+      publicKey: kp.publicKeyBytes,
+      keyId: "fast-key",
+      revocationListFetcher: fastRevokedFetcher,
+    });
+
+    // Must be BLOCKED for the correct reason: key revoked, not timeout
+    expect(result.verdict).toBe("BLOCKED");
+    expect(result.reason).toBeTruthy();
+    // The block reason must be about revocation, not timeout
+    expect(result.reason).not.toMatch(/timed out/i);
+    expect(result.reason).toMatch(/revoked/i);
   });
 });

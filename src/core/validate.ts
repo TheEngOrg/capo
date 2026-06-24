@@ -179,28 +179,44 @@ export function validatePlan(plan: Plan): ValidationResult {
 
   const reportedCycles = new Set<string>();
 
-  function dfs(id: string, path: string[]): void {
-    color.set(id, GRAY);
-    const task = taskById.get(id);
-    // taskById is keyed from seenIds (same set DFS iterates), so every id in
-    // seenIds has an entry. This guard is a defensive fallback — unreachable
-    // in practice, but protects against future refactoring regressions.
-    /* c8 ignore next */
-    if (!task) return;
+  function iterativeDfs(startId: string): void {
+    // Each stack entry: [nodeId, parentPath, neighborIndex]
+    const stack: Array<[string, string[], number]> = [[startId, [], 0]];
+    color.set(startId, GRAY);
 
-    for (const needsId of task.needs) {
-      // Skip edges into nonexistent tasks (already flagged as UNRESOLVED_NEEDS_REF)
-      if (!seenIds.has(needsId)) continue;
+    while (stack.length > 0) {
+      const [id, path, neighborIdx] = stack[stack.length - 1];
+      const task = taskById.get(id);
+      // taskById is keyed from seenIds (same set DFS iterates), so every id in
+      // seenIds has an entry. This guard is a defensive fallback — unreachable
+      // in practice, but protects against future refactoring regressions.
+      /* c8 ignore next */
+      if (!task) {
+        stack.pop();
+        color.set(id, BLACK);
+        continue;
+      }
+
+      // Collect neighbors that exist in the plan (skip UNRESOLVED_NEEDS_REF edges)
+      const neighbors = task.needs.filter((n) => seenIds.has(n));
+
+      if (neighborIdx >= neighbors.length) {
+        // All neighbors processed — mark fully explored
+        stack.pop();
+        color.set(id, BLACK);
+        continue;
+      }
+
+      const needsId = neighbors[neighborIdx];
+      stack[stack.length - 1][2]++; // advance neighbor index
 
       const neighborColor = color.get(needsId);
-
       if (neighborColor === GRAY) {
         // Found a back-edge — reconstruct the cycle path from the current DFS stack
-        const cycleStart = path.indexOf(needsId);
+        const cycleStart = path.findIndex((p) => p === needsId);
         const cyclePath = [...path.slice(cycleStart), id, needsId];
         // Normalize to a canonical form to avoid duplicate reports for the same cycle
         const cycleKey = cyclePath.join("→");
-        /* c8 ignore else */
         if (!reportedCycles.has(cycleKey)) {
           reportedCycles.add(cycleKey);
           errors.push({
@@ -209,17 +225,16 @@ export function validatePlan(plan: Plan): ValidationResult {
           });
         }
       } else if (neighborColor === WHITE) {
-        dfs(needsId, [...path, id]);
+        color.set(needsId, GRAY);
+        stack.push([needsId, [...path, id], 0]);
       }
       // BLACK = already fully explored, no cycle through this node
     }
-
-    color.set(id, BLACK);
   }
 
   for (const id of seenIds) {
     if (color.get(id) === WHITE) {
-      dfs(id, []);
+      iterativeDfs(id);
     }
   }
 
@@ -231,7 +246,7 @@ export function validatePlan(plan: Plan): ValidationResult {
   for (const task of plan.tasks) {
     if (task.type === "AGENT" && task.agent_id === "capo") {
       errors.push({
-        code: "PQ_03_SAGE_AS_EXECUTOR",
+        code: "PQ_03_CAPO_AS_EXECUTOR",
         message: `Task "${task.id}" specifies agent_id "capo". Capo is the planner and must never appear as a task executor. Use a specialist agent (e.g. "eng", "qa").`,
         taskId: task.id,
       });
@@ -254,9 +269,9 @@ export function validatePlan(plan: Plan): ValidationResult {
   // -------------------------------------------------------------------------
 
   if (plan.tasks.length > PQ_MAX_TASK_COUNT) {
-    warnings.push({
+    errors.push({
       code: "PQ_02_TOO_MANY_TASKS",
-      message: `Plan has ${plan.tasks.length} tasks, which exceeds the recommended maximum of ${PQ_MAX_TASK_COUNT}. Consider splitting into smaller plans. (Threshold: PQ_MAX_TASK_COUNT=${PQ_MAX_TASK_COUNT}, pending staff-engineer ratification.)`,
+      message: `Plan has ${plan.tasks.length} tasks, which exceeds the hard maximum of ${PQ_MAX_TASK_COUNT}. Consider splitting into smaller plans. (Threshold: PQ_MAX_TASK_COUNT=${PQ_MAX_TASK_COUNT}, pending staff-engineer ratification.)`,
     });
   }
 

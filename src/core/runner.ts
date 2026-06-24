@@ -385,7 +385,7 @@ export class TopologicalRunner {
    * Never throws — always returns a StepResult.
    */
   private async runStep(task: TEOTask, context: RunContext): Promise<StepResult> {
-    const timeoutMs = this.defaultStepTimeoutMs;
+    const timeoutMs = context.stepTimeoutMs;
 
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timedOutPromise: Promise<StepResult> = new Promise((resolve) => {

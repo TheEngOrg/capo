@@ -551,7 +551,7 @@ describe("Demo 11 — PQ-03 capo-as-executor → VALIDATION_REJECTED", () => {
 
     expect(result.overallStatus).toBe("VALIDATION_REJECTED");
     expect(result.validationResult.valid).toBe(false);
-    expect(result.validationResult.errors.some((e) => e.code === "PQ_03_SAGE_AS_EXECUTOR")).toBe(
+    expect(result.validationResult.errors.some((e) => e.code === "PQ_03_CAPO_AS_EXECUTOR")).toBe(
       true
     );
     expect(result.events).toHaveLength(0);

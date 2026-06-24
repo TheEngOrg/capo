@@ -679,6 +679,72 @@ describe("AppendOnlyLedger — PATH-LEN: session_id maximum length cap", () => {
 });
 
 // ---------------------------------------------------------------------------
+// WS-A08-03 Fix B — LEDGER-NULL-BYTE-01/02
+//
+// session_id validation must reject null bytes (\0) with a clean LedgerPathError.
+// The existing check covers /, \, and .. but not \0. A session_id like
+// "foo\0bar" would pass today and produce an opaque OS-level ENOENT/EINVAL
+// at the filesystem layer instead of a structured error.
+//
+// These tests are currently FAILING — the null-byte check has not been added yet.
+// ---------------------------------------------------------------------------
+
+describe("AppendOnlyLedger — LEDGER-NULL-BYTE: session_id null byte rejection (WS-A08-03 Fix B)", () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = makeTempDir();
+  });
+
+  afterEach(() => {
+    removeTempDir(tempDir);
+  });
+
+  // LEDGER-NULL-BYTE-01: embedded null byte must throw LedgerPathError (not OS error).
+  // FAILS TODAY: null byte passes the current path-separator check.
+  it("LEDGER-NULL-BYTE-01: session_id with embedded null byte ('foo\\0bar') throws LedgerPathError, not an OS-level error", () => {
+    // The null byte embedded in a session_id would produce an EINVAL at the
+    // filesystem layer on most OSes — an opaque error with no guidance.
+    // After the fix: the constructor catches this early with a clear LedgerPathError.
+    expect(() => {
+      new AppendOnlyLedger({ session_id: "foo\0bar", baseDir: tempDir });
+    }).toThrow(/invalid|character|null/i);
+
+    // Specifically must NOT throw an opaque EINVAL/ENOENT — check error name is LedgerPathError.
+    // We assert this by catching the error and checking its name.
+    let caughtError: unknown = null;
+    try {
+      new AppendOnlyLedger({ session_id: "foo\0bar", baseDir: tempDir });
+    } catch (e) {
+      caughtError = e;
+    }
+    expect(caughtError).not.toBeNull();
+    expect((caughtError as Error).name).toBe("LedgerPathError");
+  });
+
+  // LEDGER-NULL-BYTE-02: pure null byte must also throw LedgerPathError.
+  // FAILS TODAY: "\0" passes the current checks (non-empty, no slash, no "..").
+  it("LEDGER-NULL-BYTE-02: session_id of pure null byte ('\\0') throws LedgerPathError", () => {
+    let caughtError: unknown = null;
+    try {
+      new AppendOnlyLedger({ session_id: "\0", baseDir: tempDir });
+    } catch (e) {
+      caughtError = e;
+    }
+    expect(caughtError).not.toBeNull();
+    expect((caughtError as Error).name).toBe("LedgerPathError");
+    expect((caughtError as Error).message).toMatch(/invalid|character|null/i);
+  });
+
+  // Regression guard: valid session_id without null bytes must still succeed.
+  it("LEDGER-NULL-BYTE-GUARD: session_id without null bytes constructs normally (no regression)", () => {
+    expect(() => {
+      new AppendOnlyLedger({ session_id: "clean-session-id", baseDir: tempDir });
+    }).not.toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // BOUNDARY: nothing written outside the injected base dir (isolation)
 // ---------------------------------------------------------------------------
 

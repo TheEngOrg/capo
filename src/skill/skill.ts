@@ -74,8 +74,8 @@ function resolveEffectiveLedgerBase(override?: string): string {
 
 /**
  * Check whether a directory is writable by attempting to create it (if absent)
- * and write + delete a probe file. Returns an error string if not writable,
- * or null if writable.
+ * or write + delete a probe file (if present). Returns an error string if not
+ * writable, or null if writable.
  */
 function probeWritable(dir: string): string | null {
   try {
@@ -91,8 +91,11 @@ function probeWritable(dir: string): string | null {
       if (!stat.isDirectory()) {
         return `TEO ledger dir "${dir}" is not a directory; set TEO_LEDGER_DIR to a writable directory path`;
       }
-      // Dir exists — use accessSync to check writability without modifying mtime.
-      fs.accessSync(dir, fs.constants.W_OK);
+      // Dir exists — write + delete a probe file to verify real writability.
+      // fs.accessSync(W_OK) can false-positive on FUSE/NFS mounts.
+      const probeFile = path.join(dir, ".write_probe");
+      fs.writeFileSync(probeFile, "");
+      fs.unlinkSync(probeFile);
     } else {
       // Dir doesn't exist — try to create it (this is the real probe).
       fs.mkdirSync(dir, { recursive: true });

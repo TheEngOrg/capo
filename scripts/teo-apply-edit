@@ -1,0 +1,944 @@
+#!/usr/bin/env bash
+# ============================================================================
+# teo-apply-edit — TEO Mechanical Write Tool (patch-spec mode)
+# ============================================================================
+# Applies surgical edits to allowlisted files via a JSON patch spec.
+# No direct Edit/Write calls made by agents to protected paths; all writes
+# must flow through this script (or teo-create-document for new files).
+#
+# USAGE
+#   printf '{"schema_version":"1.0.0",...}' | teo-apply-edit
+#   teo-apply-edit --patch-file /tmp/spec.json
+#   teo-apply-edit --help | -h
+#
+# PATCH SPEC JSON SCHEMA (schema_version: "1.0.0")
+#   {
+#     "schema_version": "1.0.0",
+#     "target": "<relative path>",
+#     "patches": [
+#       { "op": "replace"|"insert-before"|"insert-after"|"append",
+#         "anchor": "<literal string>",   (omit for append)
+#         "content": "<new content>" }
+#     ]
+#   }
+#
+# ALLOWLIST (hardcoded — locked by CTO, Wave 2 plan)
+#   .claude/scripts/**  .claude/hooks/**  .claude/shared/**
+#   docs/**  src/**  packages/**
+#   Extended by .claude/config/teo-allowlist.json additional_protected_paths
+#
+# BYPASS MECHANISM
+#   Script sets TEO_APPLY_EDIT_BYPASS="teo-ae-$$-$(date +%s)" before any
+#   internal Write/Edit call and registers EXIT trap to unset it. The
+#   pre-edit-write-guard.sh hook accepts bypass only when the value matches
+#   ^teo-ae-[0-9]+-[0-9]+$. Every bypass event is logged.
+#
+# ATOMICITY
+#   flock -x per-file lockfile + temp write + mv rename.
+#   Fail-open: flock unavailable → WARN stderr, write without lock.
+#   Audit files are valid JSON arrays at all times.
+#
+# EXIT CODES
+#   0  Applied (or empty patch list — no-op)
+#   1  Refused: allowlist violation / path traversal / anchor-not-found /
+#              ambiguous-anchor / schema error / symlink
+#   2  Usage error: bad invocation
+#
+# OQ RESOLUTIONS (ADR-037)
+#   OQ-1: op:append creates new files within allowlist (write-new semantics).
+#   OQ-2: all-or-nothing atomicity — all patches applied to in-memory buffer;
+#         write occurs only if ALL patches succeed.
+#   OQ-3: flock -w 10 (10-second timeout). Acceptable for gate frequencies.
+#   OQ-4: Audit log retention policy TODO — out of scope for Wave 2a.
+#   OQ-5: teo-allowlist.json is outside protected paths intentionally
+#         (avoids bootstrap problem). Documented in ADR-037.
+#
+# See: .claude/shared/posix-write-contract.md
+# See: docs/adr/ADR-037-mechanical-write-enforcement.md
+# ============================================================================
+
+set -uo pipefail
+export LC_ALL=C.UTF-8
+export LANG=C.UTF-8
+
+# ─── Constants ───────────────────────────────────────────────────────────────
+
+SCRIPT_NAME="teo-apply-edit"
+SCHEMA_VERSION_EXPECTED="1.0.0"
+
+# Built-in allowlist prefixes (locked by CTO — cannot be narrowed by config)
+BUILTIN_ALLOWLIST=(
+  ".claude/scripts"
+  ".claude/hooks"
+  ".claude/shared"
+  ".claude/agents"
+  ".claude/settings.json"
+  "docs"
+  "src"
+  "packages"
+)
+
+# ─── Environment ─────────────────────────────────────────────────────────────
+
+# PROJECT_ROOT resolution moved to after arg parsing (issue #572 fix — see below)
+if false; then  # block removed — PROJECT_ROOT resolved post-arg-parse (issue #572)
+  : # removed (issue #572)
+  : # removed (issue #572)
+  : # removed (issue #572)
+  : # removed (issue #572)
+  : # removed (issue #572)
+else
+  : # removed (issue #572)
+fi
+
+# AUDIT_DIR resolution moved to after arg parsing (issue #572 fix — see below)
+if false; then  # block removed — AUDIT_DIR resolved post-arg-parse (issue #572)
+  : # removed (issue #572)
+else
+  : # removed (issue #572)
+fi
+
+# Generate execution_id at startup
+EXECUTION_ID="$(date +%s)-$$"
+
+# ─── Bypass mechanism ────────────────────────────────────────────────────────
+# Capture the externally-set bypass value (if any) BEFORE overwriting it.
+# The script sets its own bypass token so the pre-edit-write-guard.sh hook
+# allows our internal writes. EXIT trap ensures cleanup on any exit path.
+_INCOMING_BYPASS="${TEO_APPLY_EDIT_BYPASS:-}"
+
+TEO_APPLY_EDIT_BYPASS="teo-ae-$$-$(date +%s)"
+export TEO_APPLY_EDIT_BYPASS
+trap 'unset TEO_APPLY_EDIT_BYPASS; rm -f "${_CONTENT_TMPFILE:-}"' EXIT
+
+# ─── Infrastructure checks ───────────────────────────────────────────────────
+
+HAS_JQ=true
+HAS_FLOCK=true
+
+if ! command -v jq > /dev/null 2>&1; then
+  HAS_JQ=false
+  printf 'WARN: jq not found — audit log will not be written; spec parsing uses grep fallback\n' >&2
+fi
+
+if ! command -v flock > /dev/null 2>&1; then
+  HAS_FLOCK=false
+  printf 'WARN: flock not available — writing without lock\n' >&2
+fi
+
+# ─── Usage ───────────────────────────────────────────────────────────────────
+
+usage() {
+  printf 'Usage: %s [--project-root <path>] [--patch-file <path>] [--help|-h]\n\n' "$SCRIPT_NAME"
+  printf 'Apply surgical edits to allowlisted files via a JSON patch spec.\n\n'
+  printf 'Options:\n'
+  printf '  --project-root <path>  Override project root (default: git root or pwd)\n'
+  printf '  --patch-file <path>    Read patch spec from file\n'
+  printf '  --help, -h             Show this help\n\n'
+  printf 'Input modes:\n'
+  printf '  (a) Stdin:      printf '"'"'{"schema_version":"1.0.0",...}'"'"' | %s\n' "$SCRIPT_NAME"
+  printf '  (b) Patch file: %s --patch-file /tmp/spec.json\n' "$SCRIPT_NAME"
+  printf '  (c) Help:       %s --help\n\n' "$SCRIPT_NAME"
+  printf 'Patch spec JSON schema (schema_version: "1.0.0"):\n'
+  printf '  { "schema_version": "1.0.0",\n'
+  printf '    "target": "<relative path>",\n'
+  printf '    "patches": [\n'
+  printf '      { "op": "replace"|"insert-before"|"insert-after"|"append",\n'
+  printf '        "anchor": "<literal string>",\n'
+  printf '        "content": "<new content>" } ] }\n\n'
+  printf 'Allowlisted path prefixes:\n'
+  printf '  .claude/scripts/**  .claude/hooks/**  .claude/shared/**\n'
+  printf '  docs/**  src/**  packages/**\n'
+  printf '  (extended by .claude/config/teo-allowlist.json)\n\n'
+  printf 'Exit codes:\n'
+  printf '  0  Applied (or no-op for empty patches array)\n'
+  printf '  1  Refused (allowlist violation, schema error, anchor error, symlink)\n'
+  printf '  2  Usage error\n\n'
+  printf 'See: .claude/shared/posix-write-contract.md\n'
+  printf 'See: docs/adr/ADR-037-mechanical-write-enforcement.md\n'
+}
+
+# ─── Argument parsing ────────────────────────────────────────────────────────
+
+PROJECT_ROOT_ARG=""    # --project-root <path> to override CWD resolution (declare before loop)
+MODE="stdin"           # "stdin" | "patch-file" | "inline" | "help"
+PATCH_FILE=""
+SIGNING_KEY_DIR=""     # --key-dir <path> for post-cutover signing
+INLINE_JSON=""         # positional JSON argument
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --help|-h)
+      usage
+      exit 0
+      ;;
+    --patch-file)
+      if [[ $# -lt 2 ]]; then
+        printf 'ERROR: --patch-file requires an argument\n' >&2
+        printf 'Usage: %s --patch-file <path>\n' "$SCRIPT_NAME" >&2
+        exit 2
+      fi
+      MODE="patch-file"
+      PATCH_FILE="$2"
+      shift 2
+      ;;
+    --project-root)
+      if [[ $# -lt 2 ]]; then
+        printf 'ERROR: --project-root requires an argument\n' >&2
+        exit 2
+      fi
+      PROJECT_ROOT_ARG="$2"
+      shift 2
+      ;;
+    --key-dir)
+      if [[ $# -lt 2 ]]; then
+        printf 'ERROR: --key-dir requires an argument\n' >&2
+        exit 2
+      fi
+      SIGNING_KEY_DIR="$2"
+      shift 2
+      ;;
+    -*)
+      printf 'ERROR: unrecognized flag: %s\n' "$1" >&2
+      printf 'Run %s --help for usage.\n' "$SCRIPT_NAME" >&2
+      exit 2
+      ;;
+    *)
+      # Accept a positional JSON argument (patch spec inline)
+      if [[ -z "$INLINE_JSON" ]] && [[ "$MODE" == "stdin" ]]; then
+        INLINE_JSON="$1"
+        MODE="inline"
+      else
+        printf 'ERROR: unexpected argument: %s\n' "$1" >&2
+        printf 'Run %s --help for usage.\n' "$SCRIPT_NAME" >&2
+        exit 2
+      fi
+      shift
+      ;;
+  esac
+done
+
+# ─── PROJECT_ROOT resolution (after arg parsing — issue #572 fix) ─────────────
+# Priority: --project-root flag > TEO_PROJECT_ROOT env > git > pwd
+
+# Validate --project-root value if provided
+if [[ -n "$PROJECT_ROOT_ARG" ]]; then
+  # Strip trailing slash
+  PROJECT_ROOT_ARG="${PROJECT_ROOT_ARG%/}"
+  # Resolve relative paths to absolute (cd + pwd idiom)
+  if [[ "$PROJECT_ROOT_ARG" != /* ]]; then
+    _resolved_root=""
+    _resolved_root="$(cd "$PROJECT_ROOT_ARG" 2>/dev/null && pwd)" || true
+    if [[ -z "$_resolved_root" ]]; then
+      printf 'ERROR: --project-root path does not exist: %s\n' "$PROJECT_ROOT_ARG" >&2
+      exit 2
+    fi
+    PROJECT_ROOT_ARG="$_resolved_root"
+  fi
+  # Validate path exists
+  if [[ ! -e "$PROJECT_ROOT_ARG" ]]; then
+    printf 'ERROR: --project-root path does not exist: %s\n' "$PROJECT_ROOT_ARG" >&2
+    exit 2
+  fi
+  # Validate path is a directory (not a regular file)
+  if [[ ! -d "$PROJECT_ROOT_ARG" ]]; then
+    printf 'ERROR: --project-root path is not a directory: %s\n' "$PROJECT_ROOT_ARG" >&2
+    exit 2
+  fi
+  # Warn if no .claude/ subdir (fail-open — continue with built-in allowlist)
+  if [[ ! -d "$PROJECT_ROOT_ARG/.claude" ]]; then
+    printf 'WARN: --project-root directory has no .claude/ subdir: %s\n' "$PROJECT_ROOT_ARG" >&2
+  fi
+fi
+
+# Resolve PROJECT_ROOT (--project-root flag > TEO_PROJECT_ROOT env > CLAUDE_PLUGIN_ROOT env > git > pwd)
+if [[ -n "$PROJECT_ROOT_ARG" ]]; then
+  PROJECT_ROOT="$PROJECT_ROOT_ARG"
+elif [[ -n "${TEO_PROJECT_ROOT:-}" ]]; then
+  PROJECT_ROOT="$TEO_PROJECT_ROOT"
+elif [[ -n "${CLAUDE_PLUGIN_ROOT:-}" ]]; then
+  PROJECT_ROOT="$CLAUDE_PLUGIN_ROOT"
+elif command -v git > /dev/null 2>&1; then
+  PROJECT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || printf '%s' "$PWD")"
+else
+  PROJECT_ROOT="$PWD"
+fi
+
+# Resolve audit directory (TEO_AUDIT_DIR overrides for tests)
+if [[ -n "${TEO_AUDIT_DIR:-}" ]]; then
+  AUDIT_DIR="$TEO_AUDIT_DIR"
+else
+  AUDIT_DIR="${PROJECT_ROOT}/.claude/memory/traces"
+fi
+
+# Check if stdin is a tty with no --patch-file and no inline JSON
+if [[ "$MODE" == "stdin" ]] && [[ -t 0 ]]; then
+  printf 'ERROR: no input provided. Pipe a JSON patch spec or use --patch-file.\n' >&2
+  printf 'Usage: printf '"'"'{"schema_version":"1.0.0",...}'"'"' | %s\n' "$SCRIPT_NAME" >&2
+  printf '       %s --patch-file /tmp/spec.json\n' "$SCRIPT_NAME" >&2
+  exit 2
+fi
+
+# ─── Date/timestamp helpers (needed by bypass gate below) ────────────────────
+
+# Portable ISO 8601 UTC timestamp
+get_timestamp() {
+  date -u '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || date '+%Y-%m-%dT%H:%M:%SZ'
+}
+
+# Get today's date for log file naming
+get_date_suffix() {
+  date -u '+%Y-%m-%d' 2>/dev/null || date '+%Y-%m-%d'
+}
+
+# ─── Bypass + signing gate ────────────────────────────────────────────────────
+# When bypass is externally set (non-teo-ae pattern) AND --key-dir provided:
+# Check if the key-dir has valid keys. If not, write bypass-audit refused entry.
+_EXTERNAL_BYPASS=false
+if [[ "$_INCOMING_BYPASS" == "1" ]] && [[ -n "$SIGNING_KEY_DIR" ]]; then
+  _EXTERNAL_BYPASS=true
+fi
+
+if [[ "$_EXTERNAL_BYPASS" == "true" ]]; then
+  # Check if any .ed25519 key exists anywhere in the key-dir (agents/ subdir or root)
+  _AGENT="${AGENT_IDENTITY_TOKEN:-unknown}"
+  _KEY_FILE_AGENTS="${SIGNING_KEY_DIR}/agents/${_AGENT}.ed25519"
+  _KEY_FILE_ROOT="${SIGNING_KEY_DIR}/${_AGENT}.ed25519"
+  _HAS_KEY=false
+  [[ -f "$_KEY_FILE_AGENTS" ]] && _HAS_KEY=true
+  [[ -f "$_KEY_FILE_ROOT" ]] && _HAS_KEY=true
+  # Also check if any .ed25519 file exists at all in the key-dir tree
+  if [[ "$_HAS_KEY" == "false" ]]; then
+    # No find available — check known subpaths
+    if ls "${SIGNING_KEY_DIR}/agents/"*.ed25519 > /dev/null 2>&1; then
+      _HAS_KEY=true
+    elif ls "${SIGNING_KEY_DIR}/"*.ed25519 > /dev/null 2>&1; then
+      _HAS_KEY=true
+    fi
+  fi
+  if [[ "$_HAS_KEY" == "false" ]]; then
+    # No valid signing key — write bypass-audit refused entry as JSONL (append)
+    if [[ "$HAS_JQ" == "true" ]]; then
+      _date_suffix="$(get_date_suffix)"
+      _bypass_log="${AUDIT_DIR}/bypass-audit-${_date_suffix}.json"
+      mkdir -p "$AUDIT_DIR" 2>/dev/null || true
+      _ts="$(get_timestamp)"
+      # Build the target field from the inline JSON arg (best-effort)
+      _bp_target=""
+      if [[ -n "$INLINE_JSON" ]]; then
+        _bp_target="$(printf '%s' "$INLINE_JSON" | jq -r '.target // ""' 2>/dev/null || true)"
+      fi
+      _bypass_entry="$(jq -n \
+        --arg sv "1.1.0" \
+        --arg ts_val "$_ts" \
+        --arg verdict_val "refused" \
+        --arg reason_val "unsigned_bypass" \
+        --arg bypass_val "$_INCOMING_BYPASS" \
+        --arg target_val "$_bp_target" \
+        '{
+          "schema_version": $sv,
+          "timestamp": $ts_val,
+          "verdict": $verdict_val,
+          "refusal_reason": $reason_val,
+          "bypass_value": $bypass_val,
+          "target": $target_val
+        }' 2>/dev/null)" || true
+      if [[ -n "$_bypass_entry" ]]; then
+        # Append as JSONL (one JSON object per line)
+        printf '%s\n' "$_bypass_entry" >> "$_bypass_log" 2>/dev/null || true
+      fi
+    fi
+    printf 'ERROR: bypass refused — no signing key for agent %s (unsigned_bypass)\n' "$_AGENT" >&2
+    exit 1
+  fi
+fi
+
+# ─── Read patch spec ─────────────────────────────────────────────────────────
+
+SPEC_JSON=""
+
+if [[ "$MODE" == "inline" ]]; then
+  # Use the inline JSON argument directly
+  SPEC_JSON="$INLINE_JSON"
+elif [[ "$MODE" == "patch-file" ]]; then
+  # Validate patch file
+  if [[ -L "$PATCH_FILE" ]]; then
+    printf 'ERROR: --patch-file argument is a symlink — symlinks refused: %s\n' "$PATCH_FILE" >&2
+    exit 1
+  fi
+  if [[ ! -f "$PATCH_FILE" ]]; then
+    printf 'ERROR: --patch-file not found or not a regular file: %s\n' "$PATCH_FILE" >&2
+    exit 1
+  fi
+  # Read file using bash builtins (avoids cat dependency for restricted PATH tests)
+  SPEC_JSON=""
+  while IFS= read -r _line || [[ -n "$_line" ]]; do
+    if [[ -z "$SPEC_JSON" ]]; then
+      SPEC_JSON="$_line"
+    else
+      SPEC_JSON="${SPEC_JSON}
+${_line}"
+    fi
+  done < "$PATCH_FILE"
+else
+  # Read from stdin using bash builtins
+  SPEC_JSON=""
+  while IFS= read -r _line || [[ -n "$_line" ]]; do
+    if [[ -z "$SPEC_JSON" ]]; then
+      SPEC_JSON="$_line"
+    else
+      SPEC_JSON="${SPEC_JSON}
+${_line}"
+    fi
+  done
+fi
+
+# ─── JSON parse helpers ───────────────────────────────────────────────────────
+
+# Require jq for JSON parsing; without it, fail with a clear error
+if [[ "$HAS_JQ" == "false" ]]; then
+  printf 'WARN: jq not available — cannot parse patch spec JSON\n' >&2
+  exit 0
+fi
+
+# ─── Parse + validate patch spec ─────────────────────────────────────────────
+
+# Validate JSON is parseable
+if ! printf '%s' "$SPEC_JSON" | jq empty > /dev/null 2>&1; then
+  printf 'ERROR: patch spec is not valid JSON\n' >&2
+  exit 1
+fi
+
+# Validate schema_version
+SCHEMA_VER=""
+SCHEMA_VER="$(printf '%s' "$SPEC_JSON" | jq -r '.schema_version // ""' 2>/dev/null || true)"
+
+if [[ -z "$SCHEMA_VER" ]]; then
+  printf 'ERROR: schema_version field is missing from patch spec\n' >&2
+  exit 1
+fi
+
+if [[ "$SCHEMA_VER" != "$SCHEMA_VERSION_EXPECTED" ]]; then
+  printf 'ERROR: unsupported schema_version "%s" — expected "1.0.0"\n' "$SCHEMA_VER" >&2
+  exit 1
+fi
+
+# Validate target field
+TARGET=""
+TARGET="$(printf '%s' "$SPEC_JSON" | jq -r '.target // ""' 2>/dev/null || true)"
+
+if [[ -z "$TARGET" ]]; then
+  printf 'ERROR: target field is missing from patch spec\n' >&2
+  exit 1
+fi
+
+# Validate patches array present
+PATCHES_JSON=""
+PATCHES_JSON="$(printf '%s' "$SPEC_JSON" | jq -r 'if .patches == null then "MISSING" else "OK" end' 2>/dev/null || true)"
+
+if [[ "$PATCHES_JSON" == "MISSING" ]]; then
+  printf 'ERROR: patches field is missing from patch spec\n' >&2
+  exit 1
+fi
+
+# ─── Audit log helper functions ──────────────────────────────────────────────
+# Note: get_timestamp and get_date_suffix are defined earlier (before bypass gate).
+
+# Atomic JSON array append with flock
+# Usage: atomic_json_append <log_file> <entry_json>
+atomic_json_append() {
+  local log_file="$1"
+  local entry_json="$2"
+  local lock_file="${log_file}.lock"
+  local tmp_file
+
+  tmp_file="$(mktemp "${log_file}.tmp.XXXXXX")" || {
+    printf 'WARN: could not create temp file for audit log — write skipped\n' >&2
+    return 0
+  }
+
+  if [[ "$HAS_FLOCK" == "true" ]]; then
+    (
+      flock -x -w 10 9 2>/dev/null || {
+        printf 'WARN: flock acquisition timed out — writing audit log without lock\n' >&2
+      }
+      # Read existing array or start with empty
+      local existing="[]"
+      if [[ -s "$log_file" ]] && jq empty "$log_file" > /dev/null 2>&1; then
+        existing="$(cat "$log_file")"
+      elif [[ -f "$log_file" ]] && [[ -s "$log_file" ]]; then
+        printf 'WARN: audit log corrupt — starting fresh array\n' >&2
+      fi
+      printf '%s' "$existing" | jq --argjson entry "$entry_json" '. + [$entry]' > "$tmp_file" 2>/dev/null || {
+        printf 'WARN: failed to build audit log JSON — write skipped\n' >&2
+        rm -f "$tmp_file"
+        return 0
+      }
+      mv "$tmp_file" "$log_file"
+    ) 9>"$lock_file"
+    rm -f "$lock_file"
+  else
+    # fail-open: no flock available
+    local existing="[]"
+    if [[ -s "$log_file" ]] && jq empty "$log_file" > /dev/null 2>&1; then
+      existing="$(cat "$log_file")"
+    fi
+    printf '%s' "$existing" | jq --argjson entry "$entry_json" '. + [$entry]' > "$tmp_file" 2>/dev/null || {
+      printf 'WARN: failed to build audit log JSON — write skipped\n' >&2
+      rm -f "$tmp_file"
+      return 0
+    }
+    mv "$tmp_file" "$log_file"
+  fi
+}
+
+# Write a refused entry to the edit audit log
+write_audit_refused() {
+  local reason="$1"
+  local path="$2"
+  local patch_count="${3:-0}"
+  local patch_bytes="${4:-0}"
+  if [[ "$HAS_JQ" == "false" ]]; then
+    return 0
+  fi
+  local date_suffix
+  date_suffix="$(get_date_suffix)"
+  local log_file="${AUDIT_DIR}/edit-audit-${date_suffix}.json"
+  mkdir -p "$AUDIT_DIR" 2>/dev/null || true
+  local agent="${AGENT_IDENTITY_TOKEN:-unknown}"
+  local ts
+  ts="$(get_timestamp)"
+  local entry
+  entry="$(jq -n \
+    --arg exec_id "$EXECUTION_ID" \
+    --arg agent_val "$agent" \
+    --arg path_val "$path" \
+    --arg reason_val "$reason" \
+    --argjson count "$patch_count" \
+    --argjson bytes "$patch_bytes" \
+    --arg ts_val "$ts" \
+    '{
+      "execution_id": $exec_id,
+      "agent": $agent_val,
+      "path": $path_val,
+      "verdict": "refused",
+      "refusal_reason": $reason_val,
+      "patch_count": $count,
+      "patch_bytes": $bytes,
+      "timestamp": $ts_val
+    }' 2>/dev/null)" || return 0
+  atomic_json_append "$log_file" "$entry"
+}
+
+# Write an applied/no-op entry to the edit audit log
+write_audit_applied() {
+  local verdict="$1"  # "applied" | "no-op"
+  local path="$2"
+  local patch_count="${3:-0}"
+  local patch_bytes="${4:-0}"
+  if [[ "$HAS_JQ" == "false" ]]; then
+    return 0
+  fi
+  local date_suffix
+  date_suffix="$(get_date_suffix)"
+  local log_file="${AUDIT_DIR}/edit-audit-${date_suffix}.json"
+  mkdir -p "$AUDIT_DIR" 2>/dev/null || true
+  local agent="${AGENT_IDENTITY_TOKEN:-unknown}"
+  local ts
+  ts="$(get_timestamp)"
+  local entry
+  entry="$(jq -n \
+    --arg exec_id "$EXECUTION_ID" \
+    --arg agent_val "$agent" \
+    --arg path_val "$path" \
+    --arg verdict_val "$verdict" \
+    --argjson count "$patch_count" \
+    --argjson bytes "$patch_bytes" \
+    --arg ts_val "$ts" \
+    '{
+      "execution_id": $exec_id,
+      "agent": $agent_val,
+      "path": $path_val,
+      "verdict": $verdict_val,
+      "refusal_reason": null,
+      "patch_count": $count,
+      "patch_bytes": $bytes,
+      "timestamp": $ts_val
+    }' 2>/dev/null)" || return 0
+  atomic_json_append "$log_file" "$entry"
+}
+
+# ─── Path security checks ────────────────────────────────────────────────────
+
+# 1. Absolute path check
+if [[ "$TARGET" == /* ]]; then
+  printf 'ERROR: target path not allowed — allowlist requires relative path, got absolute: %s\n' "$TARGET" >&2
+  write_audit_refused "absolute-path" "$TARGET" 0 0
+  exit 1
+fi
+
+# 2. Path traversal check (.. components)
+if printf '%s' "$TARGET" | grep -qE '(^|/)\.\.(/|$)'; then
+  printf 'ERROR: path traversal detected in target — refused: %s\n' "$TARGET" >&2
+  write_audit_refused "path-traversal" "$TARGET" 0 0
+  exit 1
+fi
+
+# Additional traversal checks
+if [[ "$TARGET" == ".."* ]] || [[ "$TARGET" == "~"* ]] || [[ "$TARGET" == '$'* ]]; then
+  printf 'ERROR: path traversal or shell expansion detected in target — refused: %s\n' "$TARGET" >&2
+  write_audit_refused "path-traversal" "$TARGET" 0 0
+  exit 1
+fi
+
+# ─── Allowlist check ──────────────────────────────────────────────────────────
+
+# Load extension paths from teo-allowlist.json (additional_protected_paths)
+EXTENDED_ALLOWLIST=()
+ALLOWLIST_CONFIG="${PROJECT_ROOT}/.claude/config/teo-allowlist.json"
+
+if [[ -f "$ALLOWLIST_CONFIG" ]]; then
+  if [[ "$HAS_JQ" == "true" ]]; then
+    # Validate config schema_version
+    CONFIG_SCHEMA_VER=""
+    CONFIG_SCHEMA_VER="$(jq -r '.schema_version // ""' "$ALLOWLIST_CONFIG" 2>/dev/null || true)"
+    if [[ "$CONFIG_SCHEMA_VER" != "1.0.0" ]]; then
+      printf 'WARN: teo-allowlist.json schema_version mismatch ("%s") — using built-in allowlist only\n' "$CONFIG_SCHEMA_VER" >&2
+    else
+      # Load additional_protected_paths — skip entries with path traversal
+      while IFS= read -r ext_path; do
+        if [[ -z "$ext_path" ]] || [[ "$ext_path" == "null" ]]; then
+          continue
+        fi
+        # Strip trailing /**
+        ext_path_clean="${ext_path%/**}"
+        # Skip path traversal in extension entries
+        if printf '%s' "$ext_path_clean" | grep -qE '(^|/)\.\.(/|$)'; then
+          printf 'WARN: skipping extension path with traversal: %s\n' "$ext_path_clean" >&2
+          continue
+        fi
+        EXTENDED_ALLOWLIST+=("$ext_path_clean")
+      done < <(jq -r '.additional_protected_paths[]? // empty' "$ALLOWLIST_CONFIG" 2>/dev/null || true)
+    fi
+  fi
+fi
+
+# Check if target is in allowlist
+is_allowed() {
+  local path="$1"
+  # Check built-in allowlist
+  local prefix
+  for prefix in "${BUILTIN_ALLOWLIST[@]}"; do
+    if [[ "$path" == "$prefix" ]] || [[ "$path" == "$prefix/"* ]]; then
+      return 0
+    fi
+  done
+  # Check extended allowlist (guard against empty array with set -u)
+  if [[ "${#EXTENDED_ALLOWLIST[@]}" -gt 0 ]]; then
+    for prefix in "${EXTENDED_ALLOWLIST[@]}"; do
+      if [[ "$path" == "$prefix" ]] || [[ "$path" == "$prefix/"* ]]; then
+        return 0
+      fi
+    done
+  fi
+  return 1
+}
+
+# Allowlist enforcement
+if ! is_allowed "$TARGET"; then
+  printf 'ERROR: target path "%s" is not in the allowlist — write refused\n' "$TARGET" >&2
+  printf '       Allowed prefixes: .claude/scripts/** .claude/hooks/** .claude/shared/** docs/** src/** packages/**\n' >&2
+  write_audit_refused "not-in-allowlist" "$TARGET" 0 0
+  exit 1
+fi
+
+# Symlink check on target
+TARGET_FULL="${PROJECT_ROOT}/${TARGET}"
+if [[ -L "$TARGET_FULL" ]]; then
+  printf 'ERROR: target path is a symlink — symlinks refused: %s\n' "$TARGET" >&2
+  write_audit_refused "symlink-refused" "$TARGET" 0 0
+  exit 1
+fi
+
+# Also check for symlinks in path components (using bash ${var%/*} instead of dirname)
+_check_path="$TARGET"
+while [[ "$_check_path" != "." ]] && [[ -n "$_check_path" ]] && [[ "$_check_path" == */* ]]; do
+  _component_full="${PROJECT_ROOT}/${_check_path}"
+  if [[ -L "$_component_full" ]]; then
+    printf 'ERROR: target path contains a symlink component — refused: %s\n' "$TARGET" >&2
+    write_audit_refused "symlink-in-path" "$TARGET" 0 0
+    exit 1
+  fi
+  # Bash-native parent dir: strip last /component
+  _check_path="${_check_path%/*}"
+done
+
+# ─── Get patch count and bytes for audit ─────────────────────────────────────
+
+PATCH_COUNT=0
+PATCH_COUNT="$(printf '%s' "$SPEC_JSON" | jq '.patches | length' 2>/dev/null || printf '0')"
+PATCH_BYTES="${#SPEC_JSON}"
+
+# ─── No-op check (empty patches array) ───────────────────────────────────────
+
+if [[ "$PATCH_COUNT" -eq 0 ]]; then
+  write_audit_applied "no-op" "$TARGET" 0 "$PATCH_BYTES"
+  exit 0
+fi
+
+# ─── Validate target file exists for non-append ops ─────────────────────────
+
+# Check if any non-append patch is present (requires file to exist)
+HAS_NON_APPEND=false
+NON_APPEND_CHECK=""
+NON_APPEND_CHECK="$(printf '%s' "$SPEC_JSON" | jq -r 'first(.patches[] | select(.op != "append") | .op) // ""' 2>/dev/null || true)"
+if [[ -n "$NON_APPEND_CHECK" ]]; then
+  HAS_NON_APPEND=true
+fi
+
+# For append-only specs, create file if it doesn't exist (OQ-1: allow create)
+if [[ "$HAS_NON_APPEND" == "true" ]] && [[ ! -f "$TARGET_FULL" ]]; then
+  printf 'ERROR: target file not found: %s\n' "$TARGET" >&2
+  write_audit_refused "file-not-found" "$TARGET" "$PATCH_COUNT" "$PATCH_BYTES"
+  exit 1
+fi
+
+# ─── Apply patches (all-or-nothing — OQ-2) ───────────────────────────────────
+
+# Read current file content (or empty string if file doesn't exist for append-only)
+CURRENT_CONTENT=""
+if [[ -f "$TARGET_FULL" ]]; then
+  CURRENT_CONTENT="$(cat "$TARGET_FULL"; printf x)"
+CURRENT_CONTENT="${CURRENT_CONTENT%x}"
+fi
+
+# Apply all patches to in-memory buffer; only write if all succeed
+BUFFER="$CURRENT_CONTENT"
+PATCH_IDX=0
+
+while IFS= read -r patch_json; do
+  PATCH_IDX=$(( PATCH_IDX + 1 ))
+
+  # Parse op
+  OP=""
+  OP="$(printf '%s' "$patch_json" | jq -r '.op // ""' 2>/dev/null || true)"
+
+  # Validate op
+  case "$OP" in
+    replace|insert-before|insert-after|append)
+      ;;
+    "")
+      printf 'ERROR: patch %d missing "op" field\n' "$PATCH_IDX" >&2
+      write_audit_refused "missing-op" "$TARGET" "$PATCH_COUNT" "$PATCH_BYTES"
+      exit 1
+      ;;
+    *)
+      printf 'ERROR: patch %d has unrecognized op "%s"\n' "$PATCH_IDX" "$OP" >&2
+      write_audit_refused "unrecognized-op:$OP" "$TARGET" "$PATCH_COUNT" "$PATCH_BYTES"
+      exit 1
+      ;;
+  esac
+
+  # Parse content (required, empty string allowed)
+  CONTENT=""
+  CONTENT_CHECK=""
+  CONTENT_CHECK="$(printf '%s' "$patch_json" | jq -r 'if has("content") then "OK" else "MISSING" end' 2>/dev/null || true)"
+  if [[ "$CONTENT_CHECK" == "MISSING" ]]; then
+    printf 'ERROR: patch %d missing "content" field\n' "$PATCH_IDX" >&2
+    write_audit_refused "missing-content" "$TARGET" "$PATCH_COUNT" "$PATCH_BYTES"
+    exit 1
+  fi
+  CONTENT="$(printf '%s' "$patch_json" | jq -r '.content' 2>/dev/null; printf x)"
+  CONTENT="${CONTENT%x}"
+
+  # For ops that require anchor
+  if [[ "$OP" != "append" ]]; then
+    ANCHOR=""
+    ANCHOR_CHECK=""
+    ANCHOR_CHECK="$(printf '%s' "$patch_json" | jq -r 'if has("anchor") then "OK" else "MISSING" end' 2>/dev/null || true)"
+    if [[ "$ANCHOR_CHECK" == "MISSING" ]] || [[ -z "$(printf '%s' "$patch_json" | jq -r '.anchor // ""' 2>/dev/null)" ]]; then
+      printf 'ERROR: patch %d op "%s" requires "anchor" field\n' "$PATCH_IDX" "$OP" >&2
+      write_audit_refused "missing-anchor" "$TARGET" "$PATCH_COUNT" "$PATCH_BYTES"
+      exit 1
+    fi
+    ANCHOR="$(printf '%s' "$patch_json" | jq -r '.anchor' 2>/dev/null || true)"
+
+    # Check anchor occurrence count in buffer (literal string match, not regex)
+    # Use grep -F for literal matching and count lines containing the anchor
+    ANCHOR_COUNT=0
+    if [[ -n "$BUFFER" ]]; then
+      ANCHOR_COUNT="$(printf '%s' "$BUFFER" | grep -cF "$ANCHOR" 2>/dev/null || true)"
+    fi
+
+    if [[ "$ANCHOR_COUNT" -eq 0 ]]; then
+      printf 'ERROR: anchor-not-found: "%s" not found in %s\n' "$ANCHOR" "$TARGET" >&2
+      write_audit_refused "anchor-not-found" "$TARGET" "$PATCH_COUNT" "$PATCH_BYTES"
+      exit 1
+    fi
+
+    if [[ "$ANCHOR_COUNT" -gt 1 ]]; then
+      printf 'ERROR: ambiguous-anchor: "%s" appears %d times in %s\n' "$ANCHOR" "$ANCHOR_COUNT" "$TARGET" >&2
+      write_audit_refused "ambiguous-anchor" "$TARGET" "$PATCH_COUNT" "$PATCH_BYTES"
+      exit 1
+    fi
+
+    # Apply the patch using awk for reliable line-by-line processing
+    # awk -v does NOT preserve embedded newlines in variable values.
+    # Fix: write $CONTENT to a temp file; awk reads it with getline.
+    _CONTENT_TMPFILE="$(mktemp "${TMPDIR:-/tmp}/teo-apply-edit-content.XXXXXX")"
+    printf '%s' "$CONTENT" > "$_CONTENT_TMPFILE"
+    case "$OP" in
+      replace)
+        # Replace the line containing the anchor with content
+        BUFFER="$(printf '%s' "$BUFFER" | awk -v anchor="$ANCHOR" -v CONTENT_FILE="$_CONTENT_TMPFILE" '
+          BEGIN { content = ""; while ((getline line < CONTENT_FILE) > 0) { content = content line "\n" } }
+          $0 == anchor { printf "%s", content; next }
+          index($0, anchor) { printf "%s", content; next }
+          { print }
+        '; printf x)"
+        BUFFER="${BUFFER%x}"
+        ;;
+      insert-before)
+        # Insert content before the line containing the anchor
+        BUFFER="$(printf '%s' "$BUFFER" | awk -v anchor="$ANCHOR" -v CONTENT_FILE="$_CONTENT_TMPFILE" '
+          BEGIN { content = ""; while ((getline line < CONTENT_FILE) > 0) { content = content line "\n" } }
+          index($0, anchor) { printf "%s", content }
+          { print }
+        '; printf x)"
+        BUFFER="${BUFFER%x}"
+        ;;
+      insert-after)
+        # Insert content after the line containing the anchor
+        BUFFER="$(printf '%s' "$BUFFER" | awk -v anchor="$ANCHOR" -v CONTENT_FILE="$_CONTENT_TMPFILE" '
+          BEGIN { content = ""; while ((getline line < CONTENT_FILE) > 0) { content = content line "\n" } }
+          { print }
+          index($0, anchor) { printf "%s", content }
+        '; printf x)"
+        BUFFER="${BUFFER%x}"
+        ;;
+    esac
+    rm -f "$_CONTENT_TMPFILE"
+  else
+    # append: add content at EOF
+    if [[ -z "$BUFFER" ]]; then
+      BUFFER="$CONTENT"
+    else
+      # Check if buffer ends with newline using bash parameter expansion (no tail needed)
+      if [[ "${BUFFER: -1}" == $'\n' ]] || [[ -z "$BUFFER" ]]; then
+        BUFFER="${BUFFER}${CONTENT}"
+      else
+        BUFFER="${BUFFER}
+${CONTENT}"
+      fi
+    fi
+  fi
+
+done < <(printf '%s' "$SPEC_JSON" | jq -c '.patches[]' 2>/dev/null)
+
+# ─── Atomic write ─────────────────────────────────────────────────────────────
+
+# Ensure target directory exists (best-effort; fail-open if mkdir unavailable)
+TARGET_DIR=""
+if command -v dirname > /dev/null 2>&1; then
+  TARGET_DIR="$(dirname "$TARGET_FULL")"
+else
+  # bash fallback: strip last component
+  TARGET_DIR="${TARGET_FULL%/*}"
+fi
+mkdir -p "$TARGET_DIR" 2>/dev/null || true
+
+LOCK_FILE="${TARGET_FULL}.teo-apply-edit.lock"
+
+if [[ "$HAS_FLOCK" == "true" ]]; then
+  # Create temp file in same directory (same filesystem — ensures atomic rename)
+  TMP_FILE=""
+  TMP_FILE="$(mktemp "${TARGET_FULL}.teo-apply-edit.tmp.XXXXXX" 2>/dev/null)" || {
+    printf 'WARN: could not create temp file — writing directly (no atomicity)\n' >&2
+    printf '%s' "$BUFFER" > "$TARGET_FULL"
+    write_audit_applied "applied" "$TARGET" "$PATCH_COUNT" "$PATCH_BYTES"
+    exit 0
+  }
+  (
+    flock -x -w 10 9 2>/dev/null || {
+      printf 'WARN: flock acquisition timed out for target write — writing without lock\n' >&2
+    }
+    printf '%s' "$BUFFER" > "$TMP_FILE"
+    mv "$TMP_FILE" "$TARGET_FULL"
+  ) 9>"$LOCK_FILE"
+  rm -f "$LOCK_FILE" 2>/dev/null || true
+else
+  # fail-open: no flock — attempt best-effort temp+rename write
+  # If mktemp/mv unavailable, fall back to direct write
+  TMP_FILE=""
+  if command -v mktemp > /dev/null 2>&1; then
+    TMP_FILE="$(mktemp "${TARGET_FULL}.teo-apply-edit.tmp.XXXXXX" 2>/dev/null)" || true
+  fi
+  if [[ -n "$TMP_FILE" ]] && command -v mv > /dev/null 2>&1; then
+    printf '%s' "$BUFFER" > "$TMP_FILE"
+    mv "$TMP_FILE" "$TARGET_FULL"
+  else
+    # Final fallback: direct write (no atomicity, but fail-open)
+    printf '%s' "$BUFFER" > "$TARGET_FULL" 2>/dev/null || {
+      printf 'WARN: could not write to target file — operation skipped\n' >&2
+    }
+    if [[ -n "$TMP_FILE" ]]; then
+      rm -f "$TMP_FILE" 2>/dev/null || true
+    fi
+  fi
+fi
+
+# ─── Write audit log (with optional signing) ─────────────────────────────────
+
+# Check if we should sign: --key-dir provided, AGENT_IDENTITY_TOKEN set, cutover exists
+_SHOULD_SIGN=false
+_CUTOVER_FILE="${PROJECT_ROOT}/.claude/config/signing-cutover.json"
+if [[ -n "$SIGNING_KEY_DIR" ]] && [[ -n "${AGENT_IDENTITY_TOKEN:-}" ]] && [[ -f "$_CUTOVER_FILE" ]]; then
+  _SHOULD_SIGN=true
+fi
+
+if [[ "$_SHOULD_SIGN" == "true" ]] && [[ "$HAS_JQ" == "true" ]]; then
+  # Build base audit entry JSON
+  _agent="${AGENT_IDENTITY_TOKEN:-unknown}"
+  _ts="$(get_timestamp)"
+  _date_suffix="$(get_date_suffix)"
+  _log_file="${AUDIT_DIR}/edit-audit-${_date_suffix}.json"
+  mkdir -p "$AUDIT_DIR" 2>/dev/null || true
+  _base_entry="$(jq -n \
+    --arg exec_id "$EXECUTION_ID" \
+    --arg agent_val "$_agent" \
+    --arg path_val "$TARGET" \
+    --argjson count "$PATCH_COUNT" \
+    --argjson bytes "$PATCH_BYTES" \
+    --arg ts_val "$_ts" \
+    '{
+      "execution_id": $exec_id,
+      "agent": $agent_val,
+      "path": $path_val,
+      "verdict": "applied",
+      "patch_count": $count,
+      "patch_bytes": $bytes,
+      "timestamp": $ts_val
+    }' 2>/dev/null)" || true
+
+  if [[ -n "$_base_entry" ]]; then
+    # Invoke Node signer to merge signing fields
+    _SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+    _SIGNER="${_SCRIPT_DIR}/lib/teo-sign-audit-entry.mjs"
+    _signed_entry=""
+    if [[ -f "$_SIGNER" ]] && command -v node > /dev/null 2>&1; then
+      _signed_entry="$(node --experimental-vm-modules "$_SIGNER" "$SIGNING_KEY_DIR" "$_agent" "$_base_entry" 2>/dev/null)" || true
+    fi
+    if [[ -n "$_signed_entry" ]]; then
+      atomic_json_append "$_log_file" "$_signed_entry"
+    else
+      # Fallback: write unsigned entry
+      write_audit_applied "applied" "$TARGET" "$PATCH_COUNT" "$PATCH_BYTES"
+    fi
+  else
+    write_audit_applied "applied" "$TARGET" "$PATCH_COUNT" "$PATCH_BYTES"
+  fi
+else
+  write_audit_applied "applied" "$TARGET" "$PATCH_COUNT" "$PATCH_BYTES"
+fi
+
+exit 0

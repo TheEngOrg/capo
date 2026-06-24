@@ -2,7 +2,7 @@
 
 Multi-agent engineering orchestration for Claude Code, packaged as a plugin.
 
-TEO brings a structured engineering team into your Claude Code session. A single orchestrator (**Capo**) takes a request, breaks it into work, and dispatches it to specialist agents — QA, dev, staff-engineer, security, design, and more — through a gated development cycle. Every substantive code change runs QA-first: tests are written before implementation, reviewed by a staff engineer, and recorded in an HMAC-signed audit ledger.
+TEO brings a structured engineering team into your Claude Code session. A single orchestrator (**Capo**) takes a request, breaks it into work, and dispatches it to specialist agents — QA, dev, staff-engineer, security, design, and more — through a gated development cycle. Every substantive code change runs QA-first: tests are written before implementation, reviewed by a staff engineer, and committed only after every gate passes.
 
 It installs as a Claude Code plugin. No daemon, no server, no API key — everything runs in your own session.
 
@@ -32,8 +32,9 @@ Then start any workflow with `/teo`.
 
 - **QA-first development** — tests are authored before code, covering misuse and boundary cases first.
 - **Gated pipeline** — every change passes through spec -> build -> validate -> staff review before commit.
-- **Deterministic guardrails** — the gate logic and plan validation are deterministic code, not LLM judgment. The agent work they wrap is not — CAPO's job is to put hard, verifiable guardrails around it.
-- **Signed audit trail** — gate verdicts are recorded in an HMAC-signed, append-only ledger. Independent verification tooling is coming post-alpha.
+- **Hook walls** — `pre-edit-write-guard.sh` and `block-no-verify.sh` are registered Claude Code hooks. They fire on every file mutation in the session — harness-enforced, not advisory. You cannot write a file without passing them.
+- **CAD pipeline discipline** — the gate order (qa-spec → dev → qa-validate → staff-engineer → commit) is enforced through Capo's orchestration instructions. Prompt-enforced, not code-enforced — but Capo does not skip gates and does not negotiate the order.
+- **Deterministic engine (v-next)** — the gate evaluation and plan validation code is built, tested to 99.89% coverage, and verified. Wiring it to the production runtime is the next milestone. The hard part is done.
 
 ## What it does NOT do
 

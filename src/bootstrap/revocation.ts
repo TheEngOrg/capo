@@ -23,6 +23,12 @@ import * as ed from "@noble/ed25519";
 import { readInstallSig, verifyInstallSig } from "./install-sig.js";
 
 // ---------------------------------------------------------------------------
+// Timeout constant — exported so tests and callers can reference it.
+// Must be > 1000ms to avoid false-positive blocks on slow-but-live CRL endpoints.
+// ---------------------------------------------------------------------------
+export const REVOCATION_FETCH_TIMEOUT_MS = 5_000;
+
+// ---------------------------------------------------------------------------
 // Public types
 // ---------------------------------------------------------------------------
 
@@ -82,17 +88,43 @@ function isRevocationList(value: unknown): value is RevocationList {
   return Array.isArray(obj["revoked_keys"]);
 }
 
+/** Build a fetch-timeout promise that rejects after REVOCATION_FETCH_TIMEOUT_MS.
+ *
+ * The `.catch(() => {})` suppresses the Node.js "PromiseRejectionHandledWarning"
+ * that would otherwise fire when fake timers reject the promise synchronously
+ * before Promise.race has a chance to attach its handler in a microtask. The
+ * rejection itself is still propagated normally through Promise.race.
+ */
+function makeFetchTimeout(): Promise<never> {
+  const p = new Promise<never>((_, reject) =>
+    setTimeout(
+      () =>
+        reject(new Error(`Revocation list fetch timed out after ${REVOCATION_FETCH_TIMEOUT_MS}ms`)),
+      REVOCATION_FETCH_TIMEOUT_MS
+    )
+  );
+  // Attach a no-op catch to prevent the "unhandled rejection" warning.
+  // Promise.race() still consumes the rejection via its own handler.
+  p.catch(() => {});
+  return p;
+}
+
 // ---------------------------------------------------------------------------
 // checkRevocationListOnly — resolve list + check keyId (no sig verification)
 //
 // Used by the install-sig path: the signature has already been verified by
 // verifyInstallSig(). This function handles only the revocation list steps.
+//
+// fetchTimeout — an optional pre-created timeout promise. When the install-sig
+// path is used, the timeout is created BEFORE await verifyInstallSig() so that
+// the fake-timer clock is already running when Promise.race is entered.
 // ---------------------------------------------------------------------------
 
 async function checkRevocationListOnly(
   keyId: string,
   revocationList: RevocationList | undefined,
-  revocationListFetcher: (() => Promise<unknown>) | undefined
+  revocationListFetcher: (() => Promise<unknown>) | undefined,
+  fetchTimeout?: Promise<never>
 ): Promise<RevocationResult> {
   /* c8 ignore next 6 */
   if (revocationList === undefined && revocationListFetcher === undefined) {
@@ -107,9 +139,13 @@ async function checkRevocationListOnly(
   if (revocationList !== undefined) {
     resolvedList = revocationList;
   } else {
+    // Use the pre-created timeout if provided; otherwise create a fresh one.
+    /* c8 ignore next -- fetchTimeout is always pre-created by checkRevocation() before await verifyInstallSig so the fallback is intentionally unreachable in production */
+    const timeoutPromise = fetchTimeout ?? makeFetchTimeout();
+
     let fetched: unknown;
     try {
-      fetched = await revocationListFetcher!();
+      fetched = await Promise.race([revocationListFetcher!(), timeoutPromise]);
     } catch (err) {
       /* c8 ignore next */
       const message = err instanceof Error ? err.message : String(err);
@@ -171,12 +207,22 @@ export async function checkRevocation(opts: CheckRevocationOptions): Promise<Rev
   //
   // When an explicit signature IS provided (even in plugin context), skip this
   // path and fall through to Step 1 (normal Ed25519 verify path).
+  //
+  // TIMEOUT NOTE: We create the fetcher timeout promise BEFORE awaiting
+  // verifyInstallSig() so the fake-timer clock (in tests using vi.useFakeTimers)
+  // starts running immediately. If we created it inside checkRevocationListOnly
+  // after the await, vi.advanceTimersByTimeAsync(5000) would have already expired
+  // before the setTimeout was registered, and the timeout would never fire.
   // -------------------------------------------------------------------------
 
   const pluginRoot = process.env["CLAUDE_PLUGIN_ROOT"];
   const isPluginContext = typeof pluginRoot === "string" && pluginRoot.length > 0;
 
   if ((signature === undefined || signature === null) && isPluginContext) {
+    // Pre-create the fetch timeout so it starts ticking now, before verifyInstallSig.
+    // Only create it when there's a fetcher to race against.
+    const fetchTimeout = revocationListFetcher !== undefined ? makeFetchTimeout() : undefined;
+
     // Try to read the install-time sig file.
     const readResult = readInstallSig(pluginRoot);
     if (!readResult.ok) {
@@ -193,7 +239,12 @@ export async function checkRevocation(opts: CheckRevocationOptions): Promise<Rev
     // Continue to Step 2 (revocation list resolution) and Step 3 (revocation check)
     // using the install sig's key_id. Skip Steps 1 and 4 (handled above).
     const installKeyId = readResult.file.key_id;
-    return checkRevocationListOnly(installKeyId, revocationList, revocationListFetcher);
+    return checkRevocationListOnly(
+      installKeyId,
+      revocationList,
+      revocationListFetcher,
+      fetchTimeout
+    );
   }
 
   // -------------------------------------------------------------------------
@@ -239,9 +290,11 @@ export async function checkRevocation(opts: CheckRevocationOptions): Promise<Rev
     resolvedList = revocationList;
   } else {
     // Fetcher path — revocationListFetcher is defined here (guard above ensures it).
+    const timeoutPromise = makeFetchTimeout();
+
     let fetched: unknown;
     try {
-      fetched = await revocationListFetcher!();
+      fetched = await Promise.race([revocationListFetcher!(), timeoutPromise]);
     } catch (err) {
       /* c8 ignore next */
       const message = err instanceof Error ? err.message : String(err);

@@ -129,10 +129,13 @@ describe("validatePlan — misuse: structural errors", () => {
   });
 
   it("PQ-03: returns an error (not just a warning) when agent_id is 'capo'", () => {
+    // PQ-03-CODE-RENAME (WS-A08-03 Fix C): error code renamed to PQ_03_CAPO_AS_EXECUTOR
+    // to reflect the product rename. This test asserts the NEW code.
+    // FAILS until validate.ts is updated.
     const plan = minimalValidPlan([makeAgentTask("task-capo", "capo")]);
     const result = validatePlan(plan);
     expect(result.valid).toBe(false);
-    const pq03Error = result.errors.find((e) => e.code === "PQ_03_SAGE_AS_EXECUTOR");
+    const pq03Error = result.errors.find((e) => e.code === "PQ_03_CAPO_AS_EXECUTOR");
     expect(pq03Error).toBeDefined();
     expect(pq03Error?.message).toContain("capo");
   });
@@ -204,14 +207,17 @@ describe("validatePlan — boundary: plan-quality gate", () => {
     expect(pq01).toBeDefined();
   });
 
-  it("PQ-02: emits a warning for a plan with 26 tasks — valid:true", () => {
+  it("PQ-02: emits an ERROR (not a warning) for a plan with 26 tasks — valid:false (WS-A08-01)", () => {
+    // UPDATED by WS-A08-01 Fix: PQ-02 is now a hard error. valid:false, error in errors[].
     const tasks = Array.from({ length: 26 }, (_, i) => makeScriptTask(`task-${i}`));
     const plan = minimalValidPlan(tasks);
     const result = validatePlan(plan);
-    expect(result.valid).toBe(true);
-    expect(result.errors).toHaveLength(0);
-    const pq02 = result.warnings.find((w) => w.code === "PQ_02_TOO_MANY_TASKS");
+    expect(result.valid).toBe(false);
+    const pq02 = result.errors.find((e) => e.code === "PQ_02_TOO_MANY_TASKS");
     expect(pq02).toBeDefined();
+    // Must NOT appear as a warning once promoted to an error
+    const pq02Warning = result.warnings.find((w) => w.code === "PQ_02_TOO_MANY_TASKS");
+    expect(pq02Warning).toBeUndefined();
   });
 
   it("PQ-02: does NOT warn at exactly 25 tasks", () => {
@@ -301,7 +307,8 @@ describe("validatePlan — golden path", () => {
 // ---------------------------------------------------------------------------
 
 describe("validatePlan — PQ-04: ARCHITECTURAL directive misuse (WS-P1-01)", () => {
-  it("PQ-04 misuse: directive:'ARCHITECTURAL' + capo task → BOTH PQ_03_SAGE_AS_EXECUTOR error AND PQ_04_ARCHITECTURAL_SCOPE warning", () => {
+  it("PQ-04 misuse: directive:'ARCHITECTURAL' + capo task → BOTH PQ_03_CAPO_AS_EXECUTOR error AND PQ_04_ARCHITECTURAL_SCOPE warning", () => {
+    // PQ-03-CODE-RENAME (WS-A08-03 Fix C): asserts the renamed error code.
     // Capo-as-executor is always an ERROR (PQ-03). When the plan is also
     // ARCHITECTURAL, PQ-04 must fire as a WARNING on top of that — the
     // two rules are independent and must both accumulate.
@@ -312,6 +319,8 @@ describe("validatePlan — PQ-04: ARCHITECTURAL directive misuse (WS-P1-01)", ()
     //   - The existing defensive runtime guard DOES fire (it checks "directive" in plan),
     //     but it does NOT check for the qa/staff-engineer gate condition, so the
     //     new implementation must change the guard's semantics. See validate.ts TODO.
+    //   - The error code is being renamed to PQ_03_CAPO_AS_EXECUTOR —
+    //     this test fails until validate.ts is updated with the new code.
     const plan = {
       ...minimalValidPlan([makeAgentTask("capo-task", "capo")]),
       directive: "ARCHITECTURAL",
@@ -319,9 +328,9 @@ describe("validatePlan — PQ-04: ARCHITECTURAL directive misuse (WS-P1-01)", ()
 
     const result = validatePlan(plan);
 
-    // PQ-03 must be an ERROR (plan is invalid)
+    // PQ-03 must be an ERROR (plan is invalid) — code must be the renamed value
     expect(result.valid).toBe(false);
-    const pq03 = result.errors.find((e) => e.code === "PQ_03_SAGE_AS_EXECUTOR");
+    const pq03 = result.errors.find((e) => e.code === "PQ_03_CAPO_AS_EXECUTOR");
     expect(pq03).toBeDefined();
     expect(pq03?.message).toContain("capo");
 
@@ -419,5 +428,190 @@ describe("validatePlan — PQ-04: ARCHITECTURAL directive golden path (WS-P1-01)
     expect(result.valid).toBe(true);
     const pq04 = result.warnings.find((w) => w.code === "PQ_04_ARCHITECTURAL_SCOPE");
     expect(pq04).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// WS-A08-01: PQ-02 hard-error conversion + iterative DFS (INTENTIONALLY FAILING
+// until dev implements:
+//   1. Move PQ_MAX_TASK_COUNT guard from warnings to errors in validate.ts
+//   2. Convert recursive dfs() to an iterative stack-based algorithm
+// ---------------------------------------------------------------------------
+
+describe("validatePlan — WS-A08-01: PQ-02 hard cap (stack safety)", () => {
+  it("PQ-02-HARD: plan with PQ_MAX_TASK_COUNT+1 tasks (26) must be invalid with a PQ_02_TOO_MANY_TASKS ERROR", () => {
+    // FAILS NOW: current implementation pushes PQ_02_TOO_MANY_TASKS to warnings
+    // and leaves valid:true. After the fix it must be in errors with valid:false.
+    //
+    // The existing test "PQ-02: emits a warning for a plan with 26 tasks — valid:true"
+    // documents the CURRENT (broken) behavior. This test documents the TARGET behavior.
+    // Dev must also update the existing warning test once this hard-error test passes.
+    const tasks = Array.from({ length: 26 }, (_, i) => makeScriptTask(`task-${i}`));
+    const plan = minimalValidPlan(tasks);
+    const result = validatePlan(plan);
+
+    // Hard cap: exceeding PQ_MAX_TASK_COUNT must be an ERROR, not a warning
+    expect(result.valid).toBe(false);
+    const pq02Error = result.errors.find((e) => e.code === "PQ_02_TOO_MANY_TASKS");
+    expect(pq02Error).toBeDefined();
+    expect(pq02Error?.message).toContain("26");
+
+    // Must NOT appear in warnings once promoted to an error
+    const pq02Warning = result.warnings.find((w) => w.code === "PQ_02_TOO_MANY_TASKS");
+    expect(pq02Warning).toBeUndefined();
+  });
+
+  it("PQ-02-BOUNDARY: plan with exactly PQ_MAX_TASK_COUNT tasks (25) must be valid with no PQ_02 error", () => {
+    // REGRESSION GUARD: the hard-error conversion must NOT bleed into the at-cap case.
+    // 25 tasks is within the allowed limit — valid:true, zero errors, no PQ_02 anywhere.
+    //
+    // This test starts GREEN before the fix (current code emits no error for 25 tasks).
+    // It is included to lock the contract so dev cannot accidentally make 25 tasks invalid
+    // when promoting PQ_02 from warning to error. The assertion against errors[] would
+    // catch a naive off-by-one (> vs >=). The assertion against valid:true+errors.length===0
+    // catches a wider class of regression where the at-cap plan is rejected.
+    const tasks = Array.from({ length: 25 }, (_, i) => makeScriptTask(`task-${i}`));
+    const plan = minimalValidPlan(tasks);
+    const result = validatePlan(plan);
+
+    expect(result.valid).toBe(true);
+    // Zero errors total — no hard cap error, no other structural error
+    expect(result.errors).toHaveLength(0);
+    // PQ_02 must not appear as an error (would mean the hard cap fired at == not >)
+    const pq02Error = result.errors.find((e) => e.code === "PQ_02_TOO_MANY_TASKS");
+    expect(pq02Error).toBeUndefined();
+    // PQ_02 must not appear as a warning either (25 is exactly at cap, not over)
+    const pq02Warning = result.warnings.find((w) => w.code === "PQ_02_TOO_MANY_TASKS");
+    expect(pq02Warning).toBeUndefined();
+  });
+});
+
+describe("validatePlan — WS-A08-01: iterative DFS (stack-overflow safety)", () => {
+  it("DFS-DEEP-CHAIN-01: 5,000 linearly-chained tasks must NOT throw a RangeError and must return a PQ_02_TOO_MANY_TASKS error", () => {
+    // FAILS NOW in two ways:
+    //   1. With the current recursive dfs(), a 5,000-task linear chain will hit the JS
+    //      call-stack limit and throw RangeError: Maximum call stack size exceeded.
+    //      (DFS depth = N for a linear chain — one frame per task.)
+    //   2. Even if it survived, PQ_02 is currently a warning (valid:true), not an error.
+    //
+    // After the fix:
+    //   - The PQ_02 hard cap check fires (valid:false, error in errors[])
+    //   - The iterative DFS must not throw regardless of chain depth
+    //
+    // Implementation note: if the hard cap check runs before cycle detection and returns
+    // early, the DFS path may not execute for this input. The test still validates the
+    // contract: no throw + hard cap error in result.
+    const tasks: TEOTask[] = [];
+    for (let i = 0; i < 5000; i++) {
+      tasks.push(makeScriptTask(`t${i}`, i === 0 ? [] : [`t${i - 1}`]));
+    }
+    const plan = minimalValidPlan(tasks);
+
+    // Must not throw — iterative DFS eliminates the call-stack overflow
+    let result!: ReturnType<typeof validatePlan>;
+    expect(() => {
+      result = validatePlan(plan);
+    }).not.toThrow();
+
+    // Hard cap must fire (5,000 >> 25)
+    expect(result.valid).toBe(false);
+    const pq02Error = result.errors.find((e) => e.code === "PQ_02_TOO_MANY_TASKS");
+    expect(pq02Error).toBeDefined();
+  });
+
+  it("DFS-CYCLE-ITERATIVE-01: 100-task linear chain with tail->head back-edge must return a DEPENDENCY_CYCLE error via iterative detection", () => {
+    // FAILS NOW because:
+    //   1. The recursive dfs() will be replaced -- this verifies the iterative
+    //      implementation preserves cycle-detection correctness.
+    //   2. 100 tasks exceeds PQ_MAX_TASK_COUNT (25), so the hard cap error also fires.
+    //      Both errors must be present (validatePlan collects ALL errors, no short-circuit).
+    //
+    // Topology: t0 -> t1 -> ... -> t98 -> t99, plus t0 needs t99 (head depends on tail, closing the cycle).
+    const tasks: TEOTask[] = [];
+    for (let i = 0; i < 100; i++) {
+      const needs = i === 0 ? [] : [`t${i - 1}`];
+      tasks.push(makeScriptTask(`t${i}`, needs));
+    }
+    // Overwrite t0 to add the back-edge t0->t99 (head depends on tail = cycle)
+    // In the needs[] model: t0 needing t99 means t0 DEPENDS ON t99.
+    // Since t99 depends on t98 -> ... -> t1 -> t0, this closes the cycle.
+    tasks[0] = makeScriptTask("t0", ["t99"]);
+    const plan = minimalValidPlan(tasks);
+
+    let result!: ReturnType<typeof validatePlan>;
+    expect(() => {
+      result = validatePlan(plan);
+    }).not.toThrow();
+
+    expect(result.valid).toBe(false);
+
+    // Cycle must be detected and reported by the iterative algorithm
+    const cycleError = result.errors.find(
+      (e) => e.code === "DEPENDENCY_CYCLE" || /cycle/i.test(e.code)
+    );
+    expect(cycleError).toBeDefined();
+    // Both ends of the cycle must appear in the error message
+    expect(cycleError?.message).toMatch(/t0/);
+    expect(cycleError?.message).toMatch(/t99/);
+
+    // PQ_02 hard cap must ALSO fire as an ERROR (100 tasks >> 25) -- FAILS NOW
+    // because PQ_02 is currently only a warning. After the fix it must be in errors[].
+    const pq02Error = result.errors.find((e) => e.code === "PQ_02_TOO_MANY_TASKS");
+    expect(pq02Error).toBeDefined();
+  });
+
+  it("DFS-CYCLE-DEDUP-01: does not emit duplicate cycle errors when the same back-edge is traversed twice via duplicate needs[] entries", () => {
+    // A task with the same ID listed twice in needs[] causes the iterative DFS to
+    // traverse the same back-edge twice in one DFS call.
+    // First traversal of t0→t0: key="t0→t0" not in reportedCycles → recorded, error emitted.
+    // Second traversal of t0→t0: key="t0→t0" IS in reportedCycles → the FALSE branch of
+    // `if (!reportedCycles.has(cycleKey))` fires and the duplicate is suppressed.
+    // Result: exactly ONE DEPENDENCY_CYCLE error, not two.
+    //
+    // t1 is included to keep the plan above the PQ_MIN_TASK_COUNT threshold (avoids PQ-01 warning).
+    const plan = minimalValidPlan([
+      makeScriptTask("t0", ["t0", "t0"]), // self-loop listed twice in needs[]
+      makeScriptTask("t1", ["t0"]),
+    ]);
+    const result = validatePlan(plan);
+    expect(result.valid).toBe(false);
+    const cycleErrors = result.errors.filter((e) => e.code === "DEPENDENCY_CYCLE");
+    expect(cycleErrors).toHaveLength(1); // deduplicated: second traversal suppressed
+  });
+
+  it("DFS-DEEP-CHAIN-02: plan with exactly PQ_MAX_TASK_COUNT tasks (25) that has a cycle must return a DEPENDENCY_CYCLE error and no PQ_02 error", () => {
+    // FAILS NOW because the recursive dfs() will be replaced. This verifies the
+    // iterative algorithm fires correctly within the allowed task count (no hard cap),
+    // so the only error is a DEPENDENCY_CYCLE -- no PQ_02 error must appear.
+    //
+    // Topology: t0 -> t1 -> ... -> t23 -> t24, plus t0 needs t24 (head depends on tail, closing the cycle).
+    // Exactly 25 tasks -- within PQ_MAX_TASK_COUNT, so no PQ_02 hard-cap error.
+    const tasks: TEOTask[] = [];
+    for (let i = 0; i < 25; i++) {
+      const needs = i === 0 ? [] : [`t${i - 1}`];
+      tasks.push(makeScriptTask(`t${i}`, needs));
+    }
+    // Overwrite t0 to close the cycle: t0 needs t24 (head depends on tail).
+    // In the needs[] model: t0.needs = [t24] means t0 DEPENDS ON t24.
+    // Since t24 depends on t23 -> ... -> t1 -> t0, this closes the cycle.
+    tasks[0] = makeScriptTask("t0", ["t24"]);
+    const plan = minimalValidPlan(tasks);
+
+    let result!: ReturnType<typeof validatePlan>;
+    expect(() => {
+      result = validatePlan(plan);
+    }).not.toThrow();
+
+    expect(result.valid).toBe(false);
+
+    // Cycle detection must fire for the within-cap plan
+    const cycleError = result.errors.find(
+      (e) => e.code === "DEPENDENCY_CYCLE" || /cycle/i.test(e.code)
+    );
+    expect(cycleError).toBeDefined();
+
+    // No PQ_02 error -- 25 tasks is at cap, not over it
+    const pq02Error = result.errors.find((e) => e.code === "PQ_02_TOO_MANY_TASKS");
+    expect(pq02Error).toBeUndefined();
   });
 });

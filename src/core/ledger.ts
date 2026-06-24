@@ -196,10 +196,15 @@ export class AppendOnlyLedger {
     if (!session_id || session_id.length === 0) {
       throw new LedgerPathError("session_id must not be empty.");
     }
-    if (session_id.includes("/") || session_id.includes("\\") || session_id.includes("..")) {
+    if (
+      session_id.includes("/") ||
+      session_id.includes("\\") ||
+      session_id.includes("..") ||
+      session_id.includes("\0")
+    ) {
       throw new LedgerPathError(
-        `session_id "${session_id}" contains path separators or traversal sequences. ` +
-          `Use a plain identifier with no slashes or dots.`
+        `session_id "${session_id}" contains invalid characters (path separators, traversal sequences, or null bytes). ` +
+          `Use a plain identifier with no slashes, dots, or null bytes.`
       );
     }
     if (session_id.length > MAX_SESSION_ID_LENGTH) {

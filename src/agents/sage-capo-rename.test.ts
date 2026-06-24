@@ -20,9 +20,12 @@ import { execSync } from "node:child_process";
 //
 // PROTECTED patterns — these are stable API contracts, NOT persona references:
 //   sagePlan()           — TypeScript method name
-//   PQ_03_SAGE_AS_EXECUTOR — error code
 //   agent_id: "capo" in src/adapters/claude-code.test.ts (attack payload under test)
 //   TEOSageGlyph         — external font filename in hooks/session-start.sh
+//
+// NOTE (WS-A08-03 Fix C): PQ_03_SAGE_AS_EXECUTOR has been intentionally renamed
+// to PQ_03_CAPO_AS_EXECUTOR in validate.ts. It is NO LONGER a protected pattern —
+// the old string should not appear anywhere in the repo after the fix.
 //
 // FALSE POSITIVE categories — substring matches, not persona refs:
 //   message/messages/errorMessage/defaultError — JS/TS keywords
@@ -79,7 +82,8 @@ function readFileOrNull(relPath: string): string | null {
  *          src/skill/skill.ts, src/skill/skill.test.ts,
  *          src/engine/run-plan.test.ts, vitest.config.ts
  *
- * PQ_03_SAGE_AS_EXECUTOR — error code enum value, stable API contract.
+ * PQ_03_CAPO_AS_EXECUTOR — error code enum value, stable API contract (renamed
+ *   from PQ_03_SAGE_AS_EXECUTOR by WS-A08-03 Fix C).
  *   Files: src/core/validate.ts, src/core/validate.test.ts,
  *          tests/acceptance/golden-harness.test.ts,
  *          tests/acceptance/goldens/demo-11-pq03-capo-rejection.json
@@ -107,8 +111,9 @@ function readFileOrNull(relPath: string): string | null {
 const ALLOWLIST: readonly string[] = [
   // PROTECTED: method name
   "sagePlan",
-  // PROTECTED: error code
-  "PQ_03_SAGE_AS_EXECUTOR",
+  // NOTE: PQ_03_SAGE_AS_EXECUTOR was previously listed here as a protected
+  // error code. It has been intentionally renamed to PQ_03_CAPO_AS_EXECUTOR
+  // by WS-A08-03 Fix C. The old string must no longer appear in the repo.
   // PROTECTED: attack-payload test strings (claude-code.test.ts)
   // These were renamed sage→capo by the wholesale rename; they are
   // the VALUE BEING REJECTED, not Sage persona references.
@@ -748,11 +753,14 @@ describe("golden: protected patterns are still present (no over-correction)", ()
     expect(content).toContain("sagePlan");
   });
 
-  it("PQ_03_SAGE_AS_EXECUTOR error code still appears in src/core/validate.ts", () => {
-    // GOLDEN: error code is a stable contract; renaming it would break all
-    // consumers of the validate module.
+  it("PQ_03_CAPO_AS_EXECUTOR error code appears in src/core/validate.ts (renamed from PQ_03_SAGE_AS_EXECUTOR by WS-A08-03 Fix C)", () => {
+    // PQ-03-CODE-RENAME (WS-A08-03 Fix C): the error code was renamed from
+    // PQ_03_SAGE_AS_EXECUTOR to PQ_03_CAPO_AS_EXECUTOR. This golden guard
+    // now asserts the NEW code is present and the OLD code is absent.
+    // FAILS until validate.ts is updated with the renamed string.
     const content = readFile("src/core/validate.ts");
-    expect(content).toContain("PQ_03_SAGE_AS_EXECUTOR");
+    expect(content).toContain("PQ_03_CAPO_AS_EXECUTOR");
+    expect(content).not.toContain("PQ_03_SAGE_AS_EXECUTOR");
   });
 
   it("attack-payload string 'agent_id: capo' still appears in claude-code.test.ts", () => {

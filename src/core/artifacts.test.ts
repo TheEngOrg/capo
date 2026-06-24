@@ -15,7 +15,7 @@
 // =============================================================================
 
 import { describe, it, expect } from "vitest";
-// import { repairJson, validateArtifact } from "./artifacts.js"; // import added when artifacts.ts is implemented
+import { repairJson, validateArtifact } from "./artifacts.js";
 
 // ---------------------------------------------------------------------------
 // Shared fixtures
@@ -55,7 +55,7 @@ const VALID_STEP_RESULT = {
 // MISUSE: repairJson() — wrong / unexpected raw strings
 // =============================================================================
 
-describe.skip("repairJson() — misuse", () => {
+describe("repairJson() — misuse", () => {
   // M-R1: completely non-JSON input that repair cannot salvage → throws or returns
   // a string that JSON.parse will reject. The contract is that repairJson() must
   // NOT silently return a valid-looking value for garbage that is not repairable.
@@ -101,7 +101,7 @@ describe.skip("repairJson() — misuse", () => {
 // MISUSE: validateArtifact() — misuse paths
 // =============================================================================
 
-describe.skip("validateArtifact() — misuse", () => {
+describe("validateArtifact() — misuse", () => {
   // M-VA1: unknown artifact type → { valid: false } with descriptive error, no throw
   it("M-VA1. unknown type 'BOGUS_ARTIFACT' → { valid: false, errors: [mentions 'unknown artifact type'] }", () => {
     const result = validateArtifact({ type: "BOGUS_ARTIFACT", payload: {} });
@@ -215,7 +215,7 @@ describe.skip("validateArtifact() — misuse", () => {
 // BOUNDARY: repairJson() — specific repair transformations
 // =============================================================================
 
-describe.skip("repairJson() — boundary: specific repair transformations", () => {
+describe("repairJson() — boundary: specific repair transformations", () => {
   // B-R1: trailing comma in object → repaired result parses as expected object
   it("B-R1. trailing comma in object: '{\"a\": 1,}' → parses as { a: 1 }", () => {
     const result = repairJson('{"a": 1,}');
@@ -269,7 +269,7 @@ describe.skip("repairJson() — boundary: specific repair transformations", () =
 // BOUNDARY: validateArtifact() — edge cases
 // =============================================================================
 
-describe.skip("validateArtifact() — boundary", () => {
+describe("validateArtifact() — boundary", () => {
   // B-VA1: PLAN_ARTIFACT with valid plan → { valid: true }
   it("B-VA1. PLAN_ARTIFACT wrapping a valid plan → { valid: true }", () => {
     const result = validateArtifact({ type: "PLAN_ARTIFACT", payload: VALID_PLAN_PAYLOAD });
@@ -396,7 +396,7 @@ describe.skip("validateArtifact() — boundary", () => {
 // GOLDEN PATH: full round-trip
 // =============================================================================
 
-describe.skip("repairJson() + validateArtifact() — golden path round-trip", () => {
+describe("repairJson() + validateArtifact() — golden path round-trip", () => {
   // G1: raw JSON with trailing comma → repair → validate GATE_RESULT → { valid: true }
   it("G1. trailing-comma gate-result JSON → repair → validateArtifact → { valid: true }", () => {
     const rawJson =

@@ -5,11 +5,12 @@
 //   node bin/teo-run.js <command> '<json-string>'
 //
 // COMMANDS:
-//   provision       — calls provision() with JSON opts
-//   validate-plan   — validates JSON against Zod PlanSchema
-//   sign            — calls HmacSigner.sign() with payload
-//   ledger-append   — calls AppendOnlyLedger.append()
-//   ledger-close    — calls AppendOnlyLedger.close()
+//   provision         — calls provision() with JSON opts
+//   validate-plan     — validates JSON against Zod PlanSchema
+//   validate-artifact — validates artifact payload against registered type schema
+//   sign              — calls HmacSigner.sign() with payload
+//   ledger-append     — calls AppendOnlyLedger.append()
+//   ledger-close      — calls AppendOnlyLedger.close()
 //
 // OUTPUT CONTRACT:
 //   All stdout is a single JSON object. Errors are JSON { error: string }.
@@ -17,6 +18,7 @@
 // =============================================================================
 
 import { provision } from "../bootstrap/provision.js";
+import { repairJson, validateArtifact } from "../core/artifacts.js";
 import { PlanSchema } from "../core/plan.js";
 import { HmacSigner } from "../core/sign.js";
 import { AppendOnlyLedger } from "../core/ledger.js";
@@ -91,6 +93,55 @@ function handleValidatePlan(args: unknown): void {
   }
 }
 
+function handleValidateArtifact(rawJsonArg: string): void {
+  // Repair the raw arg string first (handles trailing commas, single-quoted strings, etc.)
+  let parsedArg: unknown;
+  try {
+    const repaired = repairJson(rawJsonArg);
+    parsedArg = JSON.parse(repaired) as unknown;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    writeJson({ valid: false, errors: [`JSON repair/parse error: ${msg}`] });
+    return;
+  }
+
+  const a = parsedArg as Record<string, unknown>;
+  const type = a["type"] as string;
+  const strictRaw = a["strict"];
+  let payload = a["payload"];
+
+  // If payload is a string, attempt to repair + parse it as a JSON object/array.
+  // jsonrepair may wrap a non-JSON string as a JSON string value — if after repair+parse
+  // the result is still a primitive string, the content was not repairable as a JSON structure.
+  if (typeof payload === "string") {
+    let reparsed: unknown;
+    try {
+      const repairedPayload = repairJson(payload);
+      reparsed = JSON.parse(repairedPayload) as unknown;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      writeJson({ valid: false, errors: [`JSON repair/parse error on payload: ${msg}`] });
+      return;
+    }
+    // If repair just quoted the garbage as a JSON string, it is not a valid JSON object
+    if (typeof reparsed === "string") {
+      writeJson({
+        valid: false,
+        errors: [`JSON repair/parse failed: payload string could not be parsed as a JSON object`],
+      });
+      return;
+    }
+    payload = reparsed;
+  }
+
+  // Build call args — omit strict if not provided (exactOptionalPropertyTypes compatibility)
+  const callArgs =
+    typeof strictRaw === "boolean" ? { type, payload, strict: strictRaw } : { type, payload };
+
+  const result = validateArtifact(callArgs);
+  writeJson(result);
+}
+
 function handleSign(args: unknown): void {
   const a = args as Record<string, unknown>;
   const baseDir = a["baseDir"] as string | undefined;
@@ -146,6 +197,18 @@ async function main(): Promise<void> {
   // T15b: no command argument → exit 1
   if (!command) {
     exitError({ error: "No command specified. Usage: teo-run <command> '<json>'" });
+  }
+
+  // validate-artifact handles its own JSON repair — bypass the strict JSON.parse below
+  // so that malformed-but-repairable args (e.g. trailing commas) don't cause exit 1.
+  if (command === "validate-artifact") {
+    try {
+      handleValidateArtifact(jsonArg ?? "{}");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      exitError({ error: message });
+    }
+    return;
   }
 
   // Parse the JSON argument

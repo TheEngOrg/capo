@@ -96,7 +96,7 @@ const VALID_PLAN_PAYLOAD = {
 // MISUSE: validate-artifact CLI — wrong / unexpected inputs
 // =============================================================================
 
-describe.skip("teo-run validate-artifact CLI — misuse", () => {
+describe("teo-run validate-artifact CLI — misuse", () => {
   // CLI-M1: unknown artifact type → exit 0, { valid: false } (not an exit-code error)
   it("CLI-M1. unknown type 'BOGUS_ARTIFACT' → exit 0, { valid: false, errors: [...] }", () => {
     const input = JSON.stringify({ type: "BOGUS_ARTIFACT", payload: {} });
@@ -185,7 +185,7 @@ describe.skip("teo-run validate-artifact CLI — misuse", () => {
 // BOUNDARY: validate-artifact CLI — edge cases
 // =============================================================================
 
-describe.skip("teo-run validate-artifact CLI — boundary", () => {
+describe("teo-run validate-artifact CLI — boundary", () => {
   // CLI-B1: PLAN_ARTIFACT wrapping a valid plan → exit 0, { valid: true }
   it("CLI-B1. PLAN_ARTIFACT with valid plan → exit 0, { valid: true }", () => {
     const input = JSON.stringify({ type: "PLAN_ARTIFACT", payload: VALID_PLAN_PAYLOAD });
@@ -231,7 +231,7 @@ describe.skip("teo-run validate-artifact CLI — boundary", () => {
 // GOLDEN PATH: validate-artifact CLI — full round-trip
 // =============================================================================
 
-describe.skip("teo-run validate-artifact CLI — golden path", () => {
+describe("teo-run validate-artifact CLI — golden path", () => {
   // CLI-G1: valid GATE_RESULT_ARTIFACT → exit 0, { valid: true }
   it("CLI-G1. valid GATE_RESULT_ARTIFACT → exit 0, { valid: true }", () => {
     const input = JSON.stringify({ type: "GATE_RESULT_ARTIFACT", payload: VALID_GATE_RESULT });

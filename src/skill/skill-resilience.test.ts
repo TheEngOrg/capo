@@ -790,8 +790,11 @@ describe("AC-7: TypeScript compile-time exhaustion — every invokeSkill() call 
     let exitCode = 0;
     let stderr = "";
     try {
+      // Use process.cwd() (the repo root) so this test is portable across
+      // machines. The prior commit hardcoded /tmp/capo-probe-02 — a developer-
+      // local ephemeral path that never exists in CI or other clones.
       execSync("npm run typecheck", {
-        cwd: "/tmp/capo-probe-02",
+        cwd: process.cwd(),
         stdio: ["ignore", "pipe", "pipe"],
         encoding: "utf8",
       });

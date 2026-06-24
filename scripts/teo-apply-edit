@@ -785,7 +785,7 @@ while IFS= read -r patch_json; do
     # Apply the patch using awk for reliable line-by-line processing
     # awk -v does NOT preserve embedded newlines in variable values.
     # Fix: write $CONTENT to a temp file; awk reads it with getline.
-    _CONTENT_TMPFILE="$(mktemp /tmp/teo-apply-edit-content.XXXXXX)"
+    _CONTENT_TMPFILE="$(mktemp "${TMPDIR:-/tmp}/teo-apply-edit-content.XXXXXX")"
     printf '%s' "$CONTENT" > "$_CONTENT_TMPFILE"
     case "$OP" in
       replace)
@@ -929,14 +929,7 @@ if [[ "$_SHOULD_SIGN" == "true" ]] && [[ "$HAS_JQ" == "true" ]]; then
       _signed_entry="$(node --experimental-vm-modules "$_SIGNER" "$SIGNING_KEY_DIR" "$_agent" "$_base_entry" 2>/dev/null)" || true
     fi
     if [[ -n "$_signed_entry" ]]; then
-      # Write as JSONL (overwrite with last entry — tests use tail -1)
-      _log_tmp="$(mktemp "${_log_file}.tmp.XXXXXX" 2>/dev/null)" || true
-      if [[ -n "$_log_tmp" ]]; then
-        printf '%s\n' "$_signed_entry" > "$_log_tmp"
-        mv "$_log_tmp" "$_log_file"
-      else
-        printf '%s\n' "$_signed_entry" > "$_log_file" 2>/dev/null || true
-      fi
+      atomic_json_append "$_log_file" "$_signed_entry"
     else
       # Fallback: write unsigned entry
       write_audit_applied "applied" "$TARGET" "$PATCH_COUNT" "$PATCH_BYTES"

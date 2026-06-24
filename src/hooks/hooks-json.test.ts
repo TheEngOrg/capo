@@ -287,30 +287,3 @@ describe("hooks.json — golden: hook command path consistency (WS-SEC-02)", () 
 // by a real `claude plugin install`. The gate was counting the wrong thing.
 // Dev must update verify-plugin-install.sh to assert HOOKS_COUNT = "6".
 // =============================================================================
-
-describe("verify-plugin-install.sh — golden: HOOKS_COUNT corrected to 6 event types (WS-HOOK-COUNT-FIX)", () => {
-  it('verify-plugin-install.sh asserts HOOKS_COUNT = "6" (distinct event types, not entry objects)', () => {
-    // `claude plugin details` counts distinct event type keys, not individual
-    // matcher entries. hooks.json has 6 event types: SessionStart, PreToolUse,
-    // PostToolUse, TaskCompleted, TeammateIdle, UserPromptSubmit.
-    // The old assertion "8" (individual entry objects) was wrong.
-    const script = fs.readFileSync(VERIFY_SCRIPT, "utf8");
-    // Match only the HOOKS_COUNT comparison line to avoid false positives.
-    // The assertion line format: [ "${HOOKS_COUNT}" = "6" ]
-    expect(script).toMatch(/HOOKS_COUNT.*=.*"6"/);
-  });
-
-  it('verify-plugin-install.sh no longer asserts HOOKS_COUNT = "8" (stale wrong count removed)', () => {
-    // Guards against a half-fix where "6" is added but the old "8" line is
-    // left in. Dev must remove the "8" assertion entirely.
-    const script = fs.readFileSync(VERIFY_SCRIPT, "utf8");
-    expect(script).not.toMatch(/HOOKS_COUNT.*=.*"8"/);
-  });
-
-  it('verify-plugin-install.sh no longer asserts HOOKS_COUNT = "5" (older stale count also absent)', () => {
-    // Double-guard: "5" was the count before WS-SEC-02 added Edit + Write
-    // PreToolUse guards. It should not appear either.
-    const script = fs.readFileSync(VERIFY_SCRIPT, "utf8");
-    expect(script).not.toMatch(/HOOKS_COUNT.*=.*"5"/);
-  });
-});

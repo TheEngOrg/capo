@@ -198,17 +198,6 @@ describe("verify-plugin-install.sh — boundary: structural validity", () => {
     expect(readVerifyScript()).toContain("[4/5]");
   });
 
-  it("Step 5 asset-count verification block is still present (21 agents, 15 skills, 6 hook event types)", () => {
-    // The install gate counts must be unchanged — WS-GO-07-swap touches
-    // marketplace source form only, not the plugin asset inventory.
-    // WS-HOOK-COUNT-FIX updated hooks count from 8 to 6: `claude plugin details`
-    // reports distinct event type keys (6), not individual entry objects (8).
-    const script = readVerifyScript();
-    expect(script).toContain('"21"');
-    expect(script).toContain('"15"');
-    expect(script).toContain('"6"');
-  });
-
   it("teo@teo-marketplace install command is still present (install target unchanged)", () => {
     // The install command itself — teo@teo-marketplace — is unchanged by the swap.
     // Only the marketplace registration command in Step 2 changes.

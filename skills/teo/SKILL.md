@@ -10,17 +10,21 @@ metadata:
 
 # /teo
 
-Gateway for TEO. Routes utility keywords directly to `teo-*` skills and delegates substantive work to the Capo orchestrator.
+Gateway for TEO. When arguments are present, your FIRST tool call MUST be Task(teo:capo) for all `teo` skill usecases.
 
-This is the `/teo` gateway. Pass requests to Capo verbatim — do not rewrite, pre-classify, or pre-filter the user's input before invoking the Task tool. Capo applies its own classification protocol. Invoke Capo directly via the Task tool with subagent_type: teo:capo.
+This is the `/teo` gateway. It is critical the user's prompts go to the skill verbatim for the skill to work correctly.
+**When arguments are present, your FIRST tool call MUST be Task(teo:capo)**
+1. DO NOT rewrite, pre-classify, or pre-filter the user's input before invoking the Task tool.
+2. Route user requests to `/teo` skill verbatim.
+3. `/teo` Capo is the classifier for the `teo` workflow
+4. Invoke Capo directly via the Task tool with subagent_type: teo:capo.
 
 ## Constitution
 
 1. **Capo-first for substantive work** — Utility skills route directly. Everything else goes through Capo.
 2. **No-args = menu** — Display utility skills AND Capo entry points.
-3. **Keywords first** — Match utility keywords before passing to Capo.
-4. **Thin gateway** — Do not replicate Capo logic. Delegate and let Capo orchestrate.
-5. **Be explicit** — Always tell the user whether routing to utility skill or Capo.
+3. **Thin gateway** — Do not replicate Capo logic. Delegate and let Capo orchestrate.
+4. **Be explicit** — Always tell the user whether routing to utility skill or Capo.
 
 ---
 
@@ -60,44 +64,15 @@ When invoked as `/teo` with no arguments, display:
 ---
 
 ## Delegation
+**You are most helpful by routing all teo invocations to Capo**
+1. Invoke Capo directly via the Task tool with `subagent_type: "teo:capo"`
+2. pass the user's verbatim request as the prompt.
 
-### Path 1: Utility Keywords → Direct Route
+**Claude resolves the registered plugin agent — no file existence check needed.**
 
-| Keywords | Routes to |
-|----------|-----------|
-| `login`, `session`, `auth`, `authenticate` | `/teo-login` |
-| `validate`, `check`, `integrity`, `verify framework` | `/teo-validate` |
-| `audit`, `compliance`, `trail`, `review decisions` | `/teo-audit` |
-| `upgrade`, `update`, `version`, `migrate framework` | `/teo-upgrade` |
-| `process`, `flow`, `register process`, `describe process`, `validate process`, `check process`, `update process`, `test process`, `process safety`, `process similarity` | `/teo-process` |
+Pass the user's request into Capo's pipeline.
 
-### Path 2: Everything Else → Capo
-
-Route to Capo. For substantive requests — planning, building, fixing, reviewing, improving, shipping — invoke Capo directly via the Task tool with `subagent_type: "teo:capo"` and pass the user's verbatim request as the prompt. Claude resolves the registered plugin agent — no file existence check needed.
-
-Pass the user's request into Capo's pipeline. Do NOT pre-classify intent beyond what the explicit entry point keywords provide.
-
-**Intent hints — ONLY for explicit keyword entry points:**
-
-| Entry point | intent_hint |
-|-------------|-------------|
-| `/teo plan <X>` | PLAN |
-| `/teo build <X>` | BUILD |
-| `/teo fix <X>` | FIX |
-| `/teo review <X>` | REVIEW |
-| `/teo improve <X>` | IMPROVE |
-| `/teo ship <X>` | SHIP |
-| `/teo <natural language>` | **OMIT** |
-
-**Note:** For natural language requests, do NOT infer an intent hint. Capo applies its own classification protocol.
-
-### Natural Language Routing
-
-1. Not an operational keyword → apply Capo orchestration with verbatim request
-2. Clearly operational keyword → route to utility skill
-3. Genuinely ambiguous → ask one clarifying question
-
-**Default to Capo.** When in doubt, apply Capo's pipeline.
+**Default to Capo.** When in doubt, route requests to Capo.
 
 ### Misuse Guards
 
@@ -105,7 +80,7 @@ Pass the user's request into Capo's pipeline. Do NOT pre-classify intent beyond 
 |-----------------|-------------------|
 | `/teo build` expecting code | Clarify: /teo invokes Capo orchestration; Capo delegates to engineering team |
 | `/teo` with no args | Display menu. Never return an error. |
-| Input matches no keywords | Attempt interpretation. Substantive → Capo. Operational → suggest utility skill. |
+| Input is not empty | Invoke Capo directly via the Task tool with `subagent_type: "teo:capo"` |
 | `/teo validate` | Route to `/teo-validate` |
 
 ## Memory Protocol
@@ -118,5 +93,5 @@ write: none
 ## Boundaries
 
 **CAN:** Route to teo-* utility skills, invoke teo:capo via Task for substantive work, show menu, match keywords
-**CANNOT:** Replicate Capo logic, make strategic decisions unilaterally, verify or synthesize team work, confirm specialist outputs
+**CANNOT:** Hijack `teo` workflow. Replicate Capo logic, make strategic decisions unilaterally, verify or synthesize team work, confirm specialist outputs
 **ESCALATES TO:** Capo (all substantive work)

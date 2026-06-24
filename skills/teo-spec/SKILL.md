@@ -13,6 +13,8 @@ metadata:
 
 Coordinates product-owner, product-manager, and design for product definition.
 
+Your **first action** is to spawn product-owner, product-manager, and design. Do not draft specs yourself before delegating.
+
 ## Constitution
 
 1. **User-first** - Every feature must solve a real user problem
@@ -29,7 +31,7 @@ Coordinates product-owner, product-manager, and design for product definition.
 3. Designer: UX requirements, wireframes, accessibility
 4. [GATE] Spike Validation: If external dependencies exist, validate via spike
         ↓
-Write to memory → Hand off to /mg-build
+Write to memory → Hand off to /teo-build
 ```
 
 ## Memory Protocol
@@ -39,7 +41,7 @@ read:
   - .claude/memory/agent-leadership-decisions.json
   - .claude/memory/workstream-{id}-state.json
 
-write: .claude/memory/agent-mg-spec-decisions.json
+write: .claude/memory/agent-teo-spec-decisions.json
   workstream_id: <id>
   product_vision: <PO input>
   user_stories:
@@ -58,7 +60,7 @@ write: .claude/memory/agent-mg-spec-decisions.json
 
 | Need | Action |
 |------|--------|
-| Execute feature | Recommend `/mg-build` |
+| Execute feature | Recommend `/teo-build` |
 | Design deep-dive | Spawn `design` |
 | Technical feasibility | Spawn `dev` or `staff-engineer` |
 | External dependency validation | Spawn `staff-engineer` for spike research |
@@ -110,7 +112,7 @@ write: .claude/memory/agent-mg-spec-decisions.json
 ### Ready for Engineering
 Priority: {high|medium|low}
 External Dependencies Validated: {yes|no|n/a}
-Next: /mg-build
+Next: /teo-build
 ```
 
 ## Document Output
@@ -122,5 +124,5 @@ Financial data in the Business Case section must come from user-provided input �
 ## Boundaries
 
 **CAN:** Define requirements, write specs, prioritize, spawn for research
-**CANNOT:** Make technical decisions, write code, skip design input
+**CANNOT:** Make technical decisions, write code, skip design input; Hijack the spec workflow
 **ESCALATES TO:** engineering-manager (priority conflicts, resource constraints)

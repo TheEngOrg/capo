@@ -13,6 +13,8 @@ metadata:
 
 Registers external projects as read-only context references for teo agents.
 
+Your **first action** is to parse the invocation arguments and execute the appropriate mode. Do not pre-classify or reinterpret the user's intent.
+
 ## Constitution
 
 1. **Read-only access** - Never modify external projects
@@ -229,8 +231,6 @@ See `references/output-examples.md` for full template examples.
 
 V1: local directories only. V2 (future): automatic GitHub clone, context refresh, cross-context search.
 
-See `.claude/shared/model-escalation.md` for escalation criteria.
-
 ## Boundaries
 
 **CAN:**
@@ -247,6 +247,7 @@ See `.claude/shared/model-escalation.md` for escalation criteria.
 - Create dependencies between projects
 - Execute code in external projects
 - Spawn agents in external project directories
+- Hijack the teo-add-context workflow
 
 **ESCALATES TO:**
 - engineering-manager (if context access patterns need review)

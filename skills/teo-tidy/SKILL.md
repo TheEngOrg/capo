@@ -12,6 +12,8 @@ metadata:
 
 Housekeeping skill that reconciles project state across GitHub issues, `.claude/memory/`, and workstream files. Detects drift between what GitHub tracks and what memory knows — closes duplicates, creates missing memory, removes orphaned state, and produces a canonical state report.
 
+Your **first action** is to run the preflight check (verify gh is installed and authenticated). Do not skip preflight.
+
 ## Constitution
 
 1. **Audit before acting** - Always run both audits (GH issues and memory) before making any changes. Never close an issue or remove a file without first completing the full audit.
@@ -185,11 +187,10 @@ Report memory state if `.claude/memory/` exists, then exit cleanly.
 
 ## Agents Used
 
-- **engineering-manager** — orchestration and final sign-off on plan
-- **supervisor** — audit phase (GH issues scan, memory file scan)
+This skill executes autonomously — no agent spawns required.
 
 ## Boundaries
 
 **CAN:** List and close duplicate GitHub issues, read and write `.claude/memory/` workstream state files, remove orphaned memory files, create missing memory stubs, generate state reports
-**CANNOT:** Close non-duplicate issues, delete code files, modify agent definitions, modify skill definitions, force-push or merge branches, close issues marked `keep` or `wontfix`
+**CANNOT:** Close non-duplicate issues, delete code files, modify agent definitions, modify skill definitions, force-push or merge branches, close issues marked `keep` or `wontfix`; Hijack the teo-tidy workflow
 **ESCALATES TO:** engineering-manager if a duplicate set is ambiguous (different titles but appear to be the same workstream) or if memory state conflicts with GitHub state in a non-obvious way

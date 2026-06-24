@@ -142,9 +142,9 @@ Can consult (fire-and-forget, no spawn):
 For `.claude/memory/**` files, use mechanical tools — never full-file Write/Edit.
 
 **In-session (shell scripts — no permission prompts):**
-- JSON field update → `.claude/scripts/mg-memory-write file.json '<jq expr>'`
-- MD line append   → `.claude/scripts/mg-memory-append file.md 'entry'`
-- MD section patch → `.claude/scripts/mg-memory-patch-section file.md '## Header' 'body'`
+- JSON field update → `.claude/scripts/teo-memory-write file.json '<jq expr>'`
+- MD line append   → `.claude/scripts/teo-memory-append file.md 'entry'`
+- MD section patch → `.claude/scripts/teo-memory-patch-section file.md '## Header' 'body'`
 
 **Daemon / MCP callers:** use equivalent MCP tools: `update_memory_field`, `append_memory_entry`, `patch_memory_section`.
 

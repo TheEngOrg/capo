@@ -44,8 +44,14 @@ const sourceContent = fs.readFileSync(SOURCE_PATH, "utf8");
 const OLD_SENTENCE =
   "The main session is a **Dispatcher** — its only job is routing. Capo runs as a spawned subagent (ADR-037), registered as the `teo:capo` plugin agent. Invoke it directly via the Task tool.";
 
-const NEW_SENTENCE =
-  "Pass requests to Capo verbatim — do not rewrite, pre-classify, or pre-filter the user's input before invoking the Task tool. Capo applies its own classification protocol. Invoke Capo directly via the Task tool with subagent_type: teo:capo.";
+// The post-rewrite SKILL.md (Brodie's 2026-06-24 clarity pass) expresses the
+// same intent as a directive list rather than one prose sentence. We assert on
+// the stable intent-bearing phrases instead of one brittle exact-sentence match.
+const NEW_INTENT_PHRASES = [
+  "FIRST tool call MUST be Task(teo:capo)",
+  "DO NOT rewrite, pre-classify, or pre-filter the user's input",
+  "subagent_type: teo:capo",
+];
 
 // ---------------------------------------------------------------------------
 // MISUSE / NEGATIVE-PATH TESTS
@@ -71,9 +77,11 @@ describe("skill-teo-relay-fix — source copy cleanup", () => {
 // These assert the desired post-fix state and will PASS after the fix.
 // ---------------------------------------------------------------------------
 describe("skill-teo-relay-fix — source copy post-fix content", () => {
-  it("T-04: source copy CONTAINS the new relay sentence", () => {
-    // FAILS NOW:  new sentence not present
-    // PASSES AFTER: old sentence replaced with new
-    expect(sourceContent).toContain(NEW_SENTENCE);
+  it("T-04: source copy expresses the verbatim-passthrough + Task-first intent", () => {
+    // Post-2026-06-24 rewrite: SKILL.md states the relay intent as a directive
+    // list. Assert each stable intent-bearing phrase is present.
+    for (const phrase of NEW_INTENT_PHRASES) {
+      expect(sourceContent).toContain(phrase);
+    }
   });
 });

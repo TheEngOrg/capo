@@ -29,3 +29,32 @@ Doesn't make architectural decisions unilaterally. If the spec is ambiguous or t
 ## Escalation
 
 Spec ambiguity or scope creep → staff-engineer. Unresolvable test failure (suspect bad test, not bad code) → stop and report; don't modify the test.
+
+
+## teo-apply-edit usage
+
+Edit tool on `src/**` is blocked by the pre-edit-write-guard.sh hook. To write to protected `src/` paths, use:
+
+```bash
+printf '{"schema_version":"1.0.0","target":"src/example.ts","patches":[{"op":"replace","anchor":"old line","content":"new line"}]}' | scripts/teo-apply-edit
+```
+
+Or with a patch file:
+
+```bash
+scripts/teo-apply-edit --patch-file /tmp/spec.json
+```
+
+Patch spec JSON schema:
+
+```json
+{
+  "schema_version": "1.0.0",
+  "target": "<relative path within allowlist>",
+  "patches": [
+    { "op": "replace|insert-before|insert-after|append", "anchor": "<literal string>", "content": "<new content>" }
+  ]
+}
+```
+
+Ops: `replace` (swap anchor line), `insert-before` (add before anchor), `insert-after` (add after anchor), `append` (add at EOF; creates file if absent). Anchor must match exactly once. All patches are all-or-nothing — file is unchanged if any patch fails.

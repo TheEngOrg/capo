@@ -232,7 +232,14 @@ function copyDirSandbox(src: string, dest: string): void {
       copyDirSandbox(srcPath, destPath);
     } else if (entry.isSymbolicLink()) {
       const linkTarget = fs.readlinkSync(srcPath);
-      fs.symlinkSync(linkTarget, destPath);
+      // Resolve the symlink target relative to the source file's containing directory.
+      const resolvedTarget = path.resolve(path.dirname(srcPath), linkTarget);
+      // Only copy symlinks whose resolved targets stay within the project root.
+      // Absolute paths and traversal sequences that escape are silently skipped.
+      if (resolvedTarget.startsWith(src + path.sep) || resolvedTarget === src) {
+        fs.symlinkSync(linkTarget, destPath);
+      }
+      // else: skip — symlink escapes project boundary (sandbox containment)
     } else {
       fs.copyFileSync(srcPath, destPath);
     }
@@ -495,6 +502,8 @@ export class WorkstreamTree {
                 closeGit(wsId, projectDir, worktreesDir);
                 break;
             }
+          } catch {
+            // best-effort: swallow cleanup errors — close() never rejects
           } finally {
             resolve();
           }

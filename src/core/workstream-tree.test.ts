@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
@@ -584,6 +584,106 @@ describe("WorkstreamTree — git backend on non-git directory", () => {
 });
 
 // ---------------------------------------------------------------------------
+// SYMLINK-01 — sandbox symlink escape prevention (WS-SYMLINK-01)
+//
+// Contract: copyDirSandbox() MUST NOT copy symlinks whose resolved target
+// escapes the project directory. Only symlinks that resolve within the project
+// root (src param) should be reproduced in the sandbox.
+//
+// Ordering: misuse (A, C) → boundary/regression guard (B)
+// ---------------------------------------------------------------------------
+
+describe("WorkstreamTree — SYMLINK-01: sandbox symlink escape prevention", () => {
+  // SYMLINK-01-A (misuse): absolute symlink pointing outside the project
+  // is NOT copied into the sandbox.
+  //
+  // Current behavior (BUG): copyDirSandbox() calls fs.readlinkSync() and then
+  // fs.symlinkSync() verbatim — absolute targets are reproduced unchanged,
+  // leaving a dangling escape hatch in the sandbox.
+  // Expected behavior: symlink is silently skipped.
+  // STATUS: FAILS today — this test is the red gate for WS-SYMLINK-01.
+  it("SYMLINK-01-A: absolute symlink pointing outside the project is NOT present in the sandbox", async () => {
+    // Create a symlink in the project whose target is outside tmpProjectDir.
+    // os.tmpdir() is guaranteed to exist on macOS and Linux.
+    const escapedTarget = os.tmpdir();
+    fs.symlinkSync(escapedTarget, path.join(tmpProjectDir, "escaped-link"));
+
+    const tree = makeTree("proj-symlink-01a");
+    const handle = await tree.allocate("ws-symlink-01a", "sandbox");
+
+    // The symlink must NOT appear in the sandbox.
+    const sbEscapedLink = path.join(handle.cwd, "escaped-link");
+    expect(fs.existsSync(sbEscapedLink)).toBe(false);
+
+    await tree.close("ws-symlink-01a");
+  });
+
+  // SYMLINK-01-B (boundary/regression guard): a relative symlink whose target
+  // resolves WITHIN the project IS copied into the sandbox.
+  //
+  // Relative intra-project symlinks are safe and must be preserved so that
+  // normal repo layouts (e.g. dist/index.js -> src/index.ts) keep working.
+  // STATUS: PASSES today — written as a regression guard so the fix cannot
+  // accidentally break safe symlinks.
+  it("SYMLINK-01-B: relative symlink resolving within the project IS present in the sandbox", async () => {
+    // index.ts already exists in tmpProjectDir (created in beforeEach).
+    // Create a relative symlink alias.ts -> ./index.ts (same directory).
+    fs.symlinkSync("./index.ts", path.join(tmpProjectDir, "alias.ts"));
+
+    const tree = makeTree("proj-symlink-01b");
+    const handle = await tree.allocate("ws-symlink-01b", "sandbox");
+
+    // The relative symlink must appear in the sandbox and remain a symlink.
+    const sbAlias = path.join(handle.cwd, "alias.ts");
+    expect(fs.existsSync(sbAlias)).toBe(true);
+    expect(fs.lstatSync(sbAlias).isSymbolicLink()).toBe(true);
+    // The symlink target string is preserved verbatim.
+    expect(fs.readlinkSync(sbAlias)).toBe("./index.ts");
+
+    await tree.close("ws-symlink-01b");
+  });
+
+  // SYMLINK-01-C (boundary): a relative symlink that traverses up out of the
+  // project (e.g. "../../etc") is treated as an escape and NOT copied.
+  //
+  // Even though the link text is relative, path.resolve() reveals the target
+  // escapes the project root. The fix must reject these.
+  // STATUS: FAILS today — copyDirSandbox() copies the raw relative target
+  // verbatim without resolving it against the source location.
+  //
+  // NOTE: We use lstatSync (not existsSync) to check for the symlink node
+  // itself. existsSync follows the link and returns false for a broken symlink,
+  // which would mask the bug when the traversal target doesn't exist in the
+  // sandbox's filesystem context. lstatSync returns the inode of the symlink
+  // regardless of whether the target resolves.
+  it("SYMLINK-01-C: relative upward-traversal symlink escaping the project is NOT present in the sandbox", async () => {
+    // "../../etc" resolves from tmpProjectDir to well above it (guaranteed to
+    // escape on macOS and Linux regardless of the temp dir depth).
+    const traversalTarget = "../../etc";
+    fs.symlinkSync(traversalTarget, path.join(tmpProjectDir, "traversal-link"));
+
+    const tree = makeTree("proj-symlink-01c");
+    const handle = await tree.allocate("ws-symlink-01c", "sandbox");
+
+    // The traversal symlink must NOT appear in the sandbox — check the symlink
+    // node itself with lstatSync (existsSync would follow the link and return
+    // false even when the node is present but broken, masking the bug).
+    const sbTraversalLink = path.join(handle.cwd, "traversal-link");
+    const symlinkNodeExists = (() => {
+      try {
+        fs.lstatSync(sbTraversalLink);
+        return true;
+      } catch {
+        return false;
+      }
+    })();
+    expect(symlinkNodeExists).toBe(false);
+
+    await tree.close("ws-symlink-01c");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // BOUNDARY — closeNone: lock file already gone (vitest-4 coverage: line 207 false)
 // When close() is called for a `none`-backend workstream whose lock file has
 // been externally deleted, closeNone() must be a no-op — no throw, no error.
@@ -674,8 +774,167 @@ describe("WorkstreamTree — misuse: list() with corrupted registry", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Utility helpers
+// MISUSE — WS-ASYNC-01: close() resolves even when backend cleanup throws
+//
+// Contract: close() is documented best-effort. The setImmediate callback that
+// runs closeSandbox()/closeGit() must NOT let exceptions escape as unhandled
+// errors. Before the fix the setImmediate body has try/finally but no catch:
+//
+//   setImmediate(() => {
+//     try { closeSandbox(...); }
+//     finally { resolve(); }          // <-- exception escapes here
+//   });
+//
+// When closeSandbox throws, `finally` still resolves the Promise — so
+// `await tree.close()` completes — but the exception propagates out of the
+// setImmediate callback as an `uncaughtException`. Vitest detects this and
+// fails the test. The fix is to add a `catch` block that swallows the error.
+//
+// STATUS: FAILS today (before the fix). Both tests are red gates for WS-ASYNC-01.
 // ---------------------------------------------------------------------------
+
+describe("WorkstreamTree — ASYNC-01: close() never emits uncaughtException", () => {
+  // ASYNC-01-A (misuse): close() resolves AND emits no uncaughtException when
+  // closeSandbox's fs.rmSync throws (EACCES on a locked subdirectory).
+  //
+  // Strategy: make a subdirectory inside the sandbox read-only (chmod 0o444)
+  // so that fs.rmSync({ recursive: true }) throws EACCES. This is a real
+  // filesystem-level throw — no spy needed, and it works reliably on macOS/Linux.
+  //
+  // Sequence (before fix):
+  //   1. setImmediate fires; rmSync throws EACCES on locked subdir
+  //   2. finally { resolve() } — Promise resolves
+  //   3. exception escapes setImmediate callback as uncaughtException
+  //   4. our handler captures it; assertion `expect(caughtError).toBeUndefined()` FAILS
+  //
+  // Sequence (after fix):
+  //   1. setImmediate fires; rmSync throws EACCES on locked subdir
+  //   2. catch { } — exception swallowed
+  //   3. finally { resolve() } — Promise resolves
+  //   4. no uncaughtException; assertion passes
+  //
+  // STATUS: FAILS today — the setImmediate body in close() has no catch block.
+  it("ASYNC-01-A (misuse): close() resolves and does not emit uncaughtException when closeSandbox throws EACCES", async () => {
+    const tree = makeTree("proj-async-01a");
+    const handle = await tree.allocate("ws-async-01a", "sandbox");
+    expect(fs.existsSync(handle.cwd)).toBe(true);
+
+    // Create a read-only subdirectory inside the sandbox so that
+    // fs.rmSync({ recursive: true }) throws EACCES when it tries to unlink
+    // the files inside it. chmod 0o444 removes write+execute from the owner,
+    // which prevents directory entry deletion on macOS and Linux.
+    const lockedSubdir = path.join(handle.cwd, "locked-subdir");
+    fs.mkdirSync(lockedSubdir);
+    fs.writeFileSync(path.join(lockedSubdir, "file.txt"), "contents");
+    fs.chmodSync(lockedSubdir, 0o444);
+
+    // Register an uncaughtException handler BEFORE calling close() so that if
+    // the exception escapes setImmediate we capture it rather than crashing the
+    // test worker. The handler lets us assert on the result rather than relying
+    // on Vitest's own uncaught-exception detection (which varies by version).
+    let caughtError: Error | undefined;
+    const uncaughtHandler = (err: Error) => {
+      caughtError = err;
+    };
+    process.once("uncaughtException", uncaughtHandler);
+
+    // close() must resolve — finally fires even in the buggy path.
+    await tree.close("ws-async-01a");
+
+    // Wait one extra event-loop tick so the uncaughtException event (if any)
+    // has time to propagate BEFORE we inspect caughtError.
+    await new Promise<void>((r) => setImmediate(r));
+
+    // Remove the handler if it was not triggered (prevents leaking into subsequent tests).
+    process.removeListener("uncaughtException", uncaughtHandler);
+
+    // Restore permissions so afterEach can clean up the temp dirs.
+    try {
+      fs.chmodSync(lockedSubdir, 0o755);
+    } catch {
+      // best-effort
+    }
+
+    // BEFORE FIX: caughtError is an EACCES Error → this assertion FAILS (red gate).
+    // AFTER FIX:  caughtError is undefined       → this assertion PASSES.
+    expect(caughtError).toBeUndefined();
+  });
+
+  // ASYNC-01-B (boundary): close() resolves and does not emit uncaughtException
+  // when closeGit's fs.rmSync fallback throws EACCES.
+  //
+  // closeGit() has its own internal try/catch that falls back to fs.rmSync when
+  // `git worktree remove` fails. If THAT fs.rmSync also throws, the exception
+  // propagates out of closeGit() into the same unguarded setImmediate path.
+  //
+  // Approach: allocate a `sandbox` worktree to create a real cwd directory, then
+  // corrupt the registry to claim backend="git". When close() reads the corrupted
+  // registry it routes through closeGit(). closeGit() calls `git worktree remove`
+  // on a path that is NOT a real git worktree, so it throws and falls back to
+  // fs.rmSync. We then make fs.rmSync throw by locking a subdirectory.
+  //
+  // STATUS: FAILS today — same missing catch as ASYNC-01-A.
+  it("ASYNC-01-B (boundary): close() resolves and does not emit uncaughtException when closeGit rmSync fallback throws EACCES", async () => {
+    // Allocate sandbox to create a real directory and get a registry entry.
+    const tree = makeTree("proj-async-01b");
+    const handle = await tree.allocate("ws-async-01b", "sandbox");
+    expect(fs.existsSync(handle.cwd)).toBe(true);
+
+    // Corrupt the registry: replace backend="sandbox" with backend="git" so
+    // close() routes through closeGit() instead of closeSandbox().
+    const registryPath = path.join(
+      tmpHome,
+      ".teo",
+      "worktrees",
+      "proj-async-01b",
+      "registry.jsonl"
+    );
+    const lines = fs.readFileSync(registryPath, "utf8").trim().split("\n").filter(Boolean);
+    const corrupted =
+      lines
+        .map((line) => {
+          const rec = JSON.parse(line) as WorktreeRecord;
+          return JSON.stringify({ ...rec, backend: "git" });
+        })
+        .join("\n") + "\n";
+    fs.writeFileSync(registryPath, corrupted, "utf8");
+
+    // Make fs.rmSync throw by locking a subdirectory inside the sandbox.
+    // closeGit() first tries `git worktree remove --force <path>` which will
+    // fail (this is a sandbox copy, not a real git worktree). Then it falls
+    // back to fs.rmSync({ recursive: true }), which throws EACCES on the
+    // locked subdir.
+    const lockedSubdir = path.join(handle.cwd, "locked-subdir");
+    fs.mkdirSync(lockedSubdir);
+    fs.writeFileSync(path.join(lockedSubdir, "file.txt"), "contents");
+    fs.chmodSync(lockedSubdir, 0o444);
+
+    let caughtError: Error | undefined;
+    const uncaughtHandler = (err: Error) => {
+      caughtError = err;
+    };
+    process.once("uncaughtException", uncaughtHandler);
+
+    // close() must resolve even though closeGit throws.
+    await tree.close("ws-async-01b");
+
+    // One extra tick so the uncaughtException event can propagate if present.
+    await new Promise<void>((r) => setImmediate(r));
+
+    process.removeListener("uncaughtException", uncaughtHandler);
+
+    // Restore permissions before afterEach cleanup.
+    try {
+      fs.chmodSync(lockedSubdir, 0o755);
+    } catch {
+      // best-effort
+    }
+
+    // BEFORE FIX: caughtError is set → FAILS (red gate).
+    // AFTER FIX:  caughtError is undefined → PASSES.
+    expect(caughtError).toBeUndefined();
+  });
+});
 
 function getAllFilesRecursive(dir: string): string[] {
   const results: string[] = [];

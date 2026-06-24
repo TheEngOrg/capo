@@ -1365,8 +1365,9 @@ describe("runPlan() — WS-CRYPTO-01: target_dir wired to content hash (signed p
 
       await runPlan(plan, adapter, makeSignedOpts(sessionId));
 
-      // The signer must have been called with a non-null content_hash
-      expect(capturedPayloads).toHaveLength(1);
+      // WS-SIGN-02: signer.sign() is now called twice — once for the EXECUTE event
+      // and once for the CLOSE event. We inspect capturedPayloads[0] (EXECUTE).
+      expect(capturedPayloads).toHaveLength(2);
       const payload = capturedPayloads[0]!;
       // After the fix: content_hash is the SHA-256 of targetDir, a 64-hex string
       expect(payload.content_hash).not.toBeNull();
@@ -1398,7 +1399,9 @@ describe("runPlan() — WS-CRYPTO-01: target_dir wired to content hash (signed p
 
       await runPlan(plan, adapter, makeSignedOpts(sessionId));
 
-      expect(capturedPayloads).toHaveLength(1);
+      // WS-SIGN-02: signer.sign() is now called twice — EXECUTE first, CLOSE second.
+      // We inspect capturedPayloads[0] (the EXECUTE event) for the content_hash assertion.
+      expect(capturedPayloads).toHaveLength(2);
       const payload = capturedPayloads[0]!;
       // No target_dir → content_hash must be null (not a hash, not undefined)
       expect(payload.content_hash).toBeNull();
@@ -1810,6 +1813,355 @@ describe("WS-GATE-01 — gate exception fail-closed", () => {
       expect(result.overallStatus).toBe("PASS");
     } finally {
       gateSpy.mockRestore();
+    }
+  });
+});
+
+// =============================================================================
+// WS-CLOSE-01 — ledger.close() failure must increment signingErrors
+//
+// Bug: in run-plan.ts, `result.signingErrors` is computed BEFORE `ledger.close()`
+// runs. When `close()` throws, the catch block swallows the error and the
+// caller sees no record of it — the audit trail is silently incomplete.
+//
+// Fix (Option A, preferred): when `ledger.close()` throws, increment
+// `result.signingErrors` (treat close failure as an additional audit-trail error).
+//
+// These tests MUST FAIL against the current implementation:
+//   - CLOSE-01-A: close throws, but signingErrors stays 0 (bug: not incremented)
+//   - CLOSE-01-B: append throws once + close throws, but signingErrors stays 1 (bug: close not counted)
+//
+// CLOSE-01-C is explicitly NOT added here — AUDIT-01-C already asserts that a
+// clean close keeps signingErrors === 0, which is the regression guard required.
+//
+// Ordering: misuse → boundary → (golden path covered by AUDIT-01-C)
+// =============================================================================
+
+describe("WS-CLOSE-01 — ledger.close() failure increments signingErrors", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "teo-close01-"));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  const makeSignedOpts = (sessionId: string): RunPlanOptions => ({
+    sessionId,
+    ledgerBaseDir: tmpDir,
+  });
+
+  // CLOSE-01-A (misuse): ledger.close() throws → signingErrors is incremented
+  //
+  // Current behavior (BUG): close() throw is swallowed; signingErrors was already
+  // set before close() ran and remains 0.
+  // Expected behavior (FIX): close() throw must increment signingErrors to 1.
+  //
+  // The run has one PASS task with a clean per-step append — the only failure is
+  // the close() call. After the fix, signingErrors must be exactly 1.
+  // overallStatus must remain PASS — close failure does not corrupt step outcomes.
+  it("CLOSE-01-A (misuse): ledger.close() throws → signingErrors is incremented to 1", async () => {
+    const sessionId = "close01-a-close-throws";
+    const task = makeAgentTask("close01-a-task");
+    const plan = makePlan([task]);
+    const adapter = makeMockAdapter();
+    // adapter returns PASS (default); per-step append succeeds
+
+    const closeSpy = vi.spyOn(AppendOnlyLedger.prototype, "close").mockImplementation(() => {
+      throw new Error("close-fail");
+    });
+
+    try {
+      const result = await runPlan(plan, adapter, makeSignedOpts(sessionId));
+
+      // Step ran and PASSED — close failure must not corrupt step outcomes
+      expect(result.steps).toHaveLength(1);
+      expect(result.steps[0]!.status).toBe("PASS");
+      expect(result.overallStatus).toBe("PASS");
+
+      // PRIMARY ASSERTION: close() threw → signingErrors must be 1.
+      // FAILS today: signingErrors is set before close() runs and stays 0.
+      expect(result.signingErrors).toBe(1);
+    } finally {
+      closeSpy.mockRestore();
+    }
+  });
+
+  // CLOSE-01-B (boundary): ledger.close() throws + one per-step append fails →
+  // signingErrors is 2 (one per-step failure + one close failure)
+  //
+  // Current behavior (BUG): close() throw is swallowed; only the per-step append
+  // failure is counted — signingErrors stays 1.
+  // Expected behavior (FIX): signingErrors must be 2 after the fix.
+  it("CLOSE-01-B (boundary): per-step append failure + close() throws → signingErrors === 2", async () => {
+    const sessionId = "close01-b-append-and-close-throw";
+    const task = makeAgentTask("close01-b-task");
+    const plan = makePlan([task]);
+    const adapter = makeMockAdapter();
+    // adapter returns PASS (default)
+
+    // Spy on append() — throw on the first (and only) call → one per-step signing_failed
+    const appendSpy = vi.spyOn(AppendOnlyLedger.prototype, "append").mockImplementation(() => {
+      throw new Error("append-fail");
+    });
+
+    // Spy on close() — always throw → one close failure
+    const closeSpy = vi.spyOn(AppendOnlyLedger.prototype, "close").mockImplementation(() => {
+      throw new Error("close-fail");
+    });
+
+    try {
+      const result = await runPlan(plan, adapter, makeSignedOpts(sessionId));
+
+      // Step ran and PASSED — append failure must not corrupt step status
+      expect(result.steps).toHaveLength(1);
+      expect(result.steps[0]!.status).toBe("PASS");
+      // Per-step signing must have failed
+      expect(result.steps[0]!.signingStatus).toBe("signing_failed");
+
+      // PRIMARY ASSERTION: 1 per-step append failure + 1 close failure = 2.
+      // FAILS today: signingErrors is computed before close() runs → stays 1.
+      expect(result.signingErrors).toBe(2);
+    } finally {
+      appendSpy.mockRestore();
+      closeSpy.mockRestore();
+    }
+  });
+});
+
+// =============================================================================
+// WS-SIGN-02 — CLOSE event HMAC signature stored in RunResult.closeSignature
+//
+// Bug: AppendOnlyLedger.close() returns void, discarding the {seq, ts} assigned
+// by the internal append() call. run-plan.ts therefore cannot sign the CLOSE
+// event with HmacSigner, so the workflow summary (task_count, pass, fail, etc.)
+// is unauthenticated and can be tampered with.
+//
+// Scope of fix (dev implements):
+//   1. ledger.ts  — change close() to return { seq: number; ts: string }
+//   2. runner.ts  — add closeSignature?: string to RunResult
+//   3. run-plan.ts — after ledger.close() returns {seq, ts}, call signer.sign()
+//                    on the CLOSE payload and store in result.closeSignature
+//
+// Ordering: misuse → boundary → golden path (ADR-064 policy)
+//
+// All four tests FAIL before dev implements the fix.
+// =============================================================================
+
+describe("WS-SIGN-02 — CLOSE event signature in RunResult", () => {
+  let tmpDir: string;
+  let tmpWsBase: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "teo-sign02-"));
+    tmpWsBase = fs.mkdtempSync(path.join(os.tmpdir(), "teo-sign02-ws-"));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpWsBase, { recursive: true, force: true });
+  });
+
+  const makeSignedOpts = (sessionId: string): RunPlanOptions => ({
+    sessionId,
+    ledgerBaseDir: tmpDir,
+    workstreamBaseDir: tmpWsBase,
+  });
+
+  // ---------------------------------------------------------------------------
+  // SIGN-02-A (misuse): signed run with sessionId → RunResult.closeSignature is
+  // a 64-char hex string.
+  //
+  // This is the primary assertion for the whole workstream: after the fix,
+  // close() returns {seq, ts}, signer.sign() is called on the CLOSE payload,
+  // and the resulting hex signature is stored in RunResult.closeSignature.
+  //
+  // FAILS today: closeSignature does not exist in RunResult, so it is always
+  // undefined regardless of whether signing runs.
+  // ---------------------------------------------------------------------------
+  it("SIGN-02-A (misuse): signed run with sessionId → RunResult.closeSignature is a 64-char hex string", async () => {
+    const sessionId = "sign02-a-close-sig";
+    const task = makeAgentTask("sign02-a-task");
+    const plan = makePlan([task], { plan_id: "plan-sign02-a" });
+    const adapter = makeMockAdapter();
+
+    const result = await runPlan(plan, adapter, makeSignedOpts(sessionId));
+
+    expect(result.overallStatus).toBe("PASS");
+    expect(result.steps).toHaveLength(1);
+    expect(result.steps[0]?.status).toBe("PASS");
+
+    // PRIMARY ASSERTION: closeSignature must be present and valid.
+    // FAILS today — RunResult has no closeSignature field.
+    expect((result as RunResult & { closeSignature?: string }).closeSignature).toBeDefined();
+    expect((result as RunResult & { closeSignature?: string }).closeSignature).toMatch(
+      /^[0-9a-f]{64}$/
+    );
+  });
+
+  // ---------------------------------------------------------------------------
+  // SIGN-02-B (boundary): closeSignature is verifiable using the same HmacSigner
+  // instance backed by the same ledgerBaseDir.
+  //
+  // Strategy: after the run, read the JSONL ledger file and find the CLOSE event
+  // (phase === "CLOSE") to extract its ts and seq. Then call signer.verify()
+  // with task_id: null, actor_id: "SYSTEM", verdict: null, content_hash: null
+  // and the ts/seq from the ledger line.
+  //
+  // This tests the full round-trip: ledger writes CLOSE → close() returns {seq,ts}
+  // → signer.sign() over CLOSE payload → RunResult.closeSignature → verify().
+  //
+  // FAILS today: closeSignature is undefined, so verify() receives undefined and
+  // returns false (or the assertion on closeSignature itself fails first).
+  // ---------------------------------------------------------------------------
+  it("SIGN-02-B (boundary): closeSignature is verifiable against the CLOSE ledger event", async () => {
+    const sessionId = "sign02-b-verify";
+    const task = makeAgentTask("sign02-b-task");
+    const plan = makePlan([task], { plan_id: "plan-sign02-b" });
+    const adapter = makeMockAdapter();
+
+    const result = await runPlan(plan, adapter, makeSignedOpts(sessionId));
+
+    // Retrieve closeSignature from the result (field added by dev).
+    const closeSignature = (result as RunResult & { closeSignature?: string }).closeSignature;
+
+    // Must be present — covered by SIGN-02-A; repeated here for isolation.
+    expect(closeSignature).toBeDefined();
+    expect(closeSignature).toMatch(/^[0-9a-f]{64}$/);
+
+    // Read the JSONL ledger to find the CLOSE event's seq and ts.
+    //
+    // The ledger file lives at: <ledgerBaseDir>/ledger/<sessionId>.jsonl
+    // Each line is a JSON object (LedgerEvent). The CLOSE event has phase === "CLOSE".
+    //
+    // We parse each line, filter by phase, then reconstruct the signer payload
+    // using the same fields run-plan.ts will use after the fix:
+    //   plan_id: plan.plan_id, task_id: null, actor_id: "SYSTEM",
+    //   verdict: null, ts: evt.ts, seq: evt.seq, content_hash: null
+    const ledgerFile = path.join(tmpDir, "ledger", `${sessionId}.jsonl`);
+    expect(fs.existsSync(ledgerFile)).toBe(true);
+
+    const rawLines = fs
+      .readFileSync(ledgerFile, "utf8")
+      .split("\n")
+      .filter((l) => l.trim().length > 0)
+      .map((l) => JSON.parse(l) as LedgerEvent);
+
+    const closeEvent = rawLines.find((l) => l.phase === "CLOSE");
+    expect(closeEvent).toBeDefined();
+
+    // Construct a verifier using the same shared keyring (same ledgerBaseDir).
+    const verifier = new HmacSigner({ baseDir: tmpDir });
+
+    const valid = verifier.verify(
+      {
+        plan_id: plan.plan_id,
+        task_id: null,
+        actor_id: "SYSTEM",
+        verdict: null,
+        ts: closeEvent!.ts,
+        seq: closeEvent!.seq,
+        content_hash: null,
+      },
+      closeSignature!
+    );
+
+    // PRIMARY ASSERTION: the signature stored in RunResult.closeSignature must
+    // verify against the CLOSE event's actual ts and seq from the ledger.
+    // FAILS today — closeSignature is undefined so verify() is never called.
+    expect(valid).toBe(true);
+  });
+
+  // ---------------------------------------------------------------------------
+  // SIGN-02-C (boundary): unsigned run (no sessionId) → RunResult.closeSignature
+  // is undefined.
+  //
+  // Regression guard: when no sessionId is provided the run is unsigned by design.
+  // closeSignature must be absent (undefined), not null or "".
+  //
+  // This test may pass today (undefined by default) but locks the contract so
+  // dev cannot introduce a bad default value (e.g. "" or null) when wiring the
+  // new field.
+  // ---------------------------------------------------------------------------
+  it("SIGN-02-C (boundary): unsigned run (no sessionId) → RunResult.closeSignature is undefined", async () => {
+    const task = makeAgentTask("sign02-c-task");
+    const plan = makePlan([task], { plan_id: "plan-sign02-c" });
+    const adapter = makeMockAdapter();
+
+    // No sessionId — unsigned path
+    const result = await runPlan(plan, adapter, { workstreamBaseDir: tmpWsBase });
+
+    expect(result.overallStatus).toBe("PASS");
+    expect(result.steps).toHaveLength(1);
+
+    // closeSignature must be undefined (not null, not "") on the unsigned path
+    const closeSignature = (result as RunResult & { closeSignature?: string }).closeSignature;
+    expect(closeSignature).toBeUndefined();
+  });
+
+  // ---------------------------------------------------------------------------
+  // SIGN-02-D (golden path): signer throws on the CLOSE signing call →
+  // signingErrors is incremented, run still completes, closeSignature is undefined.
+  //
+  // The spy is set to throw only on the second call to HmacSigner.prototype.sign:
+  //   - First call  = per-step EXECUTE event signing (must succeed → "signed")
+  //   - Second call = CLOSE event signing (throws → closeSignature absent)
+  //
+  // Expected post-fix behavior:
+  //   - result.signingErrors === 1 (CLOSE signing failure counted)
+  //   - result.closeSignature === undefined (signing did not produce a value)
+  //   - result.overallStatus === "PASS" (signing failure must not abort the run)
+  //
+  // FAILS today: closeSignature does not exist in RunResult at all, and
+  // signingErrors is not incremented for CLOSE signing failures (the catch block
+  // that will handle this does not yet exist).
+  // ---------------------------------------------------------------------------
+  it("SIGN-02-D (golden path): signer throws on CLOSE signing → signingErrors incremented, run completes as PASS", async () => {
+    const sessionId = "sign02-d-close-sign-fail";
+    const task = makeAgentTask("sign02-d-task");
+    const plan = makePlan([task], { plan_id: "plan-sign02-d" });
+    const adapter = makeMockAdapter();
+
+    // Spy on HmacSigner.prototype.sign.
+    // First call (per-step EXECUTE event): succeeds — returns a valid 64-hex stub.
+    // Second call (CLOSE event): throws — simulates keyring I/O failure at close time.
+    let signCallCount = 0;
+    const signSpy = vi.spyOn(HmacSigner.prototype, "sign").mockImplementation(function (
+      this: InstanceType<typeof HmacSigner>,
+      payload
+    ) {
+      signCallCount++;
+      if (signCallCount === 1) {
+        // Per-step sign — succeed with a valid-format stub signature
+        return "a".repeat(64);
+      }
+      // CLOSE sign — throw to simulate a keyring failure at workflow close time
+      throw new Error("simulated signer failure on CLOSE event");
+    });
+
+    try {
+      const result = await runPlan(plan, adapter, makeSignedOpts(sessionId));
+
+      // The run itself must complete successfully — CLOSE signing failure is audit-trail
+      // best-effort and must not change step outcomes or halt the workflow.
+      expect(result.overallStatus).toBe("PASS");
+      expect(result.steps).toHaveLength(1);
+      expect(result.steps[0]?.status).toBe("PASS");
+
+      // The per-step sign succeeded (first call).
+      expect(result.steps[0]?.signingStatus).toBe("signed");
+
+      // PRIMARY ASSERTIONS — all FAIL today:
+      // (1) CLOSE signing failure must increment signingErrors (same policy as per-step)
+      expect(result.signingErrors).toBe(1);
+
+      // (2) closeSignature must be undefined — signing threw before it could be stored
+      const closeSignature = (result as RunResult & { closeSignature?: string }).closeSignature;
+      expect(closeSignature).toBeUndefined();
+    } finally {
+      signSpy.mockRestore();
     }
   });
 });

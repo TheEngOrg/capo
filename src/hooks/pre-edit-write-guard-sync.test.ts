@@ -126,10 +126,11 @@ describe("WS-SYNC-01 — misuse: canonical hooks/pre-edit-write-guard.sh has all
     expect(canonicalPrefixes).toContain(".eslintrc.json");
   });
 
-  it("canonical hooks/pre-edit-write-guard.sh PROTECTED_PREFIXES has at least 13 entries (the full allowlist)", () => {
-    // The canonical file has 13 entries (8 existing + 5 config entries).
-    // Failing to reach 13 means an entry was removed — catch it early.
-    expect(canonicalPrefixes.length).toBeGreaterThanOrEqual(13);
+  it("canonical hooks/pre-edit-write-guard.sh PROTECTED_PREFIXES has at least 12 entries (the full allowlist)", () => {
+    // The canonical file has 12 entries (7 existing + 5 config entries).
+    // ws-delete-mirror removed ".claude/agents" (mirror deleted); count updated from 13 to 12.
+    // Failing to reach 12 means an entry was removed — catch it early.
+    expect(canonicalPrefixes.length).toBeGreaterThanOrEqual(12);
   });
 });
 

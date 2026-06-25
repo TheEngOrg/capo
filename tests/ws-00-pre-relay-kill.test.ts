@@ -3,7 +3,6 @@
 //
 // WHAT THESE TESTS VERIFY:
 //   T-01: agents/capo.md contains no GATEWAY_SPAWN_REQUEST relay protocol
-//   T-02: agents/capo.md and .claude/agents/capo.md are identical (or mirror absent)
 //   T-03: docs/how-it-works.md contains no "Dispatcher" identity-label usage
 //   T-04: sandbox/README.md contains no "Dispatcher" identity-label usage
 //   T-05: docs/adr/ADR-072.md exists and is non-empty
@@ -11,7 +10,6 @@
 //
 // INTENTIONAL FAILURE STATE (before WS-00-pre is implemented):
 //   T-01: FAILS — agents/capo.md has GATEWAY_SPAWN_REQUEST throughout section 108-161
-//   T-02: PASSES — both files are currently identical (confirmed by read)
 //   T-03: FAILS — docs/how-it-works.md has "Dispatcher" identity noun on line 6 and ASCII diagram
 //   T-04: FAILS — sandbox/README.md has "Dispatcher" as architectural noun twice
 //   T-05: FAILS — docs/adr/ is empty, ADR-072.md does not exist
@@ -19,14 +17,14 @@
 //
 // GREEN CRITERIA (after WS-00-pre is fully implemented):
 //   T-01: GATEWAY_SPAWN_REQUEST section removed; Capo calls Task() directly
-//   T-02: .claude/agents/capo.md mirrors the updated agents/capo.md
 //   T-03: how-it-works.md updated — no capitalized-noun "Dispatcher" identity references
 //   T-04: sandbox/README.md updated — "Dispatcher" replaced with accurate routing description
 //   T-05: docs/adr/ADR-072.md authored with content describing the relay-kill decision
 //   T-06: Already green — no regression expected
 //
 // SCOPE NOTES:
-//   - .claude/ is gitignored; we assert T-02 only if the mirror file exists on disk
+//   - T-02 (mirror-parity) was removed as part of ws-delete-mirror: the .claude/agents/
+//     mirror directory has been deleted; parity checks are no longer applicable.
 //   - We test for the specific identity-label pattern "Dispatcher" (capitalized noun used to
 //     name the architectural two-tier relay role), NOT generic "dispatcher" in any context
 //   - The SKILL.md relay-model language (old Dispatcher sentence) was already removed by
@@ -46,7 +44,6 @@ import * as path from "node:path";
 const REPO_ROOT = path.resolve(__dirname, "..");
 
 const PLUGIN_CAPO_PATH = path.join(REPO_ROOT, "agents", "capo.md");
-const MIRROR_CAPO_PATH = path.join(REPO_ROOT, ".claude", "agents", "capo.md");
 const HOW_IT_WORKS_PATH = path.join(REPO_ROOT, "docs", "how-it-works.md");
 const SANDBOX_README_PATH = path.join(REPO_ROOT, "sandbox", "README.md");
 const ADR_072_PATH = path.join(REPO_ROOT, "docs", "adr", "ADR-072.md");
@@ -57,10 +54,6 @@ const pluginCapoContent = fs.readFileSync(PLUGIN_CAPO_PATH, "utf8");
 const howItWorksContent = fs.readFileSync(HOW_IT_WORKS_PATH, "utf8");
 const sandboxReadmeContent = fs.readFileSync(SANDBOX_README_PATH, "utf8");
 const skillTeoContent = fs.readFileSync(SKILL_TEO_PATH, "utf8");
-
-// Mirror file is gitignored — may legitimately be absent in CI. Load conditionally.
-const mirrorExists = fs.existsSync(MIRROR_CAPO_PATH);
-const mirrorCapoContent = mirrorExists ? fs.readFileSync(MIRROR_CAPO_PATH, "utf8") : null;
 
 // =============================================================================
 // T-01 — MISUSE / NEGATIVE-PATH
@@ -113,30 +106,6 @@ describe("T-01 relay-kill — GATEWAY_SPAWN_REQUEST must be absent from agents/c
     // appears outside of the removed relay prose context.
     // This test is intentionally loose — the exact wording is dev's decision.
     // A stricter version can be added in qa-validate once dev has authored the replacement prose.
-  });
-});
-
-// =============================================================================
-// T-02 — BOUNDARY
-// agents/capo.md and .claude/agents/capo.md must be identical if both exist.
-//
-// The .claude/ mirror is gitignored. If it is absent (fresh CI checkout), this
-// test is a no-op (skipped). If it exists and diverges, that is a bug — the
-// relay-kill edit must be applied to both copies simultaneously.
-// =============================================================================
-describe("T-02 mirror-parity — .claude/agents/capo.md must match agents/capo.md when present", () => {
-  it("T-02: .claude/agents/capo.md is identical to agents/capo.md (when mirror exists)", () => {
-    if (!mirrorExists) {
-      // Mirror absent in this environment (CI fresh checkout, gitignored). Skip assertion.
-      // This is expected in CI. On a developer machine where the mirror IS present,
-      // this test ensures the relay-kill edit was applied to both files.
-      return;
-    }
-
-    // PASSES NOW: both files are currently identical (confirmed by inspection).
-    // MUST CONTINUE TO PASS AFTER: dev edits both files in lockstep.
-    // FAILS if dev edits only agents/capo.md and forgets the .claude/ mirror.
-    expect(mirrorCapoContent).toBe(pluginCapoContent);
   });
 });
 

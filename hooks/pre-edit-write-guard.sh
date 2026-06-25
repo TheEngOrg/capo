@@ -66,7 +66,6 @@ PROTECTED_PREFIXES=(
   ".claude/scripts"
   ".claude/hooks"
   ".claude/shared"
-  ".claude/agents"
   ".claude/settings.json"
   "docs"
   "src"

@@ -60,3 +60,4 @@ settings.v4-snapshot.json
 
 # WS-GO-02: esbuild bundle artifact — built in CI, not committed
 bin/teo-run.js
+bin/teo-run.js.map

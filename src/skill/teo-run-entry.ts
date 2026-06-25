@@ -12,23 +12,20 @@
 //   ledger-append     — calls AppendOnlyLedger.append()
 //   ledger-close      — calls AppendOnlyLedger.close()
 //   plan-init         — initializes a plan artifact (session_id, project_id, directive?)
-//   evaluate-gate     — evaluates a gate (stub: always PASS, UNENFORCED_MOCK status)
+//   evaluate-gate     — evaluates a gate with real gate-profile enforcement (WS-06)
 //   verify-ledger     — reads a ledger JSONL file and verifies hash-chain integrity
+//   verify-receipt    — verifies a stored run receipt by run_id (WS-RUN-RECEIPT-01)
 //
 // OUTPUT CONTRACT:
 //   All stdout is a single JSON object. Errors are JSON { error: string }.
 //   Exit code 0 = success, 1+ = error.
+//
+// IMPORT POLICY (WS-LAZY-IMPORTS-01):
+//   All engine-layer modules (../core/, ../bootstrap/, ../lib/, ../engine/) and
+//   Node.js builtins (node:fs, node:crypto) MUST be dynamically imported inside
+//   handlers, not as top-level static imports. This prevents cold-start latency
+//   for commands that don't need every module.
 // =============================================================================
-
-import * as fs from "node:fs";
-import * as crypto from "node:crypto";
-import { provision } from "../bootstrap/provision.js";
-import { repairJson, validateArtifact } from "../core/artifacts.js";
-import { PlanSchema } from "../core/plan.js";
-import { HmacSigner } from "../core/sign.js";
-import { AppendOnlyLedger, resolveDefaultLedgerBase } from "../core/ledger.js";
-import { verifyAsync } from "../lib/ed25519.js";
-import { buildRunReceipt, writeRunReceipt, verifyRunReceipt } from "../core/run-receipt.js";
 
 // ---------------------------------------------------------------------------
 // Output helpers
@@ -48,6 +45,9 @@ function exitError(obj: unknown): never {
 // ---------------------------------------------------------------------------
 
 async function handleProvision(args: unknown, jsonArg: string): Promise<void> {
+  const { provision } = await import("../bootstrap/provision.js");
+  const { buildRunReceipt, writeRunReceipt } = await import("../core/run-receipt.js");
+  const { resolveDefaultLedgerBase } = await import("../core/ledger.js");
   const opts = args as Parameters<typeof provision>[0];
   const baseDir = (args as Record<string, unknown>)["baseDir"] as string | undefined;
   const effectiveBaseDir = baseDir ?? resolveDefaultLedgerBase();
@@ -108,7 +108,10 @@ async function handleProvision(args: unknown, jsonArg: string): Promise<void> {
   }
 }
 
-function handleValidatePlan(args: unknown, jsonArg: string): void {
+async function handleValidatePlan(args: unknown, jsonArg: string): Promise<void> {
+  const { PlanSchema } = await import("../core/plan.js");
+  const { buildRunReceipt, writeRunReceipt } = await import("../core/run-receipt.js");
+  const { resolveDefaultLedgerBase } = await import("../core/ledger.js");
   const a = args as Record<string, unknown>;
   const baseDir = a["baseDir"] as string | undefined;
   const effectiveBaseDir = baseDir ?? resolveDefaultLedgerBase();
@@ -138,7 +141,10 @@ function handleValidatePlan(args: unknown, jsonArg: string): void {
   writeJson({ ...result, run_id: receipt.run_id, sig: receipt.sig });
 }
 
-function handleValidateArtifact(rawJsonArg: string): void {
+async function handleValidateArtifact(rawJsonArg: string): Promise<void> {
+  const { repairJson, validateArtifact } = await import("../core/artifacts.js");
+  const { buildRunReceipt, writeRunReceipt } = await import("../core/run-receipt.js");
+  const { resolveDefaultLedgerBase } = await import("../core/ledger.js");
   // Repair the raw arg string first (handles trailing commas, single-quoted strings, etc.)
   let parsedArg: unknown;
   try {
@@ -200,7 +206,10 @@ function handleValidateArtifact(rawJsonArg: string): void {
   writeJson({ ...result, run_id: receipt.run_id, sig: receipt.sig });
 }
 
-function handleSign(args: unknown, jsonArg: string): void {
+async function handleSign(args: unknown, jsonArg: string): Promise<void> {
+  const { HmacSigner } = await import("../core/sign.js");
+  const { buildRunReceipt, writeRunReceipt } = await import("../core/run-receipt.js");
+  const { resolveDefaultLedgerBase } = await import("../core/ledger.js");
   const a = args as Record<string, unknown>;
   const baseDir = a["baseDir"] as string | undefined;
   const effectiveBaseDir = baseDir ?? resolveDefaultLedgerBase();
@@ -226,7 +235,9 @@ function handleSign(args: unknown, jsonArg: string): void {
   writeJson({ signature, run_id: receipt.run_id, sig: receipt.sig });
 }
 
-function handleLedgerAppend(args: unknown, jsonArg: string): void {
+async function handleLedgerAppend(args: unknown, jsonArg: string): Promise<void> {
+  const { AppendOnlyLedger, resolveDefaultLedgerBase } = await import("../core/ledger.js");
+  const { buildRunReceipt, writeRunReceipt } = await import("../core/run-receipt.js");
   const a = args as Record<string, unknown>;
   const baseDir = a["baseDir"] as string | undefined;
   const effectiveBaseDir = baseDir ?? resolveDefaultLedgerBase();
@@ -252,7 +263,9 @@ function handleLedgerAppend(args: unknown, jsonArg: string): void {
   writeJson({ ...result, run_id: receipt.run_id, sig: receipt.sig });
 }
 
-function handleLedgerClose(args: unknown, jsonArg: string): void {
+async function handleLedgerClose(args: unknown, jsonArg: string): Promise<void> {
+  const { AppendOnlyLedger, resolveDefaultLedgerBase } = await import("../core/ledger.js");
+  const { buildRunReceipt, writeRunReceipt } = await import("../core/run-receipt.js");
   const a = args as Record<string, unknown>;
   const baseDir = a["baseDir"] as string | undefined;
   const effectiveBaseDir = baseDir ?? resolveDefaultLedgerBase();
@@ -277,6 +290,7 @@ function handleLedgerClose(args: unknown, jsonArg: string): void {
 
   writeJson({ ok: true, run_id: receipt.run_id, sig: receipt.sig });
 }
+
 const VALID_DIRECTIVES = new Set(["BUILD", "FIX", "REVIEW", "PLAN", "ARCHITECTURAL"]);
 
 // NOTE: plan-init is intentionally exempt from run-receipt emission.
@@ -307,7 +321,9 @@ function handlePlanInit(args: unknown): void {
   writeJson({ ok: true, session_id, plan_id, initialized_at: new Date().toISOString() });
 }
 
-function handleEvaluateGate(args: unknown): void {
+async function handleEvaluateGate(args: unknown): Promise<void> {
+  const { AppendOnlyLedger } = await import("../core/ledger.js");
+  const { runGateProfile } = await import("../engine/gate-profiles/index.js");
   const a = args as Record<string, unknown>;
 
   // Validate required fields
@@ -325,8 +341,12 @@ function handleEvaluateGate(args: unknown): void {
   if (typeof session_id !== "string" || session_id.length === 0) {
     exitError({ error: "Missing required field: session_id" });
   }
+  const KNOWN_GATE_TYPES = ["acceptance-criteria", "qa-spec", "dev", "staff-review"];
   if (typeof gate_type !== "string" || gate_type.length === 0) {
     exitError({ error: "Missing required field: gate_type" });
+  }
+  if (!KNOWN_GATE_TYPES.includes(gate_type)) {
+    exitError({ error: `Unknown gate_type: ${gate_type}` });
   }
 
   const baseDir = a["ledger_base_dir"] as string | undefined;
@@ -336,7 +356,43 @@ function handleEvaluateGate(args: unknown): void {
   if (baseDir !== undefined) ledgerOpts.baseDir = baseDir;
   const ledger = new AppendOnlyLedger(ledgerOpts);
 
-  // Append a GATE ledger entry — stub, so verdict: null and UNENFORCED_MOCK status
+  // Extract context, cwd, and mock_runner for injectable testing
+  const context = a["context"] as Record<string, unknown> | undefined;
+  const cwd = typeof context?.["cwd"] === "string" ? context["cwd"] : "";
+  const mockRunnerRaw = context?.["mock_runner"] as
+    | { exit_code: number; stdout: string; stderr: string }
+    | undefined;
+  let runner:
+    | ((
+        cmd: string,
+        args: string[],
+        cwd: string
+      ) => { exitCode: number; stdout: string; stderr: string })
+    | undefined;
+  if (mockRunnerRaw !== undefined) {
+    runner = (_cmd: string, _args: string[], _cwd: string) => ({
+      exitCode: mockRunnerRaw.exit_code,
+      stdout: mockRunnerRaw.stdout,
+      stderr: mockRunnerRaw.stderr,
+    });
+  }
+
+  // Run the gate profile
+  let profileResult: ReturnType<typeof runGateProfile>;
+  try {
+    const profileInput =
+      runner !== undefined
+        ? { cwd, gate_type, ...(context !== undefined ? { context } : {}), runner }
+        : { cwd, gate_type, ...(context !== undefined ? { context } : {}) };
+    profileResult = runGateProfile(profileInput);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    exitError({ error: msg });
+  }
+
+  const { verdict, evidence } = profileResult;
+
+  // Append a GATE ledger entry with the real verdict
   const entry = ledger.append({
     session_id,
     workflow_id: gate_id,
@@ -345,11 +401,11 @@ function handleEvaluateGate(args: unknown): void {
     actor_id: "SYSTEM",
     actor_type: "SYSTEM",
     phase: "GATE",
-    verdict: null,
+    verdict: verdict,
     detail: {
       gate_id,
       gate_type,
-      status: "UNENFORCED_MOCK",
+      status: "ENFORCED",
     },
   });
 
@@ -359,12 +415,16 @@ function handleEvaluateGate(args: unknown): void {
     gate_id,
     task_id,
     session_id,
-    verdict: "PASS", // stub verdict
-    status: "UNENFORCED_MOCK", // L7 mandatory — never a real passing verdict
+    verdict,
+    status: "ENFORCED",
     evaluated_at,
     gate_type,
     ledger_seq: entry.seq,
+    evidence,
   });
+  if (verdict !== "PASS") {
+    process.exit(1);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -372,6 +432,11 @@ function handleEvaluateGate(args: unknown): void {
 // ---------------------------------------------------------------------------
 
 async function handleVerifyLedger(args: unknown, jsonArg: string): Promise<void> {
+  const fs = await import("node:fs");
+  const crypto = await import("node:crypto");
+  const { verifyAsync } = await import("../lib/ed25519.js");
+  const { buildRunReceipt, writeRunReceipt } = await import("../core/run-receipt.js");
+  const { resolveDefaultLedgerBase } = await import("../core/ledger.js");
   const a = args as Record<string, unknown>;
   const ledger_file = a["ledger_file"];
   const public_key = a["public_key"];
@@ -492,7 +557,13 @@ async function handleVerifyLedger(args: unknown, jsonArg: string): Promise<void>
   });
   writeRunReceipt(receipt, effectiveBaseDir);
 
-  writeJson({ ok: true, entry_count: parsedEntries.length, chain_intact: true, run_id: receipt.run_id, sig: receipt.sig });
+  writeJson({
+    ok: true,
+    entry_count: parsedEntries.length,
+    chain_intact: true,
+    run_id: receipt.run_id,
+    sig: receipt.sig,
+  });
 }
 
 async function main(): Promise<void> {
@@ -507,7 +578,7 @@ async function main(): Promise<void> {
   // so that malformed-but-repairable args (e.g. trailing commas) don't cause exit 1.
   if (command === "validate-artifact") {
     try {
-      handleValidateArtifact(jsonArg ?? "{}");
+      await handleValidateArtifact(jsonArg ?? "{}");
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       exitError({ error: message });
@@ -529,34 +600,35 @@ async function main(): Promise<void> {
         await handleProvision(args, jsonArg ?? "{}");
         break;
       case "validate-plan":
-        handleValidatePlan(args, jsonArg ?? "{}");
+        await handleValidatePlan(args, jsonArg ?? "{}");
         break;
       case "sign":
-        handleSign(args, jsonArg ?? "{}");
+        await handleSign(args, jsonArg ?? "{}");
         break;
       case "ledger-append":
-        handleLedgerAppend(args, jsonArg ?? "{}");
+        await handleLedgerAppend(args, jsonArg ?? "{}");
         break;
       case "ledger-close":
-        handleLedgerClose(args, jsonArg ?? "{}");
+        await handleLedgerClose(args, jsonArg ?? "{}");
         break;
       case "plan-init":
         handlePlanInit(args);
         break;
       case "evaluate-gate":
-        handleEvaluateGate(args);
+        await handleEvaluateGate(args);
         break;
       case "verify-ledger":
         await handleVerifyLedger(args, jsonArg ?? "{}");
         break;
       case "verify-receipt": {
+        const { verifyRunReceipt } = await import("../core/run-receipt.js");
         const a = args as Record<string, unknown>;
         const run_id = a["run_id"] as string;
         const verifyBaseDir = a["baseDir"] as string | undefined;
         if (!run_id || !verifyBaseDir) {
           exitError({ error: "verify-receipt requires run_id and baseDir" });
         }
-        const result = verifyRunReceipt({ run_id, baseDir: verifyBaseDir! });
+        const result = verifyRunReceipt({ run_id, baseDir: verifyBaseDir });
         writeJson(result);
         if (!result.valid) process.exit(1);
         break;

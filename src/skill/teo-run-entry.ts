@@ -279,6 +279,14 @@ function handleLedgerClose(args: unknown, jsonArg: string): void {
 }
 const VALID_DIRECTIVES = new Set(["BUILD", "FIX", "REVIEW", "PLAN", "ARCHITECTURAL"]);
 
+// NOTE: plan-init is intentionally exempt from run-receipt emission.
+// Receipt emission is reserved for externally-observable gate proof points
+// (provision, sign, ledger-append, ledger-close, validate-plan, validate-artifact,
+// verify-ledger) — commands whose execution callers need to audit after the fact.
+// plan-init is an internal session-setup helper: it has no baseDir contract,
+// no downstream verify command, and its stdout shape is a stable public contract
+// (exactly: ok, session_id, plan_id, initialized_at). Adding run_id/sig here
+// would break that contract without providing any audit value.
 function handlePlanInit(args: unknown): void {
   const a = args as Record<string, unknown>;
   const session_id = a["session_id"] as string | undefined;

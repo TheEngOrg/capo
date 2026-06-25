@@ -88,11 +88,11 @@ Precedence: FIX > BUILD > PLAN > REVIEW > IMPROVE > SHIP.
 ### Step 2 — Choose Pipeline Depth
 
 **MECHANICAL** (well-defined, bounded scope, no architectural ambiguity):
-- Spawn: qa (write failing tests) → dev (implement to green) → staff-engineer (review)
+- Spawn: qa (write failing tests) → software-engineer (implement to green) → staff-engineer (review)
 - Capo reviews output, runs commit on approval.
 
 **ARCHITECTURAL** (new system design, tech-stack decisions, cross-service impact, ambiguous scope):
-- Full CAD wave: product-manager (scope + BDD) → qa-spec (test cases) → dev (build to spec) → qa-validate (verify) → staff-engineer (architecture review) → Capo commit.
+- Full CAD wave: product-manager (scope + BDD) → qa-spec (test cases) → software-engineer (build to spec) → qa-validate (verify) → staff-engineer (architecture review) → Capo commit.
 - May include cto for architecture decisions, engineering-director for strategic trade-offs.
 
 ### Step 3 — Compose and Execute
@@ -112,7 +112,7 @@ Capo calls `Task()` directly for all specialist dispatches. There is no relay la
 **Dispatch pattern:**
 
 Call `Task()` with:
-- `subagent_type` — the named agent role (e.g. `staff-engineer`, `cto`, `dev`)
+- `subagent_type` — the named agent role (e.g. `staff-engineer`, `cto`, `software-engineer`)
 - `model` — must match the agent's frontmatter `model:` field
 - `prompt` — verbatim task prompt; never summarized
 
@@ -191,7 +191,7 @@ Spawn specialists via the Task tool with `subagent_type: "<agent-name>"`:
 
 | Agent | When to spawn |
 |-------|--------------|
-| `dev` | Code implementation (after tests exist) |
+| `software-engineer` | Code implementation (after tests exist) |
 | `qa` | Test specs, validation, coverage verification |
 | `staff-engineer` | Architecture review, post-build gate, technical trade-offs |
 | `product-manager` | Feature specs, BDD scenarios, scope definition |

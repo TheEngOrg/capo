@@ -140,6 +140,22 @@ describe("plan-init CLI — misuse: missing required fields and invalid values",
     expect(stdout).toMatchObject({ error: expect.any(String) });
   });
 
+  // M-7: session_id is a non-string type (number) — must be rejected
+  it("M-7. session_id as number (42) → exit 1, stdout JSON { error: string }", () => {
+    const input = JSON.stringify({ session_id: 42, project_id: "proj-abc" });
+    const { exitCode, stdout } = runCli("plan-init", input);
+    expect(exitCode).toBe(1);
+    expect(stdout).toMatchObject({ error: expect.stringContaining("session_id") });
+  });
+
+  // M-8: project_id is a non-string type (number) — must be rejected
+  it("M-8. project_id as number (99) → exit 1, stdout JSON { error: string }", () => {
+    const input = JSON.stringify({ session_id: "sess-001", project_id: 99 });
+    const { exitCode, stdout } = runCli("plan-init", input);
+    expect(exitCode).toBe(1);
+    expect(stdout).toMatchObject({ error: expect.stringContaining("project_id") });
+  });
+
   // M-6: directive empty string — not a valid enum member
   it("M-6. directive '' (empty string) → exit 1, stdout JSON { error: string }", () => {
     const input = JSON.stringify({

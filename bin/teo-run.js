@@ -6130,6 +6130,24 @@ function handleLedgerClose(args) {
   ledger.close(summary);
   writeJson({ ok: true });
 }
+var VALID_DIRECTIVES = /* @__PURE__ */ new Set(["BUILD", "FIX", "REVIEW", "PLAN", "ARCHITECTURAL"]);
+function handlePlanInit(args) {
+  const a = args;
+  const session_id = a["session_id"];
+  const project_id = a["project_id"];
+  const directive = a["directive"];
+  if (typeof session_id !== "string" || !session_id || session_id.length === 0) {
+    exitError({ error: "Missing required field: session_id" });
+  }
+  if (typeof project_id !== "string" || !project_id || project_id.length === 0) {
+    exitError({ error: "Missing required field: project_id" });
+  }
+  if (directive !== void 0 && !VALID_DIRECTIVES.has(directive)) {
+    exitError({ error: `Invalid directive: ${directive}` });
+  }
+  const plan_id = `plan_${session_id}_${Date.now()}`;
+  writeJson({ ok: true, session_id, plan_id, initialized_at: (/* @__PURE__ */ new Date()).toISOString() });
+}
 async function main() {
   const [, , command, jsonArg] = process.argv;
   if (!command) {
@@ -6166,6 +6184,9 @@ async function main() {
         break;
       case "ledger-close":
         handleLedgerClose(args);
+        break;
+      case "plan-init":
+        handlePlanInit(args);
         break;
       default:
         exitError({ error: `Unknown command: ${command}` });

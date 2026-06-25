@@ -11,6 +11,7 @@
 //   sign              — calls HmacSigner.sign() with payload
 //   ledger-append     — calls AppendOnlyLedger.append()
 //   ledger-close      — calls AppendOnlyLedger.close()
+//   plan-init         — initializes a plan artifact (session_id, project_id, directive?)
 //
 // OUTPUT CONTRACT:
 //   All stdout is a single JSON object. Errors are JSON { error: string }.
@@ -194,10 +195,10 @@ function handlePlanInit(args: unknown): void {
   const project_id = a["project_id"] as string | undefined;
   const directive = a["directive"] as string | undefined;
 
-  if (!session_id || session_id.length === 0) {
+  if (typeof session_id !== "string" || !session_id || session_id.length === 0) {
     exitError({ error: "Missing required field: session_id" });
   }
-  if (!project_id || project_id.length === 0) {
+  if (typeof project_id !== "string" || !project_id || project_id.length === 0) {
     exitError({ error: "Missing required field: project_id" });
   }
   if (directive !== undefined && !VALID_DIRECTIVES.has(directive)) {

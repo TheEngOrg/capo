@@ -2,7 +2,9 @@
 import type { TEOTask } from "../core/plan.js";
 import type { StepResult, RunContext } from "../core/runner.js";
 
-export type GateVerdict = "PASS" | "FAIL" | "WARN";
+// Verdict values align with GATE_RESULT_ARTIFACT schema in src/core/artifacts.ts.
+// "UNENFORCED_MOCK" is used in test/CI contexts where gate enforcement is bypassed.
+export type GateVerdict = "PASS" | "FAIL" | "WARN" | "UNENFORCED_MOCK";
 
 export function evaluateGate(
   _task: TEOTask,

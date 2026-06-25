@@ -3,12 +3,12 @@
 // Tests for src/engine/evaluate-gate.ts — the evaluateGate() function.
 //
 // evaluateGate() is called INLINE in run-plan.ts on the signed path after
-// adapter.spawnAgent() returns. It returns a GateVerdict ("PASS" | "FAIL" | "WARN")
+// adapter.spawnAgent() returns. It returns a GateVerdict ("PASS" | "FAIL" | "WARN" | "UNENFORCED_MOCK")
 // and can override the adapter's self-report when they disagree.
 //
 // Ordering: misuse → boundary → golden path (ADR-064 policy)
 //
-// These tests FAIL until dev implements src/engine/evaluate-gate.ts.
+// These tests PASS — src/engine/evaluate-gate.ts is implemented (WS-SEC-01 + WS-GATE-TYPE-01).
 
 import { describe, it, expect, vi } from "vitest";
 import * as fs from "node:fs";
@@ -283,10 +283,10 @@ describe("GateVerdict — type unification with artifact schema", () => {
 
     // GateVerdict's current members. Dev: add "UNENFORCED_MOCK" here AND widen the
     // GateVerdict type once the fix is implemented.
-    // @ts-expect-error — remove this line once dev widens GateVerdict to include UNENFORCED_MOCK
+
     const _typeGuard: GateVerdict = "UNENFORCED_MOCK";
     void _typeGuard;
-    const GATE_VERDICT_VALUES: GateVerdict[] = ["PASS", "FAIL", "WARN"];
+    const GATE_VERDICT_VALUES: GateVerdict[] = ["PASS", "FAIL", "WARN", "UNENFORCED_MOCK"];
 
     // Runtime assertion: GateVerdict members must equal the artifact schema enum exactly.
     // FAILS pre-fix: sorted(["PASS","FAIL","WARN"]) !== sorted(["PASS","FAIL","WARN","UNENFORCED_MOCK"])

@@ -16,7 +16,8 @@
     "format:check": "prettier --check \"src/**/*.ts\" \"*.config.{ts,js}\" \"scripts/**/*.mjs\"",
     "check-lockfile": "node scripts/check-lockfile.mjs",
     "prepare": "husky",
-    "dev:install": "bash scripts/local-dev-install.sh"
+    "dev:install": "bash scripts/local-dev-install.sh",
+    "release": "bash scripts/release.sh"
   },
   "lint-staged": {
     "src/**/*.ts": [

@@ -3,10 +3,10 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 // =============================================================================
-// relay-authorization.test.ts — FAILING characterization tests for WS-RELAY-AUTHORIZATION-FIX
+// relay-authorization.test.ts — characterization tests for WS-RELAY-AUTHORIZATION-FIX
 //
-// These tests are RED before dev rewrites the relay_authorization field in
-// agents/capo.md. They turn GREEN once the rewrite is complete.
+// These tests are GREEN after dev rewrites the relay_authorization field in
+// agents/capo.md. Implementation is complete.
 //
 // Root cause being fixed: Spawned Capo instances reject verbatim-quoted relays
 // because the current relay_authorization rule:

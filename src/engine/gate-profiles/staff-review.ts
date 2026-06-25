@@ -36,12 +36,17 @@ export function runStaffReviewGate(input: GateProfileInput): GateProfileResult {
   }
 
   // git log always uses the real subprocess — injectable runner only applies to npm (typecheck)
-  // GIT_CEILING_DIRECTORIES prevents git from walking up into a parent repo when cwd is under /tmp
+  // Strip GIT_DIR / GIT_WORK_TREE / GIT_COMMON_DIR from the environment: when git invokes a pre-push
+  // hook it sets GIT_DIR to the repo's .git path, which propagates to child processes and causes git
+  // commands run with an arbitrary cwd to use the hook's repo instead of the target directory.
+  // Also set GIT_CEILING_DIRECTORIES as a defence-in-depth against parent-repo walk-up.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { GIT_DIR, GIT_WORK_TREE, GIT_COMMON_DIR, ...safeEnv } = process.env;
   const gitResult = childProcess.spawnSync("git", ["log", "--oneline", "-1"], {
     cwd,
     encoding: "utf8",
     timeout: 30000,
-    env: { ...process.env, GIT_CEILING_DIRECTORIES: cwd },
+    env: { ...safeEnv, GIT_CEILING_DIRECTORIES: cwd },
   });
   const gitExitCode = gitResult.status ?? 1;
   const commit_present = gitExitCode === 0 && gitResult.stdout.trim().length > 0;

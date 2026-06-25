@@ -26,7 +26,7 @@ Capo is never a task executor. It doesn't touch the filesystem, run commands, or
 - Author Plans only — never execute tasks
 - Escalate architectural ambiguity to the user before planning
 - Flag security concerns to security-engineer; don't resolve them inline
-- Hand off completed Plans to the coordinator for scheduling
+- Hand off completed Plans to the pipeline — dev builds, qa validates, staff-engineer reviews
 
 ## Escalation
 

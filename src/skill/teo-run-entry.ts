@@ -153,6 +153,8 @@ function handleValidateArtifact(rawJsonArg: string): void {
   const a = parsedArg as Record<string, unknown>;
   const type = a["type"] as string;
   const strictRaw = a["strict"];
+  const baseDir = a["baseDir"] as string | undefined;
+  const effectiveBaseDir = baseDir ?? resolveDefaultLedgerBase();
   let payload = a["payload"];
 
   // If payload is a string, attempt to repair + parse it as a JSON object/array.
@@ -184,7 +186,18 @@ function handleValidateArtifact(rawJsonArg: string): void {
     typeof strictRaw === "boolean" ? { type, payload, strict: strictRaw } : { type, payload };
 
   const result = validateArtifact(callArgs);
-  writeJson(result);
+
+  const receipt = buildRunReceipt({
+    command: "validate-artifact",
+    argsRaw: rawJsonArg,
+    actor_id: "teo-run",
+    outcome: "OK",
+    exit_code: 0,
+    baseDir: effectiveBaseDir,
+  });
+  writeRunReceipt(receipt, effectiveBaseDir);
+
+  writeJson({ ...result, run_id: receipt.run_id, sig: receipt.sig });
 }
 
 function handleSign(args: unknown, jsonArg: string): void {
@@ -350,10 +363,12 @@ function handleEvaluateGate(args: unknown): void {
 // Main
 // ---------------------------------------------------------------------------
 
-async function handleVerifyLedger(args: unknown): Promise<void> {
+async function handleVerifyLedger(args: unknown, jsonArg: string): Promise<void> {
   const a = args as Record<string, unknown>;
   const ledger_file = a["ledger_file"];
   const public_key = a["public_key"];
+  const baseDir = a["baseDir"] as string | undefined;
+  const effectiveBaseDir = baseDir ?? resolveDefaultLedgerBase();
 
   // Validate required field
   if (typeof ledger_file !== "string" || ledger_file.length === 0) {
@@ -459,7 +474,17 @@ async function handleVerifyLedger(args: unknown): Promise<void> {
     }
   }
 
-  writeJson({ ok: true, entry_count: parsedEntries.length, chain_intact: true });
+  const receipt = buildRunReceipt({
+    command: "verify-ledger",
+    argsRaw: jsonArg,
+    actor_id: "teo-run",
+    outcome: "OK",
+    exit_code: 0,
+    baseDir: effectiveBaseDir,
+  });
+  writeRunReceipt(receipt, effectiveBaseDir);
+
+  writeJson({ ok: true, entry_count: parsedEntries.length, chain_intact: true, run_id: receipt.run_id, sig: receipt.sig });
 }
 
 async function main(): Promise<void> {
@@ -514,7 +539,7 @@ async function main(): Promise<void> {
         handleEvaluateGate(args);
         break;
       case "verify-ledger":
-        await handleVerifyLedger(args);
+        await handleVerifyLedger(args, jsonArg ?? "{}");
         break;
       case "verify-receipt": {
         const a = args as Record<string, unknown>;

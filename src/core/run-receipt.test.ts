@@ -220,6 +220,81 @@ describe("run-receipt — misuse: buildRunReceipt rejects bad inputs", () => {
 });
 
 // ---------------------------------------------------------------------------
+// BOUNDARY: verifyRunReceipt edge cases (lines 208, 213, 235, 243)
+// ---------------------------------------------------------------------------
+
+describe("run-receipt — boundary: verifyRunReceipt edge cases in stored receipt", () => {
+  let tempDir: string;
+  let receipt: RunReceipt;
+
+  beforeEach(() => {
+    tempDir = makeTempDir();
+    receipt = buildRunReceipt(makeInput({ baseDir: tempDir }));
+    writeRunReceipt(receipt, tempDir);
+  });
+
+  afterEach(() => {
+    removeTempDir(tempDir);
+  });
+
+  // Line 208: catch block — file exists but JSON.parse throws (malformed JSON)
+  it("receipt file exists but contains malformed JSON → {valid:false, reason:'receipt not found'} (line 208)", () => {
+    const uuid = receipt.run_id.replace("urn:teo:run:", "");
+    const receiptPath = path.join(tempDir, "receipts", `${uuid}.json`);
+    // Overwrite with non-JSON content so JSON.parse throws
+    fs.writeFileSync(receiptPath, "not valid json {{{");
+
+    const result = verifyRunReceipt({ run_id: receipt.run_id, baseDir: tempDir });
+    expect(result.valid).toBe(false);
+    expect(result.reason).toMatch(/receipt not found/i);
+  });
+
+  // Line 213: sig field is not a 64-char string (wrong length triggers early return)
+  it("stored receipt sig is a short string (< 64 chars) → {valid:false, reason:'signature invalid'} (line 213)", () => {
+    const uuid = receipt.run_id.replace("urn:teo:run:", "");
+    const receiptPath = path.join(tempDir, "receipts", `${uuid}.json`);
+    const stored = JSON.parse(fs.readFileSync(receiptPath, "utf8")) as RunReceipt;
+    // Replace sig with a too-short value
+    (stored as Record<string, unknown>)["sig"] = "abc123";
+    fs.writeFileSync(receiptPath, JSON.stringify(stored));
+
+    const result = verifyRunReceipt({ run_id: receipt.run_id, baseDir: tempDir });
+    expect(result.valid).toBe(false);
+    expect(result.reason).toMatch(/signature invalid/i);
+  });
+
+  it("stored receipt sig is a non-string value → {valid:false, reason:'signature invalid'} (line 213)", () => {
+    const uuid = receipt.run_id.replace("urn:teo:run:", "");
+    const receiptPath = path.join(tempDir, "receipts", `${uuid}.json`);
+    const stored = JSON.parse(fs.readFileSync(receiptPath, "utf8")) as RunReceipt;
+    // Replace sig with a number — typeof !== "string"
+    (stored as Record<string, unknown>)["sig"] = 12345;
+    fs.writeFileSync(receiptPath, JSON.stringify(stored));
+
+    const result = verifyRunReceipt({ run_id: receipt.run_id, baseDir: tempDir });
+    expect(result.valid).toBe(false);
+    expect(result.reason).toMatch(/signature invalid/i);
+  });
+
+  // Line 235: expectedBuf.length !== actualBuf.length — happens when stored.sig is
+  // exactly 64 chars but contains non-hex characters. Buffer.from with "hex" encoding
+  // silently skips invalid hex pairs and produces a shorter buffer.
+  it("stored receipt sig is 64 chars but contains non-hex characters → {valid:false, reason:'signature invalid'} (line 235)", () => {
+    const uuid = receipt.run_id.replace("urn:teo:run:", "");
+    const receiptPath = path.join(tempDir, "receipts", `${uuid}.json`);
+    const stored = JSON.parse(fs.readFileSync(receiptPath, "utf8")) as RunReceipt;
+    // 64 chars with non-hex chars ('g', 'z', 'x') — passes length check but Buffer.from("hex")
+    // produces fewer than 32 bytes, so expectedBuf.length !== actualBuf.length
+    (stored as Record<string, unknown>)["sig"] = "g".repeat(64);
+    fs.writeFileSync(receiptPath, JSON.stringify(stored));
+
+    const result = verifyRunReceipt({ run_id: receipt.run_id, baseDir: tempDir });
+    expect(result.valid).toBe(false);
+    expect(result.reason).toMatch(/signature invalid/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // BOUNDARY: args_hash computation (AC-6)
 // ---------------------------------------------------------------------------
 

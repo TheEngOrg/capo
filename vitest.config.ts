@@ -187,6 +187,15 @@ export default defineConfig({
           branches: 100,
           statements: 100,
         },
+        // WS-RUN-RECEIPT-01: run-receipt.ts is critical-path — the tamper-evidence layer
+        // for CLI run receipts. buildRunReceipt/writeRunReceipt/verifyRunReceipt all
+        // participate in the signing and verification path. 100% branch coverage is mandatory.
+        "src/core/run-receipt.ts": {
+          lines: 100,
+          functions: 100,
+          branches: 100,
+          statements: 100,
+        },
         // WS-00: artifacts.ts is critical-path — repairJson() + validateArtifact() + all
         // three artifact schemas (GATE_RESULT, STEP_RESULT, PLAN). strict() branches for
         // STEP_RESULT_ARTIFACT and PLAN_ARTIFACT must be covered. 100% branch coverage mandatory.

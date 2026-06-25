@@ -357,6 +357,65 @@ describe("run-receipt CLI — boundary: all commands emit run_id + sig in stdout
     expect(String(result["sig"] ?? "")).toMatch(SIG_RE);
   });
 
+  it("validate-artifact stdout includes run_id and sig (AC-1)", () => {
+    const baseDir = makeTempDir();
+    const input = JSON.stringify({
+      baseDir,
+      type: "GATE_RESULT",
+      payload: {
+        gate_id: "gate-001",
+        task_id: "task-001",
+        passed: true,
+        verdict: "PASS",
+        ts: "2026-06-25T00:00:00.000Z",
+      },
+    });
+
+    const { exitCode, stdout } = runCli("validate-artifact", input);
+
+    expect(exitCode).toBe(0);
+    const result = stdout as Record<string, unknown>;
+    expect(String(result["run_id"] ?? "")).toMatch(UUID_V4_RE);
+    expect(String(result["sig"] ?? "")).toMatch(SIG_RE);
+  });
+
+  it("verify-ledger stdout includes run_id and sig on success (AC-1)", () => {
+    const baseDir = makeTempDir();
+
+    // First create a ledger file by running ledger-append
+    const appendInput = JSON.stringify({
+      baseDir,
+      session_id: "receipt-verify-ledger-session",
+      entry: {
+        session_id: "receipt-verify-ledger-session",
+        workflow_id: "wf-verify-ledger",
+        task_id: null,
+        turn_id: null,
+        actor_id: "SYSTEM",
+        actor_type: "SYSTEM",
+        phase: "PLAN",
+        verdict: null,
+        detail: {},
+      },
+    });
+    const { exitCode: ec1 } = runCli("ledger-append", appendInput);
+    expect(ec1).toBe(0);
+
+    // Find the ledger file created
+    const ledgerDir = path.join(baseDir, "ledger");
+    const ledgerFiles = fs.readdirSync(ledgerDir).filter((f) => f.endsWith(".jsonl"));
+    expect(ledgerFiles.length).toBeGreaterThan(0);
+    const ledgerFile = path.join(ledgerDir, ledgerFiles[0]!);
+
+    const verifyLedgerInput = JSON.stringify({ baseDir, ledger_file: ledgerFile });
+    const { exitCode, stdout } = runCli("verify-ledger", verifyLedgerInput);
+
+    expect(exitCode).toBe(0);
+    const result = stdout as Record<string, unknown>;
+    expect(String(result["run_id"] ?? "")).toMatch(UUID_V4_RE);
+    expect(String(result["sig"] ?? "")).toMatch(SIG_RE);
+  });
+
   it("provision failure also emits run_id and sig (outcome:FAIL) (AC-1, AC-7)", () => {
     // Provision with a nonexistent bundleDir → exits 1 but must still emit run_id + sig
     const baseDir = makeTempDir();

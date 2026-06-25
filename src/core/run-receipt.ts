@@ -239,9 +239,11 @@ export function verifyRunReceipt(opts: {
     if (!crypto.timingSafeEqual(expectedBuf, actualBuf)) {
       return { valid: false, reason: "signature invalid" };
     }
-  } catch {
+  } catch /* c8 ignore start */ {
+    // timingSafeEqual can only throw if buffer lengths differ, but line 234 already
+    // guards that. This catch is an unreachable defensive path — annotated accordingly.
     return { valid: false, reason: "signature invalid" };
-  }
+  } /* c8 ignore stop */
 
   return { valid: true };
 }

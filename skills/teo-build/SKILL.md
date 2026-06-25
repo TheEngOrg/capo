@@ -1,23 +1,23 @@
 ---
 name: teo-build
-description: "Build it. Classify at intake, then execute the appropriate track: MECHANICAL (1 spawn) or ARCHITECTURAL (5-6 spawns). Invoke with workstream ID."
+description: "Build it. If Capo emitted a PLAN_ARTIFACT block: validate it, execute the plan loop (Task + evaluate-gate + STEP_ARTIFACT), enforce rotation non-nesting. Otherwise: classify at intake, then execute the appropriate track: MECHANICAL (1 spawn) or ARCHITECTURAL (5-6 spawns). Invoke with workstream ID."
 model: sonnet
 allowed-tools: Read, Glob, Grep, Edit, Write, Task, Bash
 compatibility: "Requires Claude Code with Task tool (agent spawning)"
 metadata:
-  version: "2.0"
+  version: "3.0"
   spawn_cap: "6"
 ---
 
 # teo-build
 
-Classifies workstreams at intake, then coordinates the appropriate track: MECHANICAL (single Dev spawn + bash gate) or ARCHITECTURAL (QA, Dev, Staff Engineer review).
+Acts as the CAD loop driver. When Capo emits a `PLAN_ARTIFACT` block, teo-build validates it via CLI, executes the plan task-by-task (Task() spawn + evaluate-gate + STEP_ARTIFACT), and enforces the rotation non-nesting constraint. When no PLAN_ARTIFACT block is present, it falls back to the existing classification tracks: MECHANICAL (single Dev spawn + bash gate) or ARCHITECTURAL (QA, Dev, Staff Engineer review).
 
-Your **first action** is to run the Engine Binary Guard, then classify the workstream and begin the appropriate track. Do not skip classification.
+Your **first action** is to run the Engine Binary Guard. Then check for a PLAN_ARTIFACT block in the current turn context. If present, enter the plan execution loop. If absent, proceed to Step 0 classification.
 
 ## Constitution
 
-1. **Classify first** - Determine track at intake before any spawns
+1. **Classify first** - Determine track at intake before any spawns (when no PLAN_ARTIFACT block)
 2. **Tests before code** - MECHANICAL: Dev writes tests then implements. ARCHITECTURAL: QA writes tests first.
 3. **99% coverage** - Unit + integration combined, no exceptions
 4. **Escalate blockers** - Surface issues early to engineering-manager
@@ -30,7 +30,7 @@ Your **first action** is to run the Engine Binary Guard, then classify the works
 
 ## Engine Binary Guard
 
-**This check runs BEFORE Step 0 and BEFORE any classification, spawn, or memory write.**
+**This check runs BEFORE everything else — before PLAN_ARTIFACT handling, Step 0, any classification, spawn, or memory write.**
 
 Verify that the engine binary is reachable on PATH and functional:
 
@@ -42,7 +42,7 @@ This exercises the binary with zero disk writes (`validate-plan` runs a Zod pars
 
 A `valid:false` result here is EXPECTED for the empty-object probe and does NOT indicate failure — the guard passes if the command's EXIT CODE is 0 (binary reachable and ran). Do not halt on the `valid:false` payload; only halt if `command -v teo-run.js` finds nothing or the binary cannot execute.
 
-If `teo-run.js` is not found on PATH — surface this error and stop immediately, do not proceed to classification, spawning, or writing memory:
+If `teo-run.js` is not found on PATH — surface this error and stop immediately, do not proceed to PLAN_ARTIFACT handling, classification, spawning, or writing memory:
 
 ```
 ERROR: teo-run.js not found on PATH.
@@ -51,7 +51,98 @@ Install TEO as a Claude Code plugin so that bin/ is added to PATH,
 then retry this workstream.
 ```
 
-Do not classify, spawn agents, or write to memory if this guard fails.
+Do not process PLAN_ARTIFACT blocks, classify, spawn agents, or write to memory if this guard fails.
+
+---
+
+## PLAN_ARTIFACT Flow (runs BEFORE Step 0 when a PLAN_ARTIFACT block is present)
+
+**Decision:** After the Engine Binary Guard passes, scan the current turn context for a fenced `PLAN_ARTIFACT` block (delimited by `PLAN_ARTIFACT` … `END_PLAN_ARTIFACT`).
+
+```
+If PLAN_ARTIFACT block present in current turn context:
+  → Pre-loop: validate the artifact (step A)
+  → Execute plan loop (step B)
+  → Emit STEP_ARTIFACT blocks after each gate (step C)
+  → (Skip Step 0 classification entirely)
+Else:
+  → Proceed to Step 0: Classify at Intake (existing tracks unchanged)
+```
+
+### A. Pre-loop: Read and Validate the PLAN_ARTIFACT Block
+
+1. Extract the JSON payload from inside the `PLAN_ARTIFACT` … `END_PLAN_ARTIFACT` fence.
+2. Call the CLI to validate it:
+
+```bash
+teo-run.js validate-artifact '{"type":"PLAN_ARTIFACT","payload":<extracted-json>}'
+```
+
+3. Parse the JSON response:
+   - If `"valid": false` — surface the validation error to the user and **halt immediately**. Do NOT spawn any task. Output:
+     ```
+     PLAN_ARTIFACT_INVALID: <error detail from CLI response>
+     Halting. Fix the plan and retry.
+     ```
+   - If `"valid": true` — proceed to the plan execution loop.
+
+### B. Plan Execution Loop
+
+Execute each task in the plan in dependency order (respecting each task's `needs` array — do not start a task until all tasks it `needs` have completed successfully).
+
+For each task:
+
+**B1. Spawn the specialist:**
+
+```yaml
+Task:
+  subagent_type: <task.agent_id>
+  prompt: |
+    <task.prompt, with any __DEFERRED__ placeholder replaced by the real prompt at spawn time>
+```
+
+Wait for the specialist to complete before evaluating gates.
+
+**B2. Gate evaluation (only when `task.gates` is non-empty):**
+
+For each gate in `task.gates`:
+
+```bash
+teo-run.js evaluate-gate '{"gate_id":"<gate.name>-<task.id>","task_id":"<task.id>","session_id":"<plan_id>","gate_type":"<gate.name>"}'
+```
+
+Parse the JSON response and apply verdict semantics:
+
+| Verdict | Action |
+|---|---|
+| `PASS` | Advance loop to next task |
+| `UNENFORCED_MOCK` | Advance loop; emit `[WARN] Gate enforcement not active (UNENFORCED_MOCK)` to user |
+| `WARN` | Advance loop; note warning in STEP_ARTIFACT `details` field |
+| `FAIL` | **Halt loop**; surface `GATE_BLOCKED: <task_id> <detail>` to user; do NOT spawn subsequent tasks |
+
+**B3. Emit STEP_ARTIFACT (only when a gate was evaluated):**
+
+After gate evaluation (regardless of PASS/WARN/UNENFORCED_MOCK), emit a STEP_ARTIFACT block:
+
+~~~
+STEP_ARTIFACT
+{"task_id":"<task.id>","gate_name":"<gate.name>","verdict":"<verdict>","timestamp":"<ISO-8601 UTC>","details":"<optional warning or error detail>"}
+END_STEP_ARTIFACT
+~~~
+
+If `task.gates` is empty — skip gate evaluation and STEP_ARTIFACT entirely; advance to the next task unconditionally.
+
+### C. Rotation Non-Nesting Constraint (L7 CRITICAL RISK — mandatory)
+
+**Rotation non-nesting:** If Capo signals `ROTATION_REQUIRED` mid-plan, teo-build surfaces `ROTATION_REQUIRED` with the checkpoint context and exits cleanly. teo-build MUST NOT call `Task()` to spawn a nested Capo child session. The parent session must terminate before the rotated child resumes. This is a hard constraint — violation risks a deadlocked nested session.
+
+When `ROTATION_REQUIRED` is signaled during plan execution:
+
+1. Emit the checkpoint context (current task index, tasks completed, tasks remaining).
+2. Output `ROTATION_REQUIRED: <checkpoint>` to the parent session.
+3. Exit the plan loop immediately — do NOT spawn any further tasks including a new Capo session.
+
+---
 
 ## Step 0: Classify at Intake
 

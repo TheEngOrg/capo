@@ -23,7 +23,7 @@
 //   T-04: PASSES — T-02 mirror-parity describe block removed from ws-00-pre-relay-kill.test.ts
 //   T-05: PASSES — package.json scripts["dev:install"] added
 //   T-06: PASSES — scripts/local-dev-install.sh created with "claude plugin" commands
-//   T-07: PASSES — .gitignore still contains ".claude" (unchanged)
+//   T-07: PASSES — .gitignore has `.claude/agents/` + `.claude/skills/` (blanket replaced by ws-clean-claude-mirrors)
 //
 // Test order: misuse-first → boundary → golden-path  (QA ADR-064 policy)
 // All tests wrapped in describe.skip — standard QA pre-impl pattern for this repo.
@@ -215,23 +215,22 @@ describe("ws-delete-mirror", () => {
 
   // =============================================================================
   // T-07 — GOLDEN-PATH (regression guard)
-  // .gitignore must still contain the .claude entry after this workstream.
+  // .gitignore must still protect .claude/ plugin cache dirs after this workstream.
   //
-  // Deleting the mirrors does not mean we should start tracking .claude/ in git.
-  // The .claude/ directory holds gitignored local state (memory, settings, session
-  // traces) that must never be committed. This test guards against a dev accidentally
-  // removing the .claude gitignore entry while cleaning up mirror-related lines.
+  // ws-clean-claude-mirrors (a later workstream) replaced the blanket `.claude` rule
+  // with precise scoped entries `.claude/agents/` and `.claude/skills/`. The intent
+  // of the original T-07 guard (don't accidentally make .claude/ trackable) is
+  // preserved by those explicit cache-dir entries. This test now asserts the precise
+  // entries are present rather than the blanket — matching the post-ws-clean state.
   // =============================================================================
-  describe("T-07 golden-path — .gitignore still ignores .claude (regression guard)", () => {
-    it("T-07: .gitignore contains '.claude' as a gitignore entry", () => {
-      // PASSES NOW:  .gitignore line 11 contains ".claude" as a standalone entry.
-      // MUST CONTINUE TO PASS AFTER: ws-delete-mirror must not touch .gitignore in a way
-      //   that removes the .claude ignore entry. If dev removes the line, ALL of .claude/
-      //   (memory, settings, session state) becomes trackable — a serious accidental commit risk.
+  describe("T-07 golden-path — .gitignore still ignores .claude plugin cache dirs (regression guard)", () => {
+    it("T-07: .gitignore contains '.claude/agents/' and '.claude/skills/' as precise cache-dir entries", () => {
+      // UPDATED (ws-clean-claude-mirrors): the blanket `.claude` rule was replaced with
+      //   precise `.claude/agents/` and `.claude/skills/` entries. The guard intent is
+      //   preserved — plugin cache dirs are still ignored — but now via scoped rules.
       const content = fs.readFileSync(GITIGNORE_PATH, "utf8");
-      // Match ".claude" as a standalone line (not a sub-path like ".claude/memory/traces/")
-      // The entry on line 11 is exactly ".claude" with no trailing path component.
-      expect(content).toMatch(/^\.claude\s*$/m);
+      expect(content).toContain(".claude/agents/");
+      expect(content).toContain(".claude/skills/");
     });
   });
 });

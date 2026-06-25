@@ -8,7 +8,6 @@ dist/
 .env.local
 coverage/
 .vitest/
-.claude
 .firecrawl
 .workflows
 
@@ -20,6 +19,10 @@ coverage/
 .idea/
 *.swp
 *.swo
+
+# Plugin install cache — dropped by `claude plugin install`, never authored
+.claude/agents/
+.claude/skills/
 
 # TEO session-local state — kept out of git
 .claude/memory/traces/
@@ -54,7 +57,6 @@ demo/plans/
 # v5 rebuild — M3 archived on disk, already pinned in commit 8fd9d3c
 .archive-m3/
 settings.v4-snapshot.json
-.claude/settings.v4-snapshot.json
 
 # WS-GO-02: esbuild bundle artifact — built in CI, not committed
 bin/teo-run.js

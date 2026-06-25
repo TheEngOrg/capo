@@ -6148,6 +6148,59 @@ function handlePlanInit(args) {
   const plan_id = `plan_${session_id}_${Date.now()}`;
   writeJson({ ok: true, session_id, plan_id, initialized_at: (/* @__PURE__ */ new Date()).toISOString() });
 }
+function handleEvaluateGate(args) {
+  const a = args;
+  const gate_id = a["gate_id"];
+  const task_id = a["task_id"];
+  const session_id = a["session_id"];
+  const gate_type = a["gate_type"];
+  if (typeof gate_id !== "string" || gate_id.length === 0) {
+    exitError({ error: "Missing required field: gate_id" });
+  }
+  if (typeof task_id !== "string" || task_id.length === 0) {
+    exitError({ error: "Missing required field: task_id" });
+  }
+  if (typeof session_id !== "string" || session_id.length === 0) {
+    exitError({ error: "Missing required field: session_id" });
+  }
+  if (typeof gate_type !== "string" || gate_type.length === 0) {
+    exitError({ error: "Missing required field: gate_type" });
+  }
+  const baseDir = a["ledger_base_dir"];
+  const ledgerOpts = {
+    session_id
+  };
+  if (baseDir !== void 0) ledgerOpts.baseDir = baseDir;
+  const ledger = new AppendOnlyLedger(ledgerOpts);
+  const entry = ledger.append({
+    session_id,
+    workflow_id: gate_id,
+    task_id,
+    turn_id: null,
+    actor_id: "SYSTEM",
+    actor_type: "SYSTEM",
+    phase: "GATE",
+    verdict: null,
+    detail: {
+      gate_id,
+      gate_type,
+      status: "UNENFORCED_MOCK"
+    }
+  });
+  const evaluated_at = (/* @__PURE__ */ new Date()).toISOString();
+  writeJson({
+    gate_id,
+    task_id,
+    session_id,
+    verdict: "PASS",
+    // stub verdict
+    status: "UNENFORCED_MOCK",
+    // L7 mandatory — never a real passing verdict
+    evaluated_at,
+    gate_type,
+    ledger_seq: entry.seq
+  });
+}
 async function main() {
   const [, , command, jsonArg] = process.argv;
   if (!command) {
@@ -6187,6 +6240,9 @@ async function main() {
         break;
       case "plan-init":
         handlePlanInit(args);
+        break;
+      case "evaluate-gate":
+        handleEvaluateGate(args);
         break;
       default:
         exitError({ error: `Unknown command: ${command}` });

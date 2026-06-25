@@ -12,6 +12,7 @@
 //   ledger-append     — calls AppendOnlyLedger.append()
 //   ledger-close      — calls AppendOnlyLedger.close()
 //   plan-init         — initializes a plan artifact (session_id, project_id, directive?)
+//   evaluate-gate     — evaluates a gate (stub: always PASS, UNENFORCED_MOCK status)
 //
 // OUTPUT CONTRACT:
 //   All stdout is a single JSON object. Errors are JSON { error: string }.
@@ -209,6 +210,66 @@ function handlePlanInit(args: unknown): void {
   writeJson({ ok: true, session_id, plan_id, initialized_at: new Date().toISOString() });
 }
 
+function handleEvaluateGate(args: unknown): void {
+  const a = args as Record<string, unknown>;
+
+  // Validate required fields
+  const gate_id = a["gate_id"];
+  const task_id = a["task_id"];
+  const session_id = a["session_id"];
+  const gate_type = a["gate_type"];
+
+  if (typeof gate_id !== "string" || gate_id.length === 0) {
+    exitError({ error: "Missing required field: gate_id" });
+  }
+  if (typeof task_id !== "string" || task_id.length === 0) {
+    exitError({ error: "Missing required field: task_id" });
+  }
+  if (typeof session_id !== "string" || session_id.length === 0) {
+    exitError({ error: "Missing required field: session_id" });
+  }
+  if (typeof gate_type !== "string" || gate_type.length === 0) {
+    exitError({ error: "Missing required field: gate_type" });
+  }
+
+  const baseDir = a["ledger_base_dir"] as string | undefined;
+  const ledgerOpts: ConstructorParameters<typeof AppendOnlyLedger>[0] = {
+    session_id,
+  };
+  if (baseDir !== undefined) ledgerOpts.baseDir = baseDir;
+  const ledger = new AppendOnlyLedger(ledgerOpts);
+
+  // Append a GATE ledger entry — stub, so verdict: null and UNENFORCED_MOCK status
+  const entry = ledger.append({
+    session_id,
+    workflow_id: gate_id,
+    task_id,
+    turn_id: null,
+    actor_id: "SYSTEM",
+    actor_type: "SYSTEM",
+    phase: "GATE",
+    verdict: null,
+    detail: {
+      gate_id,
+      gate_type,
+      status: "UNENFORCED_MOCK",
+    },
+  });
+
+  const evaluated_at = new Date().toISOString();
+
+  writeJson({
+    gate_id,
+    task_id,
+    session_id,
+    verdict: "PASS", // stub verdict
+    status: "UNENFORCED_MOCK", // L7 mandatory — never a real passing verdict
+    evaluated_at,
+    gate_type,
+    ledger_seq: entry.seq,
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
@@ -260,6 +321,9 @@ async function main(): Promise<void> {
         break;
       case "plan-init":
         handlePlanInit(args);
+        break;
+      case "evaluate-gate":
+        handleEvaluateGate(args);
         break;
       default:
         exitError({ error: `Unknown command: ${command}` });

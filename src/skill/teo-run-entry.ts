@@ -14,17 +14,11 @@
 //   plan-init         — initializes a plan artifact (session_id, project_id, directive?)
 //   evaluate-gate     — evaluates a gate with real gate-profile enforcement (WS-06)
 //   verify-ledger     — reads a ledger JSONL file and verifies hash-chain integrity
-//   verify-receipt    — verifies a stored run receipt by run_id (WS-RUN-RECEIPT-01)
+//   verify-receipt    — verifies a run receipt by run_id (WS-RUN-RECEIPT-01)
 //
 // OUTPUT CONTRACT:
 //   All stdout is a single JSON object. Errors are JSON { error: string }.
 //   Exit code 0 = success, 1+ = error.
-//
-// IMPORT POLICY (WS-LAZY-IMPORTS-01):
-//   All engine-layer modules (../core/, ../bootstrap/, ../lib/, ../engine/) and
-//   Node.js builtins (node:fs, node:crypto) MUST be dynamically imported inside
-//   handlers, not as top-level static imports. This prevents cold-start latency
-//   for commands that don't need every module.
 // =============================================================================
 
 // ---------------------------------------------------------------------------
@@ -46,8 +40,8 @@ function exitError(obj: unknown): never {
 
 async function handleProvision(args: unknown, jsonArg: string): Promise<void> {
   const { provision } = await import("../bootstrap/provision.js");
-  const { buildRunReceipt, writeRunReceipt } = await import("../core/run-receipt.js");
   const { resolveDefaultLedgerBase } = await import("../core/ledger.js");
+  const { buildRunReceipt, writeRunReceipt } = await import("../core/run-receipt.js");
   const opts = args as Parameters<typeof provision>[0];
   const baseDir = (args as Record<string, unknown>)["baseDir"] as string | undefined;
   const effectiveBaseDir = baseDir ?? resolveDefaultLedgerBase();
@@ -110,11 +104,17 @@ async function handleProvision(args: unknown, jsonArg: string): Promise<void> {
 
 async function handleValidatePlan(args: unknown, jsonArg: string): Promise<void> {
   const { PlanSchema } = await import("../core/plan.js");
-  const { buildRunReceipt, writeRunReceipt } = await import("../core/run-receipt.js");
   const { resolveDefaultLedgerBase } = await import("../core/ledger.js");
-  const a = args as Record<string, unknown>;
-  const baseDir = a["baseDir"] as string | undefined;
-  const effectiveBaseDir = baseDir ?? resolveDefaultLedgerBase();
+  const { buildRunReceipt, writeRunReceipt } = await import("../core/run-receipt.js");
+
+  // validate-plan args IS the plan payload — baseDir cannot come from args without
+  // polluting PlanSchema. Read it from TEO_BASE_DIR env var, then fall back to
+  // resolveDefaultLedgerBase() so that tests can inject via { TEO_BASE_DIR: ... }.
+  const envBaseDir = process.env["TEO_BASE_DIR"];
+  const effectiveBaseDir =
+    typeof envBaseDir === "string" && envBaseDir.length > 0
+      ? envBaseDir
+      : resolveDefaultLedgerBase();
 
   const parsed = PlanSchema.safeParse(args);
 
@@ -143,8 +143,9 @@ async function handleValidatePlan(args: unknown, jsonArg: string): Promise<void>
 
 async function handleValidateArtifact(rawJsonArg: string): Promise<void> {
   const { repairJson, validateArtifact } = await import("../core/artifacts.js");
-  const { buildRunReceipt, writeRunReceipt } = await import("../core/run-receipt.js");
   const { resolveDefaultLedgerBase } = await import("../core/ledger.js");
+  const { buildRunReceipt, writeRunReceipt } = await import("../core/run-receipt.js");
+
   // Repair the raw arg string first (handles trailing commas, single-quoted strings, etc.)
   let parsedArg: unknown;
   try {
@@ -208,8 +209,8 @@ async function handleValidateArtifact(rawJsonArg: string): Promise<void> {
 
 async function handleSign(args: unknown, jsonArg: string): Promise<void> {
   const { HmacSigner } = await import("../core/sign.js");
-  const { buildRunReceipt, writeRunReceipt } = await import("../core/run-receipt.js");
   const { resolveDefaultLedgerBase } = await import("../core/ledger.js");
+  const { buildRunReceipt, writeRunReceipt } = await import("../core/run-receipt.js");
   const a = args as Record<string, unknown>;
   const baseDir = a["baseDir"] as string | undefined;
   const effectiveBaseDir = baseDir ?? resolveDefaultLedgerBase();
@@ -435,8 +436,8 @@ async function handleVerifyLedger(args: unknown, jsonArg: string): Promise<void>
   const fs = await import("node:fs");
   const crypto = await import("node:crypto");
   const { verifyAsync } = await import("../lib/ed25519.js");
-  const { buildRunReceipt, writeRunReceipt } = await import("../core/run-receipt.js");
   const { resolveDefaultLedgerBase } = await import("../core/ledger.js");
+  const { buildRunReceipt, writeRunReceipt } = await import("../core/run-receipt.js");
   const a = args as Record<string, unknown>;
   const ledger_file = a["ledger_file"];
   const public_key = a["public_key"];

@@ -2,7 +2,7 @@
 name: staff-engineer
 description: "Technical leader and code reviewer. Spawn for architectural guidance, code review, or complex technical decisions."
 model: sonnet
-tools: [Task(dev), Read, Glob, Grep, Edit, Write, Bash]
+tools: [Task(software-engineer), Read, Glob, Grep, Edit, Write, Bash]
 memory: project
 maxTurns: 300
 ---
@@ -31,7 +31,7 @@ directive_gate:
 
 > Inherits: [agent-base](../_base/agent-base.md)
 
-**Tools scope constraint:** Edit and Write tools are restricted to `.claude/memory/` paths only (review memos, triage output, GO-signals). Write is NOT permitted on source files, agent.md files, shared protocols, or implementation files — all such changes route through dev via teo-apply-edit (Task(dev) delegation). Bash is restricted to read-only git queries, teo-validate invocations, and memory script invocations. Any Edit/Write on non-memory paths is implementation drift.
+**Tools scope constraint:** Edit and Write tools are restricted to `.claude/memory/` paths only (review memos, triage output, GO-signals). Write is NOT permitted on source files, agent.md files, shared protocols, or implementation files — all such changes route through software-engineer via teo-apply-edit (Task(software-engineer) delegation). Bash is restricted to read-only git queries, teo-validate invocations, and memory script invocations. Any Edit/Write on non-memory paths is implementation drift.
 
 # Staff Engineer
 
@@ -157,7 +157,7 @@ Before marking spike complete:
 
 | Concern | Delegate To |
 |---------|-------------|
-| Implementation fixes | dev |
+| Implementation fixes | software-engineer |
 
 ## Memory Write Policy
 

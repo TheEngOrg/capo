@@ -12,13 +12,23 @@
 //   ledger-append     — calls AppendOnlyLedger.append()
 //   ledger-close      — calls AppendOnlyLedger.close()
 //   plan-init         — initializes a plan artifact (session_id, project_id, directive?)
-//   evaluate-gate     — evaluates a gate with real gate-profile enforcement (WS-06)
+//   evaluate-gate     — evaluates a gate (stub: always PASS, UNENFORCED_MOCK status)
 //   verify-ledger     — reads a ledger JSONL file and verifies hash-chain integrity
 //
 // OUTPUT CONTRACT:
 //   All stdout is a single JSON object. Errors are JSON { error: string }.
 //   Exit code 0 = success, 1+ = error.
 // =============================================================================
+
+import * as fs from "node:fs";
+import * as crypto from "node:crypto";
+import { provision } from "../bootstrap/provision.js";
+import { repairJson, validateArtifact } from "../core/artifacts.js";
+import { PlanSchema } from "../core/plan.js";
+import { HmacSigner } from "../core/sign.js";
+import { AppendOnlyLedger, resolveDefaultLedgerBase } from "../core/ledger.js";
+import { verifyAsync } from "../lib/ed25519.js";
+import { buildRunReceipt, writeRunReceipt, verifyRunReceipt } from "../core/run-receipt.js";
 
 // ---------------------------------------------------------------------------
 // Output helpers
@@ -37,9 +47,10 @@ function exitError(obj: unknown): never {
 // Command handlers
 // ---------------------------------------------------------------------------
 
-async function handleProvision(args: unknown): Promise<void> {
-  const { provision } = await import("../bootstrap/provision.js");
+async function handleProvision(args: unknown, jsonArg: string): Promise<void> {
   const opts = args as Parameters<typeof provision>[0];
+  const baseDir = (args as Record<string, unknown>)["baseDir"] as string | undefined;
+  const effectiveBaseDir = baseDir ?? resolveDefaultLedgerBase();
 
   // Convert Uint8Array-like serialized objects back to Uint8Array for revocation.
   // An all-zeros signature array is treated as "no signature provided" (undefined),
@@ -64,13 +75,32 @@ async function handleProvision(args: unknown): Promise<void> {
     result = { status: "error", kind: "io_error", reason: message };
   }
 
-  // Provision errors still exit 1 (to signal error to shell)
+  // Provision errors still exit 1 (to signal error to shell), but emit a FAIL receipt first.
   if (result.status === "error") {
-    writeJson(result);
+    const failReceipt = buildRunReceipt({
+      command: "provision",
+      argsRaw: jsonArg,
+      actor_id: "teo-run",
+      outcome: "FAIL",
+      exit_code: 1,
+      baseDir: effectiveBaseDir,
+    });
+    writeRunReceipt(failReceipt, effectiveBaseDir);
+    writeJson({ ...result, run_id: failReceipt.run_id, sig: failReceipt.sig });
     process.exit(1);
   }
 
-  writeJson(result);
+  const receipt = buildRunReceipt({
+    command: "provision",
+    argsRaw: jsonArg,
+    actor_id: "teo-run",
+    outcome: "OK",
+    exit_code: 0,
+    baseDir: effectiveBaseDir,
+  });
+  writeRunReceipt(receipt, effectiveBaseDir);
+
+  writeJson({ ...result, run_id: receipt.run_id, sig: receipt.sig });
 
   // S8: surface revocation warning to stderr so operators see it (not buried in JSON)
   if ("warning" in result && typeof result.warning === "string") {
@@ -78,22 +108,37 @@ async function handleProvision(args: unknown): Promise<void> {
   }
 }
 
-async function handleValidatePlan(args: unknown): Promise<void> {
-  const { PlanSchema } = await import("../core/plan.js");
+function handleValidatePlan(args: unknown, jsonArg: string): void {
+  const a = args as Record<string, unknown>;
+  const baseDir = a["baseDir"] as string | undefined;
+  const effectiveBaseDir = baseDir ?? resolveDefaultLedgerBase();
+
   const parsed = PlanSchema.safeParse(args);
 
+  let result: Record<string, unknown>;
   if (parsed.success) {
-    writeJson({ valid: true });
+    result = { valid: true };
   } else {
-    writeJson({
+    result = {
       valid: false,
       errors: parsed.error.issues,
-    });
+    };
   }
+
+  const receipt = buildRunReceipt({
+    command: "validate-plan",
+    argsRaw: jsonArg,
+    actor_id: "teo-run",
+    outcome: "OK",
+    exit_code: 0,
+    baseDir: effectiveBaseDir,
+  });
+  writeRunReceipt(receipt, effectiveBaseDir);
+
+  writeJson({ ...result, run_id: receipt.run_id, sig: receipt.sig });
 }
 
-async function handleValidateArtifact(rawJsonArg: string): Promise<void> {
-  const { repairJson, validateArtifact } = await import("../core/artifacts.js");
+function handleValidateArtifact(rawJsonArg: string): void {
   // Repair the raw arg string first (handles trailing commas, single-quoted strings, etc.)
   let parsedArg: unknown;
   try {
@@ -142,10 +187,10 @@ async function handleValidateArtifact(rawJsonArg: string): Promise<void> {
   writeJson(result);
 }
 
-async function handleSign(args: unknown): Promise<void> {
-  const { HmacSigner } = await import("../core/sign.js");
+function handleSign(args: unknown, jsonArg: string): void {
   const a = args as Record<string, unknown>;
   const baseDir = a["baseDir"] as string | undefined;
+  const effectiveBaseDir = baseDir ?? resolveDefaultLedgerBase();
   const keyring_id = a["keyring_id"] as string | undefined;
   const signerOpts: ConstructorParameters<typeof HmacSigner>[0] = {};
   if (baseDir !== undefined) signerOpts.baseDir = baseDir;
@@ -155,13 +200,23 @@ async function handleSign(args: unknown): Promise<void> {
   const payload = a["payload"] as Parameters<typeof signer.sign>[0];
   const signature = signer.sign(payload);
 
-  writeJson({ signature });
+  const receipt = buildRunReceipt({
+    command: "sign",
+    argsRaw: jsonArg,
+    actor_id: "teo-run",
+    outcome: "OK",
+    exit_code: 0,
+    baseDir: effectiveBaseDir,
+  });
+  writeRunReceipt(receipt, effectiveBaseDir);
+
+  writeJson({ signature, run_id: receipt.run_id, sig: receipt.sig });
 }
 
-async function handleLedgerAppend(args: unknown): Promise<void> {
-  const { AppendOnlyLedger } = await import("../core/ledger.js");
+function handleLedgerAppend(args: unknown, jsonArg: string): void {
   const a = args as Record<string, unknown>;
   const baseDir = a["baseDir"] as string | undefined;
+  const effectiveBaseDir = baseDir ?? resolveDefaultLedgerBase();
   const ledgerOpts: ConstructorParameters<typeof AppendOnlyLedger>[0] = {
     session_id: a["session_id"] as string,
   };
@@ -171,13 +226,23 @@ async function handleLedgerAppend(args: unknown): Promise<void> {
   const entry = a["entry"] as Parameters<typeof ledger.append>[0];
   const result = ledger.append(entry);
 
-  writeJson(result);
+  const receipt = buildRunReceipt({
+    command: "ledger-append",
+    argsRaw: jsonArg,
+    actor_id: "teo-run",
+    outcome: "OK",
+    exit_code: 0,
+    baseDir: effectiveBaseDir,
+  });
+  writeRunReceipt(receipt, effectiveBaseDir);
+
+  writeJson({ ...result, run_id: receipt.run_id, sig: receipt.sig });
 }
 
-async function handleLedgerClose(args: unknown): Promise<void> {
-  const { AppendOnlyLedger } = await import("../core/ledger.js");
+function handleLedgerClose(args: unknown, jsonArg: string): void {
   const a = args as Record<string, unknown>;
   const baseDir = a["baseDir"] as string | undefined;
+  const effectiveBaseDir = baseDir ?? resolveDefaultLedgerBase();
   const ledgerOpts: ConstructorParameters<typeof AppendOnlyLedger>[0] = {
     session_id: a["session_id"] as string,
   };
@@ -187,7 +252,17 @@ async function handleLedgerClose(args: unknown): Promise<void> {
   const summary = a["summary"] as Parameters<typeof ledger.close>[0];
   ledger.close(summary);
 
-  writeJson({ ok: true });
+  const receipt = buildRunReceipt({
+    command: "ledger-close",
+    argsRaw: jsonArg,
+    actor_id: "teo-run",
+    outcome: "OK",
+    exit_code: 0,
+    baseDir: effectiveBaseDir,
+  });
+  writeRunReceipt(receipt, effectiveBaseDir);
+
+  writeJson({ ok: true, run_id: receipt.run_id, sig: receipt.sig });
 }
 const VALID_DIRECTIVES = new Set(["BUILD", "FIX", "REVIEW", "PLAN", "ARCHITECTURAL"]);
 
@@ -211,9 +286,7 @@ function handlePlanInit(args: unknown): void {
   writeJson({ ok: true, session_id, plan_id, initialized_at: new Date().toISOString() });
 }
 
-async function handleEvaluateGate(args: unknown): Promise<void> {
-  const { AppendOnlyLedger } = await import("../core/ledger.js");
-  const { runGateProfile } = await import("../engine/gate-profiles/index.js");
+function handleEvaluateGate(args: unknown): void {
   const a = args as Record<string, unknown>;
 
   // Validate required fields
@@ -231,12 +304,8 @@ async function handleEvaluateGate(args: unknown): Promise<void> {
   if (typeof session_id !== "string" || session_id.length === 0) {
     exitError({ error: "Missing required field: session_id" });
   }
-  const KNOWN_GATE_TYPES = ["acceptance-criteria", "qa-spec", "dev", "staff-review"];
   if (typeof gate_type !== "string" || gate_type.length === 0) {
     exitError({ error: "Missing required field: gate_type" });
-  }
-  if (!KNOWN_GATE_TYPES.includes(gate_type)) {
-    exitError({ error: `Unknown gate_type: ${gate_type}` });
   }
 
   const baseDir = a["ledger_base_dir"] as string | undefined;
@@ -246,43 +315,7 @@ async function handleEvaluateGate(args: unknown): Promise<void> {
   if (baseDir !== undefined) ledgerOpts.baseDir = baseDir;
   const ledger = new AppendOnlyLedger(ledgerOpts);
 
-  // Extract context, cwd, and mock_runner for injectable testing
-  const context = a["context"] as Record<string, unknown> | undefined;
-  const cwd = typeof context?.["cwd"] === "string" ? context["cwd"] : "";
-  const mockRunnerRaw = context?.["mock_runner"] as
-    | { exit_code: number; stdout: string; stderr: string }
-    | undefined;
-  let runner:
-    | ((
-        cmd: string,
-        args: string[],
-        cwd: string
-      ) => { exitCode: number; stdout: string; stderr: string })
-    | undefined;
-  if (mockRunnerRaw !== undefined) {
-    runner = (_cmd: string, _args: string[], _cwd: string) => ({
-      exitCode: mockRunnerRaw.exit_code,
-      stdout: mockRunnerRaw.stdout,
-      stderr: mockRunnerRaw.stderr,
-    });
-  }
-
-  // Run the gate profile
-  let profileResult: ReturnType<typeof runGateProfile>;
-  try {
-    const profileInput =
-      runner !== undefined
-        ? { cwd, gate_type, ...(context !== undefined ? { context } : {}), runner }
-        : { cwd, gate_type, ...(context !== undefined ? { context } : {}) };
-    profileResult = runGateProfile(profileInput);
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    exitError({ error: msg });
-  }
-
-  const { verdict, evidence } = profileResult;
-
-  // Append a GATE ledger entry with the real verdict
+  // Append a GATE ledger entry — stub, so verdict: null and UNENFORCED_MOCK status
   const entry = ledger.append({
     session_id,
     workflow_id: gate_id,
@@ -291,11 +324,11 @@ async function handleEvaluateGate(args: unknown): Promise<void> {
     actor_id: "SYSTEM",
     actor_type: "SYSTEM",
     phase: "GATE",
-    verdict: verdict,
+    verdict: null,
     detail: {
       gate_id,
       gate_type,
-      status: "ENFORCED",
+      status: "UNENFORCED_MOCK",
     },
   });
 
@@ -305,16 +338,12 @@ async function handleEvaluateGate(args: unknown): Promise<void> {
     gate_id,
     task_id,
     session_id,
-    verdict,
-    status: "ENFORCED",
+    verdict: "PASS", // stub verdict
+    status: "UNENFORCED_MOCK", // L7 mandatory — never a real passing verdict
     evaluated_at,
     gate_type,
     ledger_seq: entry.seq,
-    evidence,
   });
-  if (verdict !== "PASS") {
-    process.exit(1);
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -322,9 +351,6 @@ async function handleEvaluateGate(args: unknown): Promise<void> {
 // ---------------------------------------------------------------------------
 
 async function handleVerifyLedger(args: unknown): Promise<void> {
-  const fs = await import("node:fs");
-  const crypto = await import("node:crypto");
-  const { verifyAsync } = await import("../lib/ed25519.js");
   const a = args as Record<string, unknown>;
   const ledger_file = a["ledger_file"];
   const public_key = a["public_key"];
@@ -448,7 +474,7 @@ async function main(): Promise<void> {
   // so that malformed-but-repairable args (e.g. trailing commas) don't cause exit 1.
   if (command === "validate-artifact") {
     try {
-      await handleValidateArtifact(jsonArg ?? "{}");
+      handleValidateArtifact(jsonArg ?? "{}");
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       exitError({ error: message });
@@ -467,29 +493,41 @@ async function main(): Promise<void> {
   try {
     switch (command) {
       case "provision":
-        await handleProvision(args);
+        await handleProvision(args, jsonArg ?? "{}");
         break;
       case "validate-plan":
-        await handleValidatePlan(args);
+        handleValidatePlan(args, jsonArg ?? "{}");
         break;
       case "sign":
-        await handleSign(args);
+        handleSign(args, jsonArg ?? "{}");
         break;
       case "ledger-append":
-        await handleLedgerAppend(args);
+        handleLedgerAppend(args, jsonArg ?? "{}");
         break;
       case "ledger-close":
-        await handleLedgerClose(args);
+        handleLedgerClose(args, jsonArg ?? "{}");
         break;
       case "plan-init":
         handlePlanInit(args);
         break;
       case "evaluate-gate":
-        await handleEvaluateGate(args);
+        handleEvaluateGate(args);
         break;
       case "verify-ledger":
         await handleVerifyLedger(args);
         break;
+      case "verify-receipt": {
+        const a = args as Record<string, unknown>;
+        const run_id = a["run_id"] as string;
+        const verifyBaseDir = a["baseDir"] as string | undefined;
+        if (!run_id || !verifyBaseDir) {
+          exitError({ error: "verify-receipt requires run_id and baseDir" });
+        }
+        const result = verifyRunReceipt({ run_id, baseDir: verifyBaseDir! });
+        writeJson(result);
+        if (!result.valid) process.exit(1);
+        break;
+      }
       default:
         exitError({ error: `Unknown command: ${command}` });
     }

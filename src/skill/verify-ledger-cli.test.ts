@@ -1,7 +1,7 @@
 // =============================================================================
 // verify-ledger-cli.test.ts — WS-08: verify-ledger CLI command integration tests
 //
-// STATUS: FAILING — verify-ledger command not yet implemented in teo-run-entry.ts
+// STATUS: PASSING — verify-ledger command implemented in teo-run-entry.ts (WS-08)
 //
 // CONTRACT (CLI arg protocol):
 //   node bin/teo-run.js verify-ledger '<json-string>'

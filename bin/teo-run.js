@@ -5,6 +5,10 @@ var __export = (target, all) => {
     __defProp(target, name, { get: all[name], enumerable: true });
 };
 
+// src/skill/teo-run-entry.ts
+import * as fs6 from "node:fs";
+import * as crypto3 from "node:crypto";
+
 // src/bootstrap/provision.ts
 import * as fs3 from "node:fs";
 import * as os from "node:os";
@@ -6201,6 +6205,97 @@ function handleEvaluateGate(args) {
     ledger_seq: entry.seq
   });
 }
+async function handleVerifyLedger(args) {
+  const a = args;
+  const ledger_file = a["ledger_file"];
+  const public_key = a["public_key"];
+  if (typeof ledger_file !== "string" || ledger_file.length === 0) {
+    exitError({ ok: false, error: "Missing required field: ledger_file" });
+  }
+  if (!fs6.existsSync(ledger_file)) {
+    exitError({ ok: false, error: `Ledger file not found: ${ledger_file}` });
+  }
+  const fileContent = fs6.readFileSync(ledger_file, "utf8");
+  const rawLines = fileContent.split("\n").filter((l) => l.trim().length > 0);
+  if (rawLines.length === 0) {
+    exitError({ ok: false, error: "Ledger file is empty or contains no valid entries" });
+  }
+  const parsedEntries = [];
+  for (let i = 0; i < rawLines.length; i++) {
+    const raw = rawLines[i];
+    let obj;
+    try {
+      obj = JSON.parse(raw);
+    } catch {
+      exitError({ ok: false, error: `Malformed JSON at line ${i + 1}: ${raw.slice(0, 80)}` });
+    }
+    parsedEntries.push({ raw, obj });
+  }
+  const hasAnyPrevHash = parsedEntries.some((e) => "prev_hash" in e.obj);
+  if (hasAnyPrevHash) {
+    for (let i = 0; i < parsedEntries.length; i++) {
+      const entry = parsedEntries[i];
+      const seq = entry.obj["seq"];
+      if (i === 0) {
+        const prev_hash = entry.obj["prev_hash"];
+        if (prev_hash !== null && prev_hash !== void 0) {
+          exitError({
+            ok: false,
+            error: "Hash chain broken: first entry must have prev_hash null or absent",
+            broken_at_seq: seq
+          });
+        }
+      } else {
+        const prevRaw = parsedEntries[i - 1].raw;
+        const expectedHash = crypto3.createHash("sha256").update(prevRaw, "utf8").digest("hex");
+        const prev_hash = entry.obj["prev_hash"];
+        if (prev_hash !== expectedHash) {
+          exitError({
+            ok: false,
+            error: `Hash chain broken at seq ${String(seq)}: prev_hash mismatch`,
+            broken_at_seq: seq
+          });
+        }
+      }
+    }
+  } else {
+    for (let i = 0; i < parsedEntries.length; i++) {
+      const entry = parsedEntries[i];
+      const seq = entry.obj["seq"];
+      const expectedSeq = i + 1;
+      if (seq !== expectedSeq) {
+        exitError({
+          ok: false,
+          error: `Sequence broken: expected seq ${expectedSeq}, got ${String(seq)}`,
+          broken_at_seq: seq
+        });
+      }
+    }
+  }
+  if (typeof public_key === "string" && public_key.length > 0) {
+    const pubKeyBytes = Buffer.from(public_key, "hex");
+    for (const entry of parsedEntries) {
+      const sig = entry.obj["signature"];
+      if (typeof sig === "string" && sig.length > 0) {
+        const sigBytes = Buffer.from(sig, "hex");
+        const lineBytes = Buffer.from(entry.raw, "utf8");
+        const valid = await verifyAsync(
+          new Uint8Array(sigBytes),
+          new Uint8Array(lineBytes),
+          new Uint8Array(pubKeyBytes)
+        );
+        if (!valid) {
+          const seq = entry.obj["seq"];
+          exitError({
+            ok: false,
+            error: `Signature verification failed at seq ${String(seq)}`
+          });
+        }
+      }
+    }
+  }
+  writeJson({ ok: true, entry_count: parsedEntries.length, chain_intact: true });
+}
 async function main() {
   const [, , command, jsonArg] = process.argv;
   if (!command) {
@@ -6243,6 +6338,9 @@ async function main() {
         break;
       case "evaluate-gate":
         handleEvaluateGate(args);
+        break;
+      case "verify-ledger":
+        await handleVerifyLedger(args);
         break;
       default:
         exitError({ error: `Unknown command: ${command}` });

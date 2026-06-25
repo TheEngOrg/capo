@@ -47,7 +47,7 @@ function readFile(relPath: string): string {
 // on the file being readable.
 // =============================================================================
 
-describe.skip("misuse(WS-03): agents/capo.md does not exist or is not readable", () => {
+describe("misuse(WS-03): agents/capo.md does not exist or is not readable", () => {
   it("agents/capo.md exists and is readable", () => {
     // MISUSE: if the file is absent or unreadable, every downstream test
     // would produce a confusing ENOENT error instead of a clear assertion
@@ -57,7 +57,7 @@ describe.skip("misuse(WS-03): agents/capo.md does not exist or is not readable",
   });
 });
 
-describe.skip("misuse(WS-03): agents/capo.md contains legacy GATEWAY_SPAWN_REQUEST text", () => {
+describe("misuse(WS-03): agents/capo.md contains legacy GATEWAY_SPAWN_REQUEST text", () => {
   it("agents/capo.md does NOT contain 'GATEWAY_SPAWN_REQUEST'", () => {
     // MISUSE: GATEWAY_SPAWN_REQUEST is the legacy relay model removed by
     // WS-00-pre. Any reappearance of this string in capo.md means the relay
@@ -69,7 +69,7 @@ describe.skip("misuse(WS-03): agents/capo.md contains legacy GATEWAY_SPAWN_REQUE
   });
 });
 
-describe.skip("misuse(WS-03): agents/capo.md uses 'Dispatcher' as an identity label", () => {
+describe("misuse(WS-03): agents/capo.md uses 'Dispatcher' as an identity label", () => {
   it("agents/capo.md does NOT contain 'Dispatcher' as an identity label", () => {
     // MISUSE: "Dispatcher" was a behavioral constraint label that was
     // over-interpreted into a two-tier relay model causing anomalous Capo
@@ -99,7 +99,7 @@ describe.skip("misuse(WS-03): agents/capo.md uses 'Dispatcher' as an identity la
 // golden-path territory. They verify the presence of the signal, not its form.
 // =============================================================================
 
-describe.skip("boundary(WS-03): agents/capo.md does not contain PLAN_ARTIFACT section", () => {
+describe("boundary(WS-03): agents/capo.md does not contain PLAN_ARTIFACT section", () => {
   it("agents/capo.md contains the string 'PLAN_ARTIFACT'", () => {
     // BOUNDARY: WS-03's primary deliverable is adding a PLAN_ARTIFACT protocol
     // to capo.md. If this string is absent, the entire protocol is missing.
@@ -110,7 +110,7 @@ describe.skip("boundary(WS-03): agents/capo.md does not contain PLAN_ARTIFACT se
   });
 });
 
-describe.skip("boundary(WS-03): agents/capo.md does not contain __DEFERRED__ placeholder", () => {
+describe("boundary(WS-03): agents/capo.md does not contain __DEFERRED__ placeholder", () => {
   it("agents/capo.md contains '__DEFERRED__'", () => {
     // BOUNDARY: the D1 hybrid-planner requires that task prompts in the upfront
     // PLAN_ARTIFACT block use __DEFERRED__ as a placeholder for content that
@@ -123,7 +123,7 @@ describe.skip("boundary(WS-03): agents/capo.md does not contain __DEFERRED__ pla
   });
 });
 
-describe.skip("boundary(WS-03): agents/capo.md does not reference plan_id field", () => {
+describe("boundary(WS-03): agents/capo.md does not reference plan_id field", () => {
   it("agents/capo.md references 'plan_id'", () => {
     // BOUNDARY: plan_id is a required field in PlanSchema (src/core/plan.ts).
     // The PLAN_ARTIFACT block that Capo emits must include plan_id, so the
@@ -135,7 +135,7 @@ describe.skip("boundary(WS-03): agents/capo.md does not reference plan_id field"
   });
 });
 
-describe.skip("boundary(WS-03): agents/capo.md does not reference task_id field", () => {
+describe("boundary(WS-03): agents/capo.md does not reference task_id field", () => {
   it("agents/capo.md references 'task_id'", () => {
     // BOUNDARY: the D1 hybrid-planner requires task_id declared upfront in the
     // PLAN_ARTIFACT. Without task_id in the protocol description, Capo-generated
@@ -155,7 +155,7 @@ describe.skip("boundary(WS-03): agents/capo.md does not reference task_id field"
 // content that should not appear in a post-WS-03 capo.md.
 // =============================================================================
 
-describe.skip("golden(WS-03): agents/capo.md JSON example block contains required PlanSchema fields", () => {
+describe("golden(WS-03): agents/capo.md JSON example block contains required PlanSchema fields", () => {
   it("agents/capo.md contains a JSON example with plan_id, project_id, created_at, version, and tasks", () => {
     // GOLDEN: the PLAN_ARTIFACT subsection must include an example JSON block
     // that references all five required PlanSchema fields. An example that omits
@@ -181,7 +181,7 @@ describe.skip("golden(WS-03): agents/capo.md JSON example block contains require
   });
 });
 
-describe.skip("golden(WS-03): agents/capo.md describes a two-phase output format", () => {
+describe("golden(WS-03): agents/capo.md describes a two-phase output format", () => {
   it("agents/capo.md contains 'two-phase' or 'Two-Phase' (case-sensitive alternation)", () => {
     // GOLDEN: the protocol description must use the term "two-phase" or
     // "Two-Phase" to name the output format. This is the term agreed in the
@@ -194,7 +194,7 @@ describe.skip("golden(WS-03): agents/capo.md describes a two-phase output format
   });
 });
 
-describe.skip("golden(WS-03): agents/capo.md does not contain legacy 'mkdir' command", () => {
+describe("golden(WS-03): agents/capo.md does not contain legacy 'mkdir' command", () => {
   it("agents/capo.md does NOT contain the string 'mkdir'", () => {
     // GOLDEN: 'mkdir' is a legacy session setup command that belongs in
     // initialization workstreams (WS-01), not in the Capo orchestrator definition.
@@ -207,7 +207,7 @@ describe.skip("golden(WS-03): agents/capo.md does not contain legacy 'mkdir' com
   });
 });
 
-describe.skip("golden(WS-03): PLAN_ARTIFACT section appears before Turn-end Protocol section", () => {
+describe("golden(WS-03): PLAN_ARTIFACT section appears before Turn-end Protocol section", () => {
   it("'PLAN_ARTIFACT' appears earlier in capo.md than 'Turn-end Protocol'", () => {
     // GOLDEN: structural ordering matters for agent comprehension. Capo reads
     // its own definition top-to-bottom. The PLAN_ARTIFACT section describes

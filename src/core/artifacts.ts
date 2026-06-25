@@ -10,7 +10,7 @@
 // =============================================================================
 
 import { jsonrepair } from "jsonrepair";
-import { z } from "zod";
+import { z } from "../lib/schema.js";
 import { PlanSchema } from "./plan.js";
 
 // ---------------------------------------------------------------------------

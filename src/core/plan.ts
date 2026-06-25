@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from "../lib/schema.js";
 
 // =============================================================================
 // plan.ts — TEO Plan Schema (WS-CORE-01)

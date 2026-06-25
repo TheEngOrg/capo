@@ -1672,7 +1672,7 @@ describe("checkRevocation — WS-REVOKE-01: security invariants hold in plugin c
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import * as ed from "@noble/ed25519";
+import * as ed from "../lib/ed25519.js";
 import { signPluginRoot } from "./install-sig.js";
 
 describe("checkRevocation — WS-REVOKE-01: checkRevocationListOnly via install-sig plugin-context path", () => {

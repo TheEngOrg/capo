@@ -19,7 +19,7 @@
 // both Uint8Array and Buffer callers work identically.
 // =============================================================================
 
-import * as ed from "@noble/ed25519";
+import * as ed from "../lib/ed25519.js";
 import { readInstallSig, verifyInstallSig } from "./install-sig.js";
 
 // ---------------------------------------------------------------------------

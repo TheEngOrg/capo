@@ -1,8 +1,8 @@
 // =============================================================================
 // plan-init-validate-artifact-flag.test.ts — WS-01: TEO_VALIDATE_ARTIFACT stub
 //
-// STATUS: FAILING — the TEO_VALIDATE_ARTIFACT env-var guard does not yet exist
-// in hooks/teo-prompt-router.sh. Dev will add the feature-flag stub, then un-skip.
+// STATUS: GREEN — the TEO_VALIDATE_ARTIFACT env-var guard implemented as a stub
+// in hooks/teo-prompt-router.sh (WS-01). Describes un-skipped.
 //
 // CONTRACT (env-var feature flag):
 //   TEO_VALIDATE_ARTIFACT=1  → when a substantive /teo prompt is processed,
@@ -73,7 +73,7 @@ const SUBSTANTIVE_PROMPT = "/teo build a login page";
 // MISUSE: Invalid / unexpected env-var values must fall back to default (off)
 // =============================================================================
 
-describe.skip("TEO_VALIDATE_ARTIFACT flag — misuse: invalid values treated as off", () => {
+describe("TEO_VALIDATE_ARTIFACT flag — misuse: invalid values treated as off", () => {
   // MV-1: TEO_VALIDATE_ARTIFACT=bad — not "1", must be treated as off
   it("MV-1. TEO_VALIDATE_ARTIFACT=bad → treated as off, same output as unset", () => {
     const { exitCode: baseExit, stdout: baseOut } = runRouter(SUBSTANTIVE_PROMPT);
@@ -148,7 +148,7 @@ describe.skip("TEO_VALIDATE_ARTIFACT flag — misuse: invalid values treated as 
 // BOUNDARY: Default (unset) behavior is unchanged
 // =============================================================================
 
-describe.skip("TEO_VALIDATE_ARTIFACT flag — boundary: unset flag preserves current behavior", () => {
+describe("TEO_VALIDATE_ARTIFACT flag — boundary: unset flag preserves current behavior", () => {
   // B-1: Flag unset, substantive /teo prompt → additionalContext injected (current behavior)
   it("B-1. flag unset, substantive /teo prompt → exit 0, additionalContext injected (unchanged)", () => {
     // Explicitly unset by not passing TEO_VALIDATE_ARTIFACT in extraEnv
@@ -187,7 +187,7 @@ describe.skip("TEO_VALIDATE_ARTIFACT flag — boundary: unset flag preserves cur
 // GOLDEN PATH: TEO_VALIDATE_ARTIFACT=1 — flag enabled, no crash, exit 0
 // =============================================================================
 
-describe.skip("TEO_VALIDATE_ARTIFACT flag — golden path: flag enabled, exit 0, no blocking", () => {
+describe("TEO_VALIDATE_ARTIFACT flag — golden path: flag enabled, exit 0, no blocking", () => {
   // G-1: Flag enabled + substantive prompt → exit 0 (never blocks)
   it("G-1. TEO_VALIDATE_ARTIFACT=1 + substantive /teo prompt → exit 0", () => {
     const { exitCode } = runRouter(SUBSTANTIVE_PROMPT, { TEO_VALIDATE_ARTIFACT: "1" });

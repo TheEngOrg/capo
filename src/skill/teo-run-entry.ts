@@ -186,6 +186,27 @@ function handleLedgerClose(args: unknown): void {
 
   writeJson({ ok: true });
 }
+const VALID_DIRECTIVES = new Set(["BUILD", "FIX", "REVIEW", "PLAN", "ARCHITECTURAL"]);
+
+function handlePlanInit(args: unknown): void {
+  const a = args as Record<string, unknown>;
+  const session_id = a["session_id"] as string | undefined;
+  const project_id = a["project_id"] as string | undefined;
+  const directive = a["directive"] as string | undefined;
+
+  if (!session_id || session_id.length === 0) {
+    exitError({ error: "Missing required field: session_id" });
+  }
+  if (!project_id || project_id.length === 0) {
+    exitError({ error: "Missing required field: project_id" });
+  }
+  if (directive !== undefined && !VALID_DIRECTIVES.has(directive)) {
+    exitError({ error: `Invalid directive: ${directive}` });
+  }
+
+  const plan_id = `plan_${session_id}_${Date.now()}`;
+  writeJson({ ok: true, session_id, plan_id, initialized_at: new Date().toISOString() });
+}
 
 // ---------------------------------------------------------------------------
 // Main
@@ -235,6 +256,9 @@ async function main(): Promise<void> {
         break;
       case "ledger-close":
         handleLedgerClose(args);
+        break;
+      case "plan-init":
+        handlePlanInit(args);
         break;
       default:
         exitError({ error: `Unknown command: ${command}` });

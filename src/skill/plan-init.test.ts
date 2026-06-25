@@ -1,8 +1,8 @@
 // =============================================================================
 // plan-init.test.ts — WS-01: plan-init CLI command tests (FAILING specs)
 //
-// STATUS: FAILING — plan-init command does not yet exist in teo-run-entry.ts.
-// Dev will add handlePlanInit() and the "plan-init" switch case, then un-skip.
+// STATUS: GREEN — plan-init command implemented in teo-run-entry.ts (WS-01).
+// handlePlanInit() and the "plan-init" switch case added; describes un-skipped.
 //
 // CONTRACT (CLI arg protocol):
 //   node bin/teo-run.js plan-init '<json-string>'
@@ -77,7 +77,7 @@ function runCli(
 // MISUSE: Required-field violations and invalid values
 // =============================================================================
 
-describe.skip("plan-init CLI — misuse: missing required fields and invalid values", () => {
+describe("plan-init CLI — misuse: missing required fields and invalid values", () => {
   // M-1: session_id absent — required field missing
   it("M-1. missing session_id → exit 1, stdout JSON { error: string }", () => {
     const input = JSON.stringify({ project_id: "proj-abc" });
@@ -159,7 +159,7 @@ describe.skip("plan-init CLI — misuse: missing required fields and invalid val
 // BOUNDARY: Edge cases just inside and outside the valid range
 // =============================================================================
 
-describe.skip("plan-init CLI — boundary: empty strings and optional fields", () => {
+describe("plan-init CLI — boundary: empty strings and optional fields", () => {
   // B-1: session_id is an empty string — should be rejected (required = non-empty)
   it("B-1. session_id '' (empty string) → exit 1, stdout JSON { error: string }", () => {
     const input = JSON.stringify({ session_id: "", project_id: "proj-abc" });
@@ -209,7 +209,7 @@ describe.skip("plan-init CLI — boundary: empty strings and optional fields", (
 // GOLDEN PATH: Valid inputs return full success shape
 // =============================================================================
 
-describe.skip("plan-init CLI — golden path: valid inputs return ok:true with required fields", () => {
+describe("plan-init CLI — golden path: valid inputs return ok:true with required fields", () => {
   // G-1: minimal valid input (no directive)
   it("G-1. valid session_id + project_id → exit 0, { ok: true, session_id, plan_id, initialized_at }", () => {
     const sessionId = "sess-golden-001";

@@ -1,0 +1,12 @@
+{
+  "schema_version": "1.0.0",
+  "workstream_id": "WS-GO-07-swap",
+  "phase": "dev",
+  "from_agent": "dev",
+  "to_phase": "staff-review",
+  "artifact_paths": [
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/.claude-plugin/marketplace.json",
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/scripts/verify-plugin-install.sh"
+  ],
+  "timestamp": "2026-06-22T17:52:55Z"
+}

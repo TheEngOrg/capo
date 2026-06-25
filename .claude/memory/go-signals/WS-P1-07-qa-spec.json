@@ -1,0 +1,11 @@
+{
+  "schema_version": "1.0.0",
+  "workstream_id": "WS-P1-07",
+  "phase": "qa-spec",
+  "from_agent": "qa",
+  "to_phase": "dev",
+  "artifact_paths": [
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/src/engine/run-plan.test.ts"
+  ],
+  "timestamp": "2026-06-20T03:59:53Z"
+}

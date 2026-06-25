@@ -1,0 +1,15 @@
+{
+  "schema_version": "1.0.0",
+  "workstream_id": "cov-fix-vitest4",
+  "phase": "dev",
+  "from_agent": "dev",
+  "to_phase": "staff-review",
+  "artifact_paths": [
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/src/core/validate.ts",
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/src/core/runner.ts",
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/src/bootstrap/revocation.ts",
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/src/adapters/claude-code.test.ts",
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/.claude/memory/pipeline/dev-output.json"
+  ],
+  "timestamp": "2026-06-20T04:38:49Z"
+}

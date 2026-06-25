@@ -1,0 +1,11 @@
+{
+  "schema_version": "1.0.0",
+  "workstream_id": "ws-parseVerdict-richer-return",
+  "phase": "qa-spec",
+  "from_agent": "qa",
+  "to_phase": "dev",
+  "artifact_paths": [
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/src/adapters/parse-verdict.test.ts"
+  ],
+  "timestamp": "2026-06-19T19:12:51Z"
+}

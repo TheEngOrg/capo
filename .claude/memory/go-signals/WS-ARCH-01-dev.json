@@ -1,0 +1,15 @@
+{
+  "schema_version": "1.0.0",
+  "workstream_id": "WS-ARCH-01",
+  "phase": "dev",
+  "from_agent": "dev",
+  "to_phase": "staff-review",
+  "artifact_paths": [
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/src/core/runner.ts",
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/src/core/ledger.ts",
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/src/engine/run-plan.ts",
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/src/core/runner.test.ts",
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/src/engine/run-plan.test.ts"
+  ],
+  "timestamp": "2026-06-23T10:13:39Z"
+}

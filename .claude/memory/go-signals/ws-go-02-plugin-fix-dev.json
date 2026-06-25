@@ -1,0 +1,12 @@
+{
+  "schema_version": "1.0.0",
+  "workstream_id": "ws-go-02-plugin-fix",
+  "phase": "dev",
+  "from_agent": "dev",
+  "to_phase": "staff-review",
+  "artifact_paths": [
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/.claude-plugin/plugin.json",
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/tests/plugin-manifest.test.ts"
+  ],
+  "timestamp": "2026-06-21T02:53:00Z"
+}

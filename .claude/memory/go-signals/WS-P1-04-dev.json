@@ -1,0 +1,15 @@
+{
+  "schema_version": "1.0.0",
+  "workstream_id": "WS-P1-04",
+  "phase": "dev",
+  "from_agent": "dev",
+  "to_phase": "staff-review",
+  "artifact_paths": [
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/src/bootstrap/provision.ts",
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/vitest.config.ts",
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/src/bootstrap/provision.test.ts"
+  ],
+  "tests_passing": "613/613",
+  "coverage": "100%",
+  "timestamp": "2026-06-19T23:03:06Z"
+}

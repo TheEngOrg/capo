@@ -1,0 +1,12 @@
+{
+  "schema_version": "1.0.0",
+  "workstream_id": "ws-03",
+  "phase": "dev",
+  "from_agent": "dev",
+  "to_phase": "staff-review",
+  "artifact_paths": [
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/agents/capo.md",
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/src/agents/capo-plan-artifact.test.ts"
+  ],
+  "timestamp": "2026-06-24T17:11:00Z"
+}

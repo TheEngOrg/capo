@@ -1,0 +1,11 @@
+{
+  "schema_version": "1.0.0",
+  "workstream_id": "WS-00-pre-relay-kill",
+  "phase": "qa-spec",
+  "from_agent": "qa",
+  "to_phase": "dev",
+  "artifact_paths": [
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/tests/ws-00-pre-relay-kill.test.ts"
+  ],
+  "timestamp": "2026-06-24T00:00:00Z"
+}

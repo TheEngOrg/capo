@@ -1,0 +1,14 @@
+{
+  "schema_version": "1.0.0",
+  "workstream_id": "fix/plugin-manifest-paths",
+  "phase": "dev",
+  "from_agent": "dev",
+  "to_phase": "staff-review",
+  "artifact_paths": [
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/.claude-plugin/plugin.json",
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/.claude-plugin/marketplace.json",
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/tests/plugin-manifest.test.ts",
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/scripts/verify-plugin-install.sh"
+  ],
+  "timestamp": "2026-06-21T03:01:46Z"
+}

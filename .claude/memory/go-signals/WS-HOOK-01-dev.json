@@ -1,0 +1,17 @@
+{
+  "schema_version": "1.0.0",
+  "workstream_id": "WS-HOOK-01",
+  "phase": "dev",
+  "from_agent": "dev",
+  "to_phase": "staff-review",
+  "artifact_paths": [
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/hooks/teo-prompt-router.sh",
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/hooks/hooks.json",
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/scripts/verify-plugin-install.sh",
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/src/hooks/teo-prompt-router.test.ts",
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/src/hooks/hooks-json-userpromptsubmit.test.ts",
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/src/hooks/hooks-json.test.ts",
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/src/tests/marketplace-github-source.test.ts"
+  ],
+  "timestamp": "2026-06-23T09:52:45Z"
+}

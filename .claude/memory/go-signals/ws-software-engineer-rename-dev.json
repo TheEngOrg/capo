@@ -1,0 +1,24 @@
+{
+  "schema_version": "1.0.0",
+  "workstream_id": "ws-software-engineer-rename",
+  "phase": "dev",
+  "from_agent": "software-engineer",
+  "to_phase": "staff-review",
+  "artifact_paths": [
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/agents/software-engineer.md",
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/.claude/agents/software-engineer.md",
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/agents/dev-haiku.md",
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/.claude/agents/dev-haiku.md",
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/agents/staff-engineer.md",
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/.claude/agents/staff-engineer.md",
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/agents/engineering-manager.md",
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/.claude/agents/engineering-manager.md",
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/agents/capo.md",
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/.claude/agents/capo.md",
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/agents/qa.md",
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/.claude/agents/qa.md",
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/scripts/verify-plugin-install.sh",
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/src/agents/doctest-gate.test.ts"
+  ],
+  "timestamp": "2026-06-25T16:28:03Z"
+}

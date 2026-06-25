@@ -1,0 +1,11 @@
+{
+  "schema_version": "1.0.0",
+  "workstream_id": "ws-go-plugin-manifest",
+  "phase": "qa-spec",
+  "from_agent": "qa",
+  "to_phase": "dev",
+  "artifact_paths": [
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/tests/plugin-manifest.test.ts"
+  ],
+  "timestamp": "2026-06-21T02:48:23Z"
+}

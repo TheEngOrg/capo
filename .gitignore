@@ -10,6 +10,7 @@ coverage/
 .vitest/
 .firecrawl
 .workflows
+.claude
 
 # Bun output
 # bun.lockb is committed — required for bun install --frozen-lockfile in CI

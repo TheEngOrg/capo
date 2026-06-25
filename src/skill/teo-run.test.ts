@@ -15,6 +15,7 @@
 //   sign            — calls HmacSigner.sign() with payload
 //   ledger-append   — calls AppendOnlyLedger.append()
 //   ledger-close    — calls AppendOnlyLedger.close()
+//   plan-init       — initializes a plan artifact (session_id, project_id, directive?)
 //
 // OUTPUT CONTRACT:
 //   All stdout is a single JSON object. Errors are JSON { error: string }.

@@ -50,6 +50,12 @@ case "$arg" in
     ;;
 esac
 
+# Forward-compat stub: TEO_VALIDATE_ARTIFACT=1 enables artifact validation (off by default)
+if [[ "${TEO_VALIDATE_ARTIFACT:-}" == "1" ]]; then
+  # Stub: validation path registered but not yet enforced
+  : # no-op for now
+fi
+
 # Substantive /teo prompt — inject additionalContext
 printf '%s\n' '{
   "hookSpecificOutput": {

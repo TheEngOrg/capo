@@ -259,3 +259,38 @@ describe("evaluateGate() — GATE-STUB: discriminant coverage", () => {
     }
   });
 });
+
+// =============================================================================
+// WS-GATE-TYPE-01: GateVerdict — type unification with artifact schema
+//
+// GateVerdict in evaluate-gate.ts is currently:
+//   "PASS" | "FAIL" | "WARN"
+//
+// The artifact schema (src/core/artifacts.ts) uses for GATE_RESULT_ARTIFACT:
+//   verdict: z.enum(["PASS", "FAIL", "WARN", "UNENFORCED_MOCK"])
+//
+// These must be identical. Until dev widens GateVerdict to include
+// "UNENFORCED_MOCK", the @ts-expect-error below suppresses the TS error.
+// After dev's fix (GateVerdict widened), the @ts-expect-error becomes an
+// "unused @ts-expect-error" TS error — dev must remove it for typecheck to pass.
+// =============================================================================
+
+describe("GateVerdict — type unification with artifact schema", () => {
+  it("GateVerdict includes 'UNENFORCED_MOCK' to match artifact schema verdict union", () => {
+    // The artifact schema's GATE_RESULT_ARTIFACT verdict enum (from src/core/artifacts.ts).
+    // This is the authoritative source — GateVerdict must equal this set exactly.
+    const artifactVerdictEnum = ["PASS", "FAIL", "WARN", "UNENFORCED_MOCK"] as const;
+
+    // GateVerdict's current members. Dev: add "UNENFORCED_MOCK" here AND widen the
+    // GateVerdict type once the fix is implemented.
+    // @ts-expect-error — remove this line once dev widens GateVerdict to include UNENFORCED_MOCK
+    const _typeGuard: GateVerdict = "UNENFORCED_MOCK";
+    void _typeGuard;
+    const GATE_VERDICT_VALUES: GateVerdict[] = ["PASS", "FAIL", "WARN"];
+
+    // Runtime assertion: GateVerdict members must equal the artifact schema enum exactly.
+    // FAILS pre-fix: sorted(["PASS","FAIL","WARN"]) !== sorted(["PASS","FAIL","WARN","UNENFORCED_MOCK"])
+    // PASSES post-fix: dev adds "UNENFORCED_MOCK" to GATE_VERDICT_VALUES above.
+    expect([...GATE_VERDICT_VALUES].sort()).toEqual([...artifactVerdictEnum].sort());
+  });
+});

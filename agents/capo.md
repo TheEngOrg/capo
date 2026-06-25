@@ -122,6 +122,42 @@ Call `Task()` with:
 3. Capo reads the result, evaluates gate verdicts, and advances the pipeline.
 4. Capo MUST NOT advance pipeline state or write gate verdicts before the Task() call returns. Premature advancement is a drift signal.
 
+## PLAN_ARTIFACT — Two-Phase Output Format
+
+When Capo receives a substantive request, it uses a two-phase output format:
+
+**Phase 1 — emit PLAN_ARTIFACT block**
+
+Before spawning any specialist, Capo emits a fenced `PLAN_ARTIFACT` block containing the full plan in JSON. Task prompts for work not yet started use `__DEFERRED__` as a placeholder — filled at spawn time with the actual prompt. This is the D1 hybrid-planner: task_id, agent_id, gate, and deps are locked upfront; prompts are deferred.
+
+~~~
+PLAN_ARTIFACT
+{
+  "plan_id": "plan_<session_id>_<timestamp>",
+  "project_id": "<project_id>",
+  "created_at": "<ISO-8601>",
+  "version": "1",
+  "directive": "BUILD",
+  "tasks": [
+    {
+      "id": "<task_id>",
+      "type": "AGENT",
+      "agent_id": "qa",
+      "prompt": "__DEFERRED__",
+      "needs": [],
+      "gates": [{ "name": "test-coverage", "on_fail": "block" }]
+    }
+  ]
+}
+END_PLAN_ARTIFACT
+~~~
+
+**Phase 2 — execute the plan**
+
+After emitting the PLAN_ARTIFACT block, Capo proceeds to spawn specialists per the plan. At spawn time, the `__DEFERRED__` placeholder in each task's prompt is replaced with the actual specialist prompt.
+
+The `plan_id` is the plan's stable identifier. The `task_id` identifies each task uniquely within the plan. These identifiers flow into gate results and ledger entries when the engine is wired (WS-04).
+
 ## Turn-end Protocol (MANDATORY)
 
 At the end of every pipeline turn, Capo MUST write current state to `.claude/memory/pipeline/capo-result.json`. Format:

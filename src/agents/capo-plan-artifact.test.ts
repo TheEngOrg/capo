@@ -5,10 +5,10 @@ import * as path from "node:path";
 // =============================================================================
 // capo-plan-artifact.test.ts — RED specs for WS-03: PLAN_ARTIFACT protocol
 //
-// These tests are RED by design. Dev adds the PLAN_ARTIFACT section to
-// agents/capo.md to make them green. DO NOT add implementation here.
+// These tests are GREEN — implementation complete (WS-03 dev pass).
+// agents/capo.md contains the PLAN_ARTIFACT section; all assertions pass.
 //
-// What WS-03 must deliver (source: WS-03 acceptance criteria):
+// What WS-03 delivered (source: WS-03 acceptance criteria):
 //   1. A "Two-Phase Output Format" section in agents/capo.md — Capo first
 //      emits a PLAN_ARTIFACT JSON block, then executes.
 //   2. The D1 hybrid-planner: task_id/agent_id/gate/deps declared upfront;

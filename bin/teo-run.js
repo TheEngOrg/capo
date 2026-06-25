@@ -6518,7 +6518,12 @@ function gitRunner(args, cwd) {
   for (const key of GIT_ENV_KEYS_TO_STRIP) {
     delete env[key];
   }
-  const result = childProcess2.spawnSync("git", args, { cwd, encoding: "utf8", timeout: 3e4, env });
+  const result = childProcess2.spawnSync("git", args, {
+    cwd,
+    encoding: "utf8",
+    timeout: 3e4,
+    env
+  });
   return {
     exitCode: result.status ?? 1,
     stdout: result.stdout,

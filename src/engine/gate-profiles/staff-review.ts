@@ -36,8 +36,15 @@ export function runStaffReviewGate(input: GateProfileInput): GateProfileResult {
   }
 
   // git log always uses the real subprocess — injectable runner only applies to npm (typecheck)
-  const gitResult = realRunner("git", ["log", "--oneline", "-1"], cwd);
-  const commit_present = gitResult.exitCode === 0 && gitResult.stdout.trim().length > 0;
+  // GIT_CEILING_DIRECTORIES prevents git from walking up into a parent repo when cwd is under /tmp
+  const gitResult = childProcess.spawnSync("git", ["log", "--oneline", "-1"], {
+    cwd,
+    encoding: "utf8",
+    timeout: 30000,
+    env: { ...process.env, GIT_CEILING_DIRECTORIES: cwd },
+  });
+  const gitExitCode = gitResult.status ?? 1;
+  const commit_present = gitExitCode === 0 && gitResult.stdout.trim().length > 0;
 
   // typecheck uses the injectable runner (mocked in tests)
   const npmRunner: GateProfileRunner = input.runner ?? realRunner;

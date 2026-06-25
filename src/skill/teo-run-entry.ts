@@ -12,7 +12,7 @@
 //   ledger-append     — calls AppendOnlyLedger.append()
 //   ledger-close      — calls AppendOnlyLedger.close()
 //   plan-init         — initializes a plan artifact (session_id, project_id, directive?)
-//   evaluate-gate     — evaluates a gate (stub: always PASS, UNENFORCED_MOCK status)
+//   evaluate-gate     — evaluates a gate with real gate-profile enforcement (WS-06)
 //   verify-ledger     — reads a ledger JSONL file and verifies hash-chain integrity
 //
 // OUTPUT CONTRACT:
@@ -28,6 +28,8 @@ import { PlanSchema } from "../core/plan.js";
 import { HmacSigner } from "../core/sign.js";
 import { AppendOnlyLedger } from "../core/ledger.js";
 import { verifyAsync } from "../lib/ed25519.js";
+import { runGateProfile } from "../engine/gate-profiles/index.js";
+import type { GateProfileRunner } from "../engine/gate-profiles/types.js";
 
 // ---------------------------------------------------------------------------
 // Output helpers
@@ -232,8 +234,12 @@ function handleEvaluateGate(args: unknown): void {
   if (typeof session_id !== "string" || session_id.length === 0) {
     exitError({ error: "Missing required field: session_id" });
   }
+  const KNOWN_GATE_TYPES = ["acceptance-criteria", "qa-spec", "dev", "staff-review"];
   if (typeof gate_type !== "string" || gate_type.length === 0) {
     exitError({ error: "Missing required field: gate_type" });
+  }
+  if (!KNOWN_GATE_TYPES.includes(gate_type)) {
+    exitError({ error: `Unknown gate_type: ${gate_type}` });
   }
 
   const baseDir = a["ledger_base_dir"] as string | undefined;
@@ -243,7 +249,37 @@ function handleEvaluateGate(args: unknown): void {
   if (baseDir !== undefined) ledgerOpts.baseDir = baseDir;
   const ledger = new AppendOnlyLedger(ledgerOpts);
 
-  // Append a GATE ledger entry — stub, so verdict: null and UNENFORCED_MOCK status
+  // Extract context, cwd, and mock_runner for injectable testing
+  const context = a["context"] as Record<string, unknown> | undefined;
+  const cwd = typeof context?.["cwd"] === "string" ? context["cwd"] : "";
+  const mockRunnerRaw = context?.["mock_runner"] as
+    | { exit_code: number; stdout: string; stderr: string }
+    | undefined;
+  let runner: GateProfileRunner | undefined;
+  if (mockRunnerRaw !== undefined) {
+    runner = (_cmd: string, _args: string[], _cwd: string) => ({
+      exitCode: mockRunnerRaw.exit_code,
+      stdout: mockRunnerRaw.stdout,
+      stderr: mockRunnerRaw.stderr,
+    });
+  }
+
+  // Run the gate profile
+  let profileResult: ReturnType<typeof runGateProfile>;
+  try {
+    const profileInput =
+      runner !== undefined
+        ? { cwd, gate_type, ...(context !== undefined ? { context } : {}), runner }
+        : { cwd, gate_type, ...(context !== undefined ? { context } : {}) };
+    profileResult = runGateProfile(profileInput);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    exitError({ error: msg });
+  }
+
+  const { verdict, evidence } = profileResult;
+
+  // Append a GATE ledger entry with the real verdict
   const entry = ledger.append({
     session_id,
     workflow_id: gate_id,
@@ -252,11 +288,11 @@ function handleEvaluateGate(args: unknown): void {
     actor_id: "SYSTEM",
     actor_type: "SYSTEM",
     phase: "GATE",
-    verdict: null,
+    verdict: verdict,
     detail: {
       gate_id,
       gate_type,
-      status: "UNENFORCED_MOCK",
+      status: "ENFORCED",
     },
   });
 
@@ -266,12 +302,16 @@ function handleEvaluateGate(args: unknown): void {
     gate_id,
     task_id,
     session_id,
-    verdict: "PASS", // stub verdict
-    status: "UNENFORCED_MOCK", // L7 mandatory — never a real passing verdict
+    verdict,
+    status: "ENFORCED",
     evaluated_at,
     gate_type,
     ledger_seq: entry.seq,
+    evidence,
   });
+  if (verdict !== "PASS") {
+    process.exit(1);
+  }
 }
 
 // ---------------------------------------------------------------------------

@@ -6,7 +6,7 @@ var __export = (target, all) => {
 };
 
 // src/skill/teo-run-entry.ts
-import * as fs6 from "node:fs";
+import * as fs10 from "node:fs";
 import * as crypto3 from "node:crypto";
 
 // src/bootstrap/provision.ts
@@ -1210,8 +1210,8 @@ function getErrorMap() {
 
 // node_modules/zod/v3/helpers/parseUtil.js
 var makeIssue = (params) => {
-  const { data, path: path6, errorMaps, issueData } = params;
-  const fullPath = [...path6, ...issueData.path || []];
+  const { data, path: path8, errorMaps, issueData } = params;
+  const fullPath = [...path8, ...issueData.path || []];
   const fullIssue = {
     ...issueData,
     path: fullPath
@@ -1327,11 +1327,11 @@ var errorUtil;
 
 // node_modules/zod/v3/types.js
 var ParseInputLazyPath = class {
-  constructor(parent, value, path6, key) {
+  constructor(parent, value, path8, key) {
     this._cachedPath = [];
     this.parent = parent;
     this.data = value;
-    this._path = path6;
+    this._path = path8;
     this._key = key;
   }
   get path() {
@@ -5682,6 +5682,19 @@ function validateArtifact(input) {
     case "PLAN_ARTIFACT":
       schema = strict ? PlanArtifactSchema.strict() : PlanArtifactSchema;
       break;
+    case "AC_ARTIFACT": {
+      const AcArtifactSchema = external_exports.object({
+        workstream: external_exports.string().min(1),
+        acs: external_exports.array(
+          external_exports.object({
+            id: external_exports.string().min(1),
+            description: external_exports.string().min(1)
+          })
+        )
+      });
+      schema = strict ? AcArtifactSchema.strict() : AcArtifactSchema;
+      break;
+    }
     default:
       return {
         valid: false,
@@ -6014,6 +6027,226 @@ var HmacSigner = class _HmacSigner {
   }
 };
 
+// src/engine/gate-profiles/acceptance-criteria.ts
+import * as fs6 from "node:fs";
+import * as path6 from "node:path";
+function runAcceptanceCriteriaGate(input) {
+  const { cwd } = input;
+  if (!cwd) {
+    return { verdict: "FAIL", status: "ENFORCED", evidence: { reason: "Missing required context.cwd" } };
+  }
+  if (!fs6.existsSync(cwd)) {
+    return { verdict: "FAIL", status: "ENFORCED", evidence: { reason: `cwd not found: ${cwd}` } };
+  }
+  const acPath = path6.join(cwd, "ac.json");
+  if (!fs6.existsSync(acPath)) {
+    return { verdict: "FAIL", status: "ENFORCED", evidence: { reason: "ac.json not found" } };
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(fs6.readFileSync(acPath, "utf8"));
+  } catch (err2) {
+    const msg = err2 instanceof Error ? err2.message : String(err2);
+    return { verdict: "FAIL", status: "ENFORCED", evidence: { reason: "ac.json is not valid JSON", errors: [msg] } };
+  }
+  const result = validateArtifact({ type: "AC_ARTIFACT", payload: parsed, strict: true });
+  if (!result.valid) {
+    const errors = result.errors?.map((e) => String(e)) ?? ["schema validation failed"];
+    return { verdict: "FAIL", status: "ENFORCED", evidence: { reason: "ac.json schema invalid", errors } };
+  }
+  const payload = parsed;
+  return { verdict: "PASS", status: "ENFORCED", evidence: { ac_count: payload.acs.length } };
+}
+
+// src/engine/gate-profiles/qa-spec.ts
+import * as fs7 from "node:fs";
+import * as path7 from "node:path";
+function collectTestFiles(dir) {
+  const results = [];
+  let entries;
+  try {
+    entries = fs7.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return results;
+  }
+  for (const entry of entries) {
+    const fullPath = path7.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      results.push(...collectTestFiles(fullPath));
+    } else if (entry.isFile() && (entry.name.endsWith(".test.ts") || entry.name.endsWith(".spec.ts"))) {
+      results.push(fullPath);
+    }
+  }
+  return results;
+}
+function runQaSpecGate(input) {
+  const { cwd } = input;
+  if (!cwd) {
+    return { verdict: "FAIL", status: "ENFORCED", evidence: { reason: "Missing required context.cwd" } };
+  }
+  if (!fs7.existsSync(cwd)) {
+    return { verdict: "FAIL", status: "ENFORCED", evidence: { reason: `cwd not found: ${cwd}` } };
+  }
+  const acPath = path7.join(cwd, "ac.json");
+  if (!fs7.existsSync(acPath)) {
+    return { verdict: "FAIL", status: "ENFORCED", evidence: { reason: "ac.json not found", covered_acs: [], uncovered_acs: [] } };
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(fs7.readFileSync(acPath, "utf8"));
+  } catch (err2) {
+    const msg = err2 instanceof Error ? err2.message : String(err2);
+    return { verdict: "FAIL", status: "ENFORCED", evidence: { reason: "ac.json is not valid JSON", errors: [msg] } };
+  }
+  const result = validateArtifact({ type: "AC_ARTIFACT", payload: parsed, strict: true });
+  if (!result.valid) {
+    return { verdict: "FAIL", status: "ENFORCED", evidence: { reason: "ac.json schema invalid" } };
+  }
+  const payload = parsed;
+  const acIds = payload.acs.map((ac) => ac.id);
+  const testFiles = collectTestFiles(cwd);
+  if (testFiles.length === 0) {
+    return { verdict: "FAIL", status: "ENFORCED", evidence: { reason: "no test files found", covered_acs: [], uncovered_acs: acIds } };
+  }
+  const allContent = testFiles.map((f) => {
+    try {
+      return fs7.readFileSync(f, "utf8");
+    } catch {
+      return "";
+    }
+  }).join("\n");
+  const coveredAcs = [];
+  const uncoveredAcs = [];
+  for (const id of acIds) {
+    if (allContent.includes(`[${id}]`)) {
+      coveredAcs.push(id);
+    } else {
+      uncoveredAcs.push(id);
+    }
+  }
+  if (uncoveredAcs.length > 0) {
+    return { verdict: "FAIL", status: "ENFORCED", evidence: { covered_acs: coveredAcs, uncovered_acs: uncoveredAcs } };
+  }
+  return { verdict: "PASS", status: "ENFORCED", evidence: { covered_acs: coveredAcs, uncovered_acs: [] } };
+}
+
+// src/engine/gate-profiles/dev.ts
+import * as childProcess from "node:child_process";
+import * as fs8 from "node:fs";
+function defaultRunner(command, args, cwd) {
+  const result = childProcess.spawnSync(command, args, { cwd, encoding: "utf8", timeout: 12e4 });
+  return {
+    exitCode: result.status ?? 1,
+    stdout: result.stdout ?? "",
+    stderr: result.stderr ?? ""
+  };
+}
+function parseCoverage(output) {
+  const allFilesMatch = output.match(/All files\s*\|\s*([\d.]+)/);
+  if (allFilesMatch) {
+    const n = parseFloat(allFilesMatch[1] ?? "0");
+    if (!isNaN(n)) return n;
+  }
+  const coverageMatch = output.match(/Coverage[:\s]+([\d.]+)%/i);
+  if (coverageMatch) {
+    const n = parseFloat(coverageMatch[1] ?? "0");
+    if (!isNaN(n)) return n;
+  }
+  return 0;
+}
+function parseTestCount(output) {
+  const passedMatch = output.match(/(\d+)\s+passed/);
+  if (passedMatch) {
+    const n = parseInt(passedMatch[1] ?? "0", 10);
+    if (!isNaN(n)) return n;
+  }
+  return 0;
+}
+function runDevGate(input) {
+  const { cwd } = input;
+  if (!cwd) {
+    return { verdict: "FAIL", status: "ENFORCED", evidence: { reason: "Missing required context.cwd" } };
+  }
+  if (!fs8.existsSync(cwd)) {
+    return { verdict: "FAIL", status: "ENFORCED", evidence: { reason: `cwd not found: ${cwd}` } };
+  }
+  const runner = input.runner ?? defaultRunner;
+  const threshold = typeof input.context?.["coverage_threshold"] === "number" ? input.context["coverage_threshold"] : 99;
+  const result = runner("npm", ["run", "test:cov"], cwd);
+  if (result.exitCode !== 0) {
+    return {
+      verdict: "FAIL",
+      status: "ENFORCED",
+      evidence: { reason: "test suite failed", raw_output: result.stdout.slice(0, 500) }
+    };
+  }
+  const coverage_pct = parseCoverage(result.stdout);
+  const test_count = parseTestCount(result.stdout);
+  if (coverage_pct < threshold) {
+    return {
+      verdict: "FAIL",
+      status: "ENFORCED",
+      evidence: { reason: "coverage below threshold", coverage_pct, threshold, test_count }
+    };
+  }
+  return { verdict: "PASS", status: "ENFORCED", evidence: { test_count, coverage_pct, threshold } };
+}
+
+// src/engine/gate-profiles/staff-review.ts
+import * as childProcess2 from "node:child_process";
+import * as fs9 from "node:fs";
+function realRunner(command, args, cwd) {
+  const result = childProcess2.spawnSync(command, args, { cwd, encoding: "utf8", timeout: 3e4 });
+  return {
+    exitCode: result.status ?? 1,
+    stdout: result.stdout ?? "",
+    stderr: result.stderr ?? ""
+  };
+}
+function runStaffReviewGate(input) {
+  const { cwd } = input;
+  if (!cwd) {
+    return { verdict: "FAIL", status: "ENFORCED", evidence: { reason: "Missing required context.cwd" } };
+  }
+  if (!fs9.existsSync(cwd)) {
+    return { verdict: "FAIL", status: "ENFORCED", evidence: { reason: `cwd not found: ${cwd}` } };
+  }
+  const gitResult = realRunner("git", ["log", "--oneline", "-1"], cwd);
+  const commit_present = gitResult.exitCode === 0 && gitResult.stdout.trim().length > 0;
+  const npmRunner = input.runner ?? realRunner;
+  const typecheckResult = npmRunner("npm", ["run", "typecheck"], cwd);
+  const typecheck_clean = typecheckResult.exitCode === 0;
+  const typecheck_errors = typecheck_clean ? void 0 : (typecheckResult.stderr || typecheckResult.stdout).slice(0, 1e3);
+  if (commit_present && typecheck_clean) {
+    return { verdict: "PASS", status: "ENFORCED", evidence: { commit_present: true, typecheck_clean: true } };
+  }
+  return {
+    verdict: "FAIL",
+    status: "ENFORCED",
+    evidence: {
+      commit_present,
+      typecheck_clean,
+      ...typecheck_errors !== void 0 ? { typecheck_errors } : {}
+    }
+  };
+}
+
+// src/engine/gate-profiles/index.ts
+function runGateProfile(input) {
+  switch (input.gate_type) {
+    case "acceptance-criteria":
+      return runAcceptanceCriteriaGate(input);
+    case "qa-spec":
+      return runQaSpecGate(input);
+    case "dev":
+      return runDevGate(input);
+    case "staff-review":
+      return runStaffReviewGate(input);
+    default:
+      throw new Error(`Unknown gate_type: ${input.gate_type}`);
+  }
+}
+
 // src/skill/teo-run-entry.ts
 function writeJson(obj) {
   process.stdout.write(JSON.stringify(obj) + "\n");
@@ -6167,8 +6400,12 @@ function handleEvaluateGate(args) {
   if (typeof session_id !== "string" || session_id.length === 0) {
     exitError({ error: "Missing required field: session_id" });
   }
+  const KNOWN_GATE_TYPES = ["acceptance-criteria", "qa-spec", "dev", "staff-review"];
   if (typeof gate_type !== "string" || gate_type.length === 0) {
     exitError({ error: "Missing required field: gate_type" });
+  }
+  if (!KNOWN_GATE_TYPES.includes(gate_type)) {
+    exitError({ error: `Unknown gate_type: ${gate_type}` });
   }
   const baseDir = a["ledger_base_dir"];
   const ledgerOpts = {
@@ -6176,6 +6413,26 @@ function handleEvaluateGate(args) {
   };
   if (baseDir !== void 0) ledgerOpts.baseDir = baseDir;
   const ledger = new AppendOnlyLedger(ledgerOpts);
+  const context = a["context"];
+  const cwd = typeof context?.["cwd"] === "string" ? context["cwd"] : "";
+  const mockRunnerRaw = context?.["mock_runner"];
+  let runner;
+  if (mockRunnerRaw !== void 0) {
+    runner = (_cmd, _args, _cwd) => ({
+      exitCode: mockRunnerRaw.exit_code,
+      stdout: mockRunnerRaw.stdout,
+      stderr: mockRunnerRaw.stderr
+    });
+  }
+  let profileResult;
+  try {
+    const profileInput = runner !== void 0 ? { cwd, gate_type, ...context !== void 0 ? { context } : {}, runner } : { cwd, gate_type, ...context !== void 0 ? { context } : {} };
+    profileResult = runGateProfile(profileInput);
+  } catch (err2) {
+    const msg = err2 instanceof Error ? err2.message : String(err2);
+    exitError({ error: msg });
+  }
+  const { verdict, evidence } = profileResult;
   const entry = ledger.append({
     session_id,
     workflow_id: gate_id,
@@ -6184,11 +6441,11 @@ function handleEvaluateGate(args) {
     actor_id: "SYSTEM",
     actor_type: "SYSTEM",
     phase: "GATE",
-    verdict: null,
+    verdict,
     detail: {
       gate_id,
       gate_type,
-      status: "UNENFORCED_MOCK"
+      status: "ENFORCED"
     }
   });
   const evaluated_at = (/* @__PURE__ */ new Date()).toISOString();
@@ -6196,14 +6453,16 @@ function handleEvaluateGate(args) {
     gate_id,
     task_id,
     session_id,
-    verdict: "PASS",
-    // stub verdict
-    status: "UNENFORCED_MOCK",
-    // L7 mandatory — never a real passing verdict
+    verdict,
+    status: "ENFORCED",
     evaluated_at,
     gate_type,
-    ledger_seq: entry.seq
+    ledger_seq: entry.seq,
+    evidence
   });
+  if (verdict !== "PASS") {
+    process.exit(1);
+  }
 }
 async function handleVerifyLedger(args) {
   const a = args;
@@ -6212,10 +6471,10 @@ async function handleVerifyLedger(args) {
   if (typeof ledger_file !== "string" || ledger_file.length === 0) {
     exitError({ ok: false, error: "Missing required field: ledger_file" });
   }
-  if (!fs6.existsSync(ledger_file)) {
+  if (!fs10.existsSync(ledger_file)) {
     exitError({ ok: false, error: `Ledger file not found: ${ledger_file}` });
   }
-  const fileContent = fs6.readFileSync(ledger_file, "utf8");
+  const fileContent = fs10.readFileSync(ledger_file, "utf8");
   const rawLines = fileContent.split("\n").filter((l) => l.trim().length > 0);
   if (rawLines.length === 0) {
     exitError({ ok: false, error: "Ledger file is empty or contains no valid entries" });

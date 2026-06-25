@@ -441,9 +441,23 @@ describe("T-WS04-07: UNENFORCED_MOCK verdict — loop continues, emits warning",
   // CLI result: evaluate-gate exits 0, { verdict:"PASS", status:"UNENFORCED_MOCK", ... }
   //             validate-artifact exits 0, { valid: true } for GATE_RESULT_ARTIFACT UNENFORCED_MOCK
 
-  it("evaluate-gate always returns verdict PASS with status UNENFORCED_MOCK (current stub)", () => {
+  it("evaluate-gate returns ENFORCED status — WS-06 real enforcement active", () => {
+    // WS-06: qa-spec gate requires context.cwd with ac.json + test file containing [AC-N] tags
     const tempDir = makeTempDir();
-    const input = JSON.stringify({ ...MINIMAL_GATE_INPUT, ledger_base_dir: tempDir });
+    const acJson = {
+      workstream: "ws-04-boundary",
+      acs: [{ id: "AC-1", description: "Gate returns ENFORCED status" }],
+    };
+    fs.writeFileSync(path.join(tempDir, "ac.json"), JSON.stringify(acJson));
+    fs.writeFileSync(
+      path.join(tempDir, "gate.test.ts"),
+      "it('[AC-1] evaluate-gate returns ENFORCED', () => {});"
+    );
+    const input = JSON.stringify({
+      ...MINIMAL_GATE_INPUT,
+      ledger_base_dir: tempDir,
+      context: { cwd: tempDir },
+    });
     const { exitCode, stdout } = runCli("evaluate-gate", input);
     expect(exitCode).toBe(0);
     const out = stdout as {
@@ -457,7 +471,7 @@ describe("T-WS04-07: UNENFORCED_MOCK verdict — loop continues, emits warning",
       ledger_seq: number;
     };
     expect(out.verdict).toBe("PASS");
-    expect(out.status).toBe("UNENFORCED_MOCK");
+    expect(out.status).toBe("ENFORCED");
   });
 
   it("validate-artifact accepts GATE_RESULT_ARTIFACT with verdict UNENFORCED_MOCK", () => {
@@ -611,8 +625,22 @@ describe("T-WS04-11: evaluate-gate returns well-formed response for each task in
   // CLI result: evaluate-gate exits 0, returns all required fields; ledger_seq increments
 
   it("evaluate-gate returns all required output fields for a valid input", () => {
+    // WS-06: qa-spec gate requires context.cwd with ac.json + test file containing [AC-N] tags
     const tempDir = makeTempDir();
-    const input = JSON.stringify({ ...MINIMAL_GATE_INPUT, ledger_base_dir: tempDir });
+    const acJson = {
+      workstream: "ws-04-t11",
+      acs: [{ id: "AC-1", description: "All required fields returned" }],
+    };
+    fs.writeFileSync(path.join(tempDir, "ac.json"), JSON.stringify(acJson));
+    fs.writeFileSync(
+      path.join(tempDir, "check.test.ts"),
+      "it('[AC-1] returns all required fields', () => {});"
+    );
+    const input = JSON.stringify({
+      ...MINIMAL_GATE_INPUT,
+      ledger_base_dir: tempDir,
+      context: { cwd: tempDir },
+    });
     const { exitCode, stdout } = runCli("evaluate-gate", input);
     expect(exitCode).toBe(0);
     const out = stdout as Record<string, unknown>;
@@ -631,20 +659,41 @@ describe("T-WS04-11: evaluate-gate returns well-formed response for each task in
     // instance per process — seq is in-process monotonic, not cross-process monotonic).
     // The in-process increment is tested by the ledger unit tests (src/core/ledger.test.ts).
     // The CLI contract is: each independent call returns ledger_seq >= 1.
+    //
+    // WS-06: qa-spec requires context.cwd with ac.json + test file.
+    //        dev requires context.cwd + mock_runner (avoids running npm test in a subprocess).
     const tempDir = makeTempDir();
+    const acJson = {
+      workstream: "ws-04-seq",
+      acs: [{ id: "AC-1", description: "ledger_seq increments" }],
+    };
+    fs.writeFileSync(path.join(tempDir, "ac.json"), JSON.stringify(acJson));
+    fs.writeFileSync(
+      path.join(tempDir, "seq.test.ts"),
+      "it('[AC-1] ledger_seq increments', () => {});"
+    );
     const inputA = JSON.stringify({
       gate_id: "gate-qa-001",
       task_id: "task-qa-001",
       session_id: "session-ws04-seq-test",
       gate_type: "qa-spec",
       ledger_base_dir: tempDir,
+      context: { cwd: tempDir },
     });
     const inputB = JSON.stringify({
       gate_id: "gate-dev-001",
       task_id: "task-dev-001",
       session_id: "session-ws04-seq-test",
-      gate_type: "dev-impl",
+      gate_type: "dev",
       ledger_base_dir: tempDir,
+      context: {
+        cwd: tempDir,
+        mock_runner: {
+          exit_code: 0,
+          stdout: "All files  |  100  |  100  |  100  |  100  |\nTest Files  5 passed (5)\n",
+          stderr: "",
+        },
+      },
     });
 
     const resultA = runCli("evaluate-gate", inputA);
@@ -728,40 +777,63 @@ describe("T-WS04-13: Golden path — evaluate-gate PASS for each task in the ARC
   //
   // CLI result: evaluate-gate exits 0, { verdict:"PASS", status:"UNENFORCED_MOCK", ... }
 
-  it("evaluate-gate returns PASS + UNENFORCED_MOCK for qa-spec gate", () => {
+  it("evaluate-gate returns PASS + ENFORCED for qa-spec gate", () => {
+    // WS-06: qa-spec gate requires context.cwd with ac.json + test file containing [AC-N] tags
     const tempDir = makeTempDir();
+    const acJson = {
+      workstream: "ws-04-golden",
+      acs: [{ id: "AC-1", description: "qa-spec gate passes" }],
+    };
+    fs.writeFileSync(path.join(tempDir, "ac.json"), JSON.stringify(acJson));
+    fs.writeFileSync(
+      path.join(tempDir, "golden.test.ts"),
+      "it('[AC-1] qa-spec gate passes', () => {});"
+    );
     const input = JSON.stringify({
       gate_id: "gate-qa-spec-001",
       task_id: "task-qa-spec-001",
       session_id: "session-golden-arch-001",
       gate_type: "qa-spec",
       ledger_base_dir: tempDir,
+      context: { cwd: tempDir },
     });
     const { exitCode, stdout } = runCli("evaluate-gate", input);
     expect(exitCode).toBe(0);
     const out = stdout as { verdict: string; status: string; evaluated_at: string };
     expect(out.verdict).toBe("PASS");
-    expect(out.status).toBe("UNENFORCED_MOCK");
+    expect(out.status).toBe("ENFORCED");
     expect(out.evaluated_at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   });
 
-  it("evaluate-gate returns PASS + UNENFORCED_MOCK for dev-impl gate", () => {
+  it("evaluate-gate returns PASS + ENFORCED for dev gate", () => {
+    // WS-06: dev gate requires context.cwd + mock_runner (injectable, avoids spawning npm)
+    // gate_type "dev-impl" is unknown under WS-06 — use "dev" (one of the four known types)
     const tempDir = makeTempDir();
     const input = JSON.stringify({
       gate_id: "gate-dev-impl-001",
       task_id: "task-dev-impl-001",
       session_id: "session-golden-arch-001",
-      gate_type: "dev-impl",
+      gate_type: "dev",
       ledger_base_dir: tempDir,
+      context: {
+        cwd: tempDir,
+        mock_runner: {
+          exit_code: 0,
+          stdout: "All files  |  100  |  100  |  100  |  100  |\nTest Files  5 passed (5)\n",
+          stderr: "",
+        },
+      },
     });
     const { exitCode, stdout } = runCli("evaluate-gate", input);
     expect(exitCode).toBe(0);
     const out = stdout as { verdict: string; status: string };
     expect(out.verdict).toBe("PASS");
-    expect(out.status).toBe("UNENFORCED_MOCK");
+    expect(out.status).toBe("ENFORCED");
   });
 
-  it("evaluate-gate returns PASS + UNENFORCED_MOCK for staff-review gate", () => {
+  it("evaluate-gate returns PASS + ENFORCED for staff-review gate", () => {
+    // WS-06: staff-review gate runs "git log --oneline -1" (real subprocess) + injectable runner
+    // for typecheck. Use REPO_ROOT as cwd (git log works there) and inject mock_runner for npm.
     const tempDir = makeTempDir();
     const input = JSON.stringify({
       gate_id: "gate-staff-review-001",
@@ -769,12 +841,16 @@ describe("T-WS04-13: Golden path — evaluate-gate PASS for each task in the ARC
       session_id: "session-golden-arch-001",
       gate_type: "staff-review",
       ledger_base_dir: tempDir,
+      context: {
+        cwd: REPO_ROOT,
+        mock_runner: { exit_code: 0, stdout: "", stderr: "" },
+      },
     });
     const { exitCode, stdout } = runCli("evaluate-gate", input);
     expect(exitCode).toBe(0);
     const out = stdout as { verdict: string; status: string };
     expect(out.verdict).toBe("PASS");
-    expect(out.status).toBe("UNENFORCED_MOCK");
+    expect(out.status).toBe("ENFORCED");
   });
 });
 
@@ -970,27 +1046,68 @@ describe("T-WS04-17: Full ARCH pipeline end-to-end — all CLI contracts hold se
     expect(out.valid).toBe(true);
   });
 
-  it("steps 3,6,9: evaluate-gate returns PASS + UNENFORCED_MOCK for all 3 pipeline tasks", () => {
+  it("steps 3,6,9: evaluate-gate returns PASS + ENFORCED for all 3 pipeline tasks", () => {
+    // WS-06: each gate type now runs a real profile:
+    //   qa-spec     — requires context.cwd with ac.json + test file containing [AC-N] tags
+    //   dev         — requires context.cwd + mock_runner (injectable, avoids spawning npm)
+    //   staff-review — requires context.cwd (REPO_ROOT, git log works) + mock_runner for typecheck
+    // gate_type "dev-impl" is unknown under WS-06 — replaced with "dev"
     const tempDir = makeTempDir();
     const sessionId = "session-e2e-arch-001";
 
+    // Set up qa-spec fixture: ac.json + test file with [AC-1] tag
+    const acJson = {
+      workstream: "ws-04-e2e",
+      acs: [{ id: "AC-1", description: "E2E pipeline gate passes" }],
+    };
+    fs.writeFileSync(path.join(tempDir, "ac.json"), JSON.stringify(acJson));
+    fs.writeFileSync(
+      path.join(tempDir, "e2e.test.ts"),
+      "it('[AC-1] E2E pipeline gate passes', () => {});"
+    );
+
+    const devMockRunner = {
+      exit_code: 0,
+      stdout: "All files  |  100  |  100  |  100  |  100  |\nTest Files  5 passed (5)\n",
+      stderr: "",
+    };
+    const typecheckMockRunner = { exit_code: 0, stdout: "", stderr: "" };
+
     const taskGates = [
-      { gate_id: "gate-qa-e2e", task_id: "task-qa-e2e", gate_type: "qa-spec" },
-      { gate_id: "gate-dev-e2e", task_id: "task-dev-e2e", gate_type: "dev-impl" },
-      { gate_id: "gate-staff-e2e", task_id: "task-staff-e2e", gate_type: "staff-review" },
+      {
+        gate_id: "gate-qa-e2e",
+        task_id: "task-qa-e2e",
+        gate_type: "qa-spec",
+        context: { cwd: tempDir },
+      },
+      {
+        gate_id: "gate-dev-e2e",
+        task_id: "task-dev-e2e",
+        gate_type: "dev",
+        context: { cwd: tempDir, mock_runner: devMockRunner },
+      },
+      {
+        gate_id: "gate-staff-e2e",
+        task_id: "task-staff-e2e",
+        gate_type: "staff-review",
+        context: { cwd: REPO_ROOT, mock_runner: typecheckMockRunner },
+      },
     ];
 
     for (const gate of taskGates) {
       const input = JSON.stringify({
-        ...gate,
+        gate_id: gate.gate_id,
+        task_id: gate.task_id,
+        gate_type: gate.gate_type,
         session_id: sessionId,
         ledger_base_dir: tempDir,
+        context: gate.context,
       });
       const { exitCode, stdout } = runCli("evaluate-gate", input);
       expect(exitCode).toBe(0);
       const out = stdout as { verdict: string; status: string; ledger_seq: number };
       expect(out.verdict).toBe("PASS");
-      expect(out.status).toBe("UNENFORCED_MOCK");
+      expect(out.status).toBe("ENFORCED");
       // ledger_seq >= 1 per CLI call (in-process only — each spawnSync is a fresh process)
       expect(out.ledger_seq).toBeGreaterThanOrEqual(1);
     }

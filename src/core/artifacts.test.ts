@@ -460,3 +460,68 @@ describe("repairJson() + validateArtifact() — golden path round-trip", () => {
     expect(result.valid).toBe(true);
   });
 });
+
+// =============================================================================
+// AC_ARTIFACT schema — WS-06: added to artifacts.ts; coverage gate requires tests
+// =============================================================================
+
+describe("validateArtifact() — AC_ARTIFACT (WS-06)", () => {
+  // M: misuse — missing required field
+  it("M-AC1. AC_ARTIFACT missing workstream → { valid: false }", () => {
+    const result = validateArtifact({
+      type: "AC_ARTIFACT",
+      payload: { acs: [{ id: "AC-1", description: "test" }] },
+    });
+    expect(result.valid).toBe(false);
+    expect(result.errors).toBeDefined();
+  });
+
+  it("M-AC2. AC_ARTIFACT missing acs → { valid: false }", () => {
+    const result = validateArtifact({
+      type: "AC_ARTIFACT",
+      payload: { workstream: "ws-06" },
+    });
+    expect(result.valid).toBe(false);
+  });
+
+  it("M-AC3. AC_ARTIFACT ac item missing description → { valid: false }", () => {
+    const result = validateArtifact({
+      type: "AC_ARTIFACT",
+      payload: { workstream: "ws-06", acs: [{ id: "AC-1" }] },
+    });
+    expect(result.valid).toBe(false);
+  });
+
+  // B: boundary — strict mode rejects extra fields
+  it("B-AC1. AC_ARTIFACT strict=true with extra top-level field → { valid: false }", () => {
+    const result = validateArtifact({
+      type: "AC_ARTIFACT",
+      payload: { workstream: "ws-06", acs: [], extra_field: "should-be-rejected" },
+      strict: true,
+    });
+    expect(result.valid).toBe(false);
+  });
+
+  // G: golden path
+  it("G-AC1. AC_ARTIFACT valid payload → { valid: true }", () => {
+    const result = validateArtifact({
+      type: "AC_ARTIFACT",
+      payload: {
+        workstream: "ws-06",
+        acs: [
+          { id: "AC-1", description: "Gate returns ENFORCED status" },
+          { id: "AC-2", description: "Unknown gate_type returns exit 1 error" },
+        ],
+      },
+    });
+    expect(result.valid).toBe(true);
+  });
+
+  it("G-AC2. AC_ARTIFACT empty acs array → { valid: true }", () => {
+    const result = validateArtifact({
+      type: "AC_ARTIFACT",
+      payload: { workstream: "ws-06", acs: [] },
+    });
+    expect(result.valid).toBe(true);
+  });
+});

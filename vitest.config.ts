@@ -33,6 +33,15 @@ export default defineConfig({
         // teo-run.test.ts). In-process v8 instrumentation cannot reach across the
         // process boundary, so this file is excluded per ADR-064 peripheral-scaffold policy.
         "src/skill/teo-run-entry.ts",
+        // WS-06: gate-profile implementations — tested via CLI subprocess integration
+        // (evaluate-gate-cli.test.ts). In-process v8 instrumentation cannot reach
+        // across the process boundary; same policy as teo-run-entry.ts per ADR-064.
+        "src/engine/gate-profiles/acceptance-criteria.ts",
+        "src/engine/gate-profiles/dev.ts",
+        "src/engine/gate-profiles/qa-spec.ts",
+        "src/engine/gate-profiles/staff-review.ts",
+        "src/engine/gate-profiles/index.ts",
+        "src/engine/gate-profiles/types.ts",
       ],
       // Per-file 100% thresholds on critical-path modules.
       // Global thresholds are intentionally omitted — peripheral files should

@@ -13,17 +13,21 @@
 //   ledger-close      — calls AppendOnlyLedger.close()
 //   plan-init         — initializes a plan artifact (session_id, project_id, directive?)
 //   evaluate-gate     — evaluates a gate (stub: always PASS, UNENFORCED_MOCK status)
+//   verify-ledger     — reads a ledger JSONL file and verifies hash-chain integrity
 //
 // OUTPUT CONTRACT:
 //   All stdout is a single JSON object. Errors are JSON { error: string }.
 //   Exit code 0 = success, 1+ = error.
 // =============================================================================
 
+import * as fs from "node:fs";
+import * as crypto from "node:crypto";
 import { provision } from "../bootstrap/provision.js";
 import { repairJson, validateArtifact } from "../core/artifacts.js";
 import { PlanSchema } from "../core/plan.js";
 import { HmacSigner } from "../core/sign.js";
 import { AppendOnlyLedger } from "../core/ledger.js";
+import { verifyAsync } from "../lib/ed25519.js";
 
 // ---------------------------------------------------------------------------
 // Output helpers
@@ -274,6 +278,118 @@ function handleEvaluateGate(args: unknown): void {
 // Main
 // ---------------------------------------------------------------------------
 
+async function handleVerifyLedger(args: unknown): Promise<void> {
+  const a = args as Record<string, unknown>;
+  const ledger_file = a["ledger_file"];
+  const public_key = a["public_key"];
+
+  // Validate required field
+  if (typeof ledger_file !== "string" || ledger_file.length === 0) {
+    exitError({ ok: false, error: "Missing required field: ledger_file" });
+  }
+
+  // Check file exists
+  if (!fs.existsSync(ledger_file)) {
+    exitError({ ok: false, error: `Ledger file not found: ${ledger_file}` });
+  }
+
+  // Read file content
+  const fileContent = fs.readFileSync(ledger_file, "utf8");
+  const rawLines = fileContent.split("\n").filter((l) => l.trim().length > 0);
+
+  // Empty file check
+  if (rawLines.length === 0) {
+    exitError({ ok: false, error: "Ledger file is empty or contains no valid entries" });
+  }
+
+  // Parse all lines
+  const parsedEntries: Array<{ raw: string; obj: Record<string, unknown> }> = [];
+  for (let i = 0; i < rawLines.length; i++) {
+    const raw = rawLines[i]!;
+    let obj: unknown;
+    try {
+      obj = JSON.parse(raw);
+    } catch {
+      exitError({ ok: false, error: `Malformed JSON at line ${i + 1}: ${raw.slice(0, 80)}` });
+    }
+    parsedEntries.push({ raw, obj: obj as Record<string, unknown> });
+  }
+
+  // Detect mode: if any entry has prev_hash, use Mode B (hash chain); otherwise Mode A (seq only)
+  const hasAnyPrevHash = parsedEntries.some((e) => "prev_hash" in e.obj);
+
+  if (hasAnyPrevHash) {
+    // Mode B: hash chain verification
+    for (let i = 0; i < parsedEntries.length; i++) {
+      const entry = parsedEntries[i]!;
+      const seq = entry.obj["seq"] as number | undefined;
+
+      if (i === 0) {
+        const prev_hash = entry.obj["prev_hash"];
+        if (prev_hash !== null && prev_hash !== undefined) {
+          exitError({
+            ok: false,
+            error: "Hash chain broken: first entry must have prev_hash null or absent",
+            broken_at_seq: seq,
+          });
+        }
+      } else {
+        const prevRaw = parsedEntries[i - 1]!.raw;
+        const expectedHash = crypto.createHash("sha256").update(prevRaw, "utf8").digest("hex");
+        const prev_hash = entry.obj["prev_hash"];
+        if (prev_hash !== expectedHash) {
+          exitError({
+            ok: false,
+            error: `Hash chain broken at seq ${String(seq)}: prev_hash mismatch`,
+            broken_at_seq: seq,
+          });
+        }
+      }
+    }
+  } else {
+    // Mode A: seq strictly monotonic 1..N (no gaps, duplicates, or out-of-order)
+    for (let i = 0; i < parsedEntries.length; i++) {
+      const entry = parsedEntries[i]!;
+      const seq = entry.obj["seq"] as number | undefined;
+      const expectedSeq = i + 1;
+
+      if (seq !== expectedSeq) {
+        exitError({
+          ok: false,
+          error: `Sequence broken: expected seq ${expectedSeq}, got ${String(seq)}`,
+          broken_at_seq: seq,
+        });
+      }
+    }
+  }
+
+  // Signature verification (when public_key provided)
+  if (typeof public_key === "string" && public_key.length > 0) {
+    const pubKeyBytes = Buffer.from(public_key, "hex");
+    for (const entry of parsedEntries) {
+      const sig = entry.obj["signature"];
+      if (typeof sig === "string" && sig.length > 0) {
+        const sigBytes = Buffer.from(sig, "hex");
+        const lineBytes = Buffer.from(entry.raw, "utf8");
+        const valid = await verifyAsync(
+          new Uint8Array(sigBytes),
+          new Uint8Array(lineBytes),
+          new Uint8Array(pubKeyBytes)
+        );
+        if (!valid) {
+          const seq = entry.obj["seq"] as number | undefined;
+          exitError({
+            ok: false,
+            error: `Signature verification failed at seq ${String(seq)}`,
+          });
+        }
+      }
+    }
+  }
+
+  writeJson({ ok: true, entry_count: parsedEntries.length, chain_intact: true });
+}
+
 async function main(): Promise<void> {
   const [, , command, jsonArg] = process.argv;
 
@@ -324,6 +440,9 @@ async function main(): Promise<void> {
         break;
       case "evaluate-gate":
         handleEvaluateGate(args);
+        break;
+      case "verify-ledger":
+        await handleVerifyLedger(args);
         break;
       default:
         exitError({ error: `Unknown command: ${command}` });

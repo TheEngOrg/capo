@@ -91,6 +91,19 @@ export function validateArtifact(input: ValidateArtifactInput): ValidateArtifact
     case "PLAN_ARTIFACT":
       schema = strict ? PlanArtifactSchema.strict() : PlanArtifactSchema;
       break;
+    case "AC_ARTIFACT": {
+      const AcArtifactSchema = z.object({
+        workstream: z.string().min(1),
+        acs: z.array(
+          z.object({
+            id: z.string().min(1),
+            description: z.string().min(1),
+          })
+        ),
+      });
+      schema = strict ? AcArtifactSchema.strict() : AcArtifactSchema;
+      break;
+    }
     default:
       return {
         valid: false,

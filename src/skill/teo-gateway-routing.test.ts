@@ -1,5 +1,5 @@
-// STATUS: FAILING (tests 2, 3, 6, 8) — G1 gateway routing not yet wired in skills/teo/SKILL.md
-// Tests 1, 4, 5, 7 should pass; tests 2, 3, 6, 8 fail until dev implements G1 wire
+// STATUS: PASSING — all 11 tests green. G1 gateway routing wired in skills/teo/SKILL.md (WS-05).
+// Tests 2, 3, 6, 8 were expected-fail pre-impl; all pass post-implementation.
 //
 // WS-05: G1 gateway routing — teo/SKILL.md routes Capo-delegated BUILD requests through teo-build
 //

@@ -14,6 +14,7 @@
 //   plan-init         — initializes a plan artifact (session_id, project_id, directive?)
 //   evaluate-gate     — evaluates a gate with real gate-profile enforcement (WS-06)
 //   verify-ledger     — reads a ledger JSONL file and verifies hash-chain integrity
+//   verify-receipt    — verifies a run receipt by run_id (WS-RUN-RECEIPT-01)
 //
 // OUTPUT CONTRACT:
 //   All stdout is a single JSON object. Errors are JSON { error: string }.
@@ -37,9 +38,13 @@ function exitError(obj: unknown): never {
 // Command handlers
 // ---------------------------------------------------------------------------
 
-async function handleProvision(args: unknown): Promise<void> {
+async function handleProvision(args: unknown, jsonArg: string): Promise<void> {
   const { provision } = await import("../bootstrap/provision.js");
+  const { resolveDefaultLedgerBase } = await import("../core/ledger.js");
+  const { buildRunReceipt, writeRunReceipt } = await import("../core/run-receipt.js");
   const opts = args as Parameters<typeof provision>[0];
+  const baseDir = (args as Record<string, unknown>)["baseDir"] as string | undefined;
+  const effectiveBaseDir = baseDir ?? resolveDefaultLedgerBase();
 
   // Convert Uint8Array-like serialized objects back to Uint8Array for revocation.
   // An all-zeros signature array is treated as "no signature provided" (undefined),
@@ -64,13 +69,32 @@ async function handleProvision(args: unknown): Promise<void> {
     result = { status: "error", kind: "io_error", reason: message };
   }
 
-  // Provision errors still exit 1 (to signal error to shell)
+  // Provision errors still exit 1 (to signal error to shell), but emit a FAIL receipt first.
   if (result.status === "error") {
-    writeJson(result);
+    const failReceipt = buildRunReceipt({
+      command: "provision",
+      argsRaw: jsonArg,
+      actor_id: "teo-run",
+      outcome: "FAIL",
+      exit_code: 1,
+      baseDir: effectiveBaseDir,
+    });
+    writeRunReceipt(failReceipt, effectiveBaseDir);
+    writeJson({ ...result, run_id: failReceipt.run_id, sig: failReceipt.sig });
     process.exit(1);
   }
 
-  writeJson(result);
+  const receipt = buildRunReceipt({
+    command: "provision",
+    argsRaw: jsonArg,
+    actor_id: "teo-run",
+    outcome: "OK",
+    exit_code: 0,
+    baseDir: effectiveBaseDir,
+  });
+  writeRunReceipt(receipt, effectiveBaseDir);
+
+  writeJson({ ...result, run_id: receipt.run_id, sig: receipt.sig });
 
   // S8: surface revocation warning to stderr so operators see it (not buried in JSON)
   if ("warning" in result && typeof result.warning === "string") {
@@ -78,22 +102,50 @@ async function handleProvision(args: unknown): Promise<void> {
   }
 }
 
-async function handleValidatePlan(args: unknown): Promise<void> {
+async function handleValidatePlan(args: unknown, jsonArg: string): Promise<void> {
   const { PlanSchema } = await import("../core/plan.js");
+  const { resolveDefaultLedgerBase } = await import("../core/ledger.js");
+  const { buildRunReceipt, writeRunReceipt } = await import("../core/run-receipt.js");
+
+  // validate-plan args IS the plan payload — baseDir cannot come from args without
+  // polluting PlanSchema. Read it from TEO_BASE_DIR env var, then fall back to
+  // resolveDefaultLedgerBase() so that tests can inject via { TEO_BASE_DIR: ... }.
+  const envBaseDir = process.env["TEO_BASE_DIR"];
+  const effectiveBaseDir =
+    typeof envBaseDir === "string" && envBaseDir.length > 0
+      ? envBaseDir
+      : resolveDefaultLedgerBase();
+
   const parsed = PlanSchema.safeParse(args);
 
+  let result: Record<string, unknown>;
   if (parsed.success) {
-    writeJson({ valid: true });
+    result = { valid: true };
   } else {
-    writeJson({
+    result = {
       valid: false,
       errors: parsed.error.issues,
-    });
+    };
   }
+
+  const receipt = buildRunReceipt({
+    command: "validate-plan",
+    argsRaw: jsonArg,
+    actor_id: "teo-run",
+    outcome: "OK",
+    exit_code: 0,
+    baseDir: effectiveBaseDir,
+  });
+  writeRunReceipt(receipt, effectiveBaseDir);
+
+  writeJson({ ...result, run_id: receipt.run_id, sig: receipt.sig });
 }
 
 async function handleValidateArtifact(rawJsonArg: string): Promise<void> {
   const { repairJson, validateArtifact } = await import("../core/artifacts.js");
+  const { resolveDefaultLedgerBase } = await import("../core/ledger.js");
+  const { buildRunReceipt, writeRunReceipt } = await import("../core/run-receipt.js");
+
   // Repair the raw arg string first (handles trailing commas, single-quoted strings, etc.)
   let parsedArg: unknown;
   try {
@@ -108,6 +160,8 @@ async function handleValidateArtifact(rawJsonArg: string): Promise<void> {
   const a = parsedArg as Record<string, unknown>;
   const type = a["type"] as string;
   const strictRaw = a["strict"];
+  const baseDir = a["baseDir"] as string | undefined;
+  const effectiveBaseDir = baseDir ?? resolveDefaultLedgerBase();
   let payload = a["payload"];
 
   // If payload is a string, attempt to repair + parse it as a JSON object/array.
@@ -139,13 +193,27 @@ async function handleValidateArtifact(rawJsonArg: string): Promise<void> {
     typeof strictRaw === "boolean" ? { type, payload, strict: strictRaw } : { type, payload };
 
   const result = validateArtifact(callArgs);
-  writeJson(result);
+
+  const receipt = buildRunReceipt({
+    command: "validate-artifact",
+    argsRaw: rawJsonArg,
+    actor_id: "teo-run",
+    outcome: "OK",
+    exit_code: 0,
+    baseDir: effectiveBaseDir,
+  });
+  writeRunReceipt(receipt, effectiveBaseDir);
+
+  writeJson({ ...result, run_id: receipt.run_id, sig: receipt.sig });
 }
 
-async function handleSign(args: unknown): Promise<void> {
+async function handleSign(args: unknown, jsonArg: string): Promise<void> {
   const { HmacSigner } = await import("../core/sign.js");
+  const { resolveDefaultLedgerBase } = await import("../core/ledger.js");
+  const { buildRunReceipt, writeRunReceipt } = await import("../core/run-receipt.js");
   const a = args as Record<string, unknown>;
   const baseDir = a["baseDir"] as string | undefined;
+  const effectiveBaseDir = baseDir ?? resolveDefaultLedgerBase();
   const keyring_id = a["keyring_id"] as string | undefined;
   const signerOpts: ConstructorParameters<typeof HmacSigner>[0] = {};
   if (baseDir !== undefined) signerOpts.baseDir = baseDir;
@@ -155,13 +223,25 @@ async function handleSign(args: unknown): Promise<void> {
   const payload = a["payload"] as Parameters<typeof signer.sign>[0];
   const signature = signer.sign(payload);
 
-  writeJson({ signature });
+  const receipt = buildRunReceipt({
+    command: "sign",
+    argsRaw: jsonArg,
+    actor_id: "teo-run",
+    outcome: "OK",
+    exit_code: 0,
+    baseDir: effectiveBaseDir,
+  });
+  writeRunReceipt(receipt, effectiveBaseDir);
+
+  writeJson({ signature, run_id: receipt.run_id, sig: receipt.sig });
 }
 
-async function handleLedgerAppend(args: unknown): Promise<void> {
-  const { AppendOnlyLedger } = await import("../core/ledger.js");
+async function handleLedgerAppend(args: unknown, jsonArg: string): Promise<void> {
+  const { AppendOnlyLedger, resolveDefaultLedgerBase } = await import("../core/ledger.js");
+  const { buildRunReceipt, writeRunReceipt } = await import("../core/run-receipt.js");
   const a = args as Record<string, unknown>;
   const baseDir = a["baseDir"] as string | undefined;
+  const effectiveBaseDir = baseDir ?? resolveDefaultLedgerBase();
   const ledgerOpts: ConstructorParameters<typeof AppendOnlyLedger>[0] = {
     session_id: a["session_id"] as string,
   };
@@ -171,13 +251,25 @@ async function handleLedgerAppend(args: unknown): Promise<void> {
   const entry = a["entry"] as Parameters<typeof ledger.append>[0];
   const result = ledger.append(entry);
 
-  writeJson(result);
+  const receipt = buildRunReceipt({
+    command: "ledger-append",
+    argsRaw: jsonArg,
+    actor_id: "teo-run",
+    outcome: "OK",
+    exit_code: 0,
+    baseDir: effectiveBaseDir,
+  });
+  writeRunReceipt(receipt, effectiveBaseDir);
+
+  writeJson({ ...result, run_id: receipt.run_id, sig: receipt.sig });
 }
 
-async function handleLedgerClose(args: unknown): Promise<void> {
-  const { AppendOnlyLedger } = await import("../core/ledger.js");
+async function handleLedgerClose(args: unknown, jsonArg: string): Promise<void> {
+  const { AppendOnlyLedger, resolveDefaultLedgerBase } = await import("../core/ledger.js");
+  const { buildRunReceipt, writeRunReceipt } = await import("../core/run-receipt.js");
   const a = args as Record<string, unknown>;
   const baseDir = a["baseDir"] as string | undefined;
+  const effectiveBaseDir = baseDir ?? resolveDefaultLedgerBase();
   const ledgerOpts: ConstructorParameters<typeof AppendOnlyLedger>[0] = {
     session_id: a["session_id"] as string,
   };
@@ -187,10 +279,29 @@ async function handleLedgerClose(args: unknown): Promise<void> {
   const summary = a["summary"] as Parameters<typeof ledger.close>[0];
   ledger.close(summary);
 
-  writeJson({ ok: true });
+  const receipt = buildRunReceipt({
+    command: "ledger-close",
+    argsRaw: jsonArg,
+    actor_id: "teo-run",
+    outcome: "OK",
+    exit_code: 0,
+    baseDir: effectiveBaseDir,
+  });
+  writeRunReceipt(receipt, effectiveBaseDir);
+
+  writeJson({ ok: true, run_id: receipt.run_id, sig: receipt.sig });
 }
+
 const VALID_DIRECTIVES = new Set(["BUILD", "FIX", "REVIEW", "PLAN", "ARCHITECTURAL"]);
 
+// NOTE: plan-init is intentionally exempt from run-receipt emission.
+// Receipt emission is reserved for externally-observable gate proof points
+// (provision, sign, ledger-append, ledger-close, validate-plan, validate-artifact,
+// verify-ledger) — commands whose execution callers need to audit after the fact.
+// plan-init is an internal session-setup helper: it has no baseDir contract,
+// no downstream verify command, and its stdout shape is a stable public contract
+// (exactly: ok, session_id, plan_id, initialized_at). Adding run_id/sig here
+// would break that contract without providing any audit value.
 function handlePlanInit(args: unknown): void {
   const a = args as Record<string, unknown>;
   const session_id = a["session_id"] as string | undefined;
@@ -321,13 +432,17 @@ async function handleEvaluateGate(args: unknown): Promise<void> {
 // Main
 // ---------------------------------------------------------------------------
 
-async function handleVerifyLedger(args: unknown): Promise<void> {
+async function handleVerifyLedger(args: unknown, jsonArg: string): Promise<void> {
   const fs = await import("node:fs");
   const crypto = await import("node:crypto");
   const { verifyAsync } = await import("../lib/ed25519.js");
+  const { resolveDefaultLedgerBase } = await import("../core/ledger.js");
+  const { buildRunReceipt, writeRunReceipt } = await import("../core/run-receipt.js");
   const a = args as Record<string, unknown>;
   const ledger_file = a["ledger_file"];
   const public_key = a["public_key"];
+  const baseDir = a["baseDir"] as string | undefined;
+  const effectiveBaseDir = baseDir ?? resolveDefaultLedgerBase();
 
   // Validate required field
   if (typeof ledger_file !== "string" || ledger_file.length === 0) {
@@ -433,7 +548,23 @@ async function handleVerifyLedger(args: unknown): Promise<void> {
     }
   }
 
-  writeJson({ ok: true, entry_count: parsedEntries.length, chain_intact: true });
+  const receipt = buildRunReceipt({
+    command: "verify-ledger",
+    argsRaw: jsonArg,
+    actor_id: "teo-run",
+    outcome: "OK",
+    exit_code: 0,
+    baseDir: effectiveBaseDir,
+  });
+  writeRunReceipt(receipt, effectiveBaseDir);
+
+  writeJson({
+    ok: true,
+    entry_count: parsedEntries.length,
+    chain_intact: true,
+    run_id: receipt.run_id,
+    sig: receipt.sig,
+  });
 }
 
 async function main(): Promise<void> {
@@ -467,19 +598,19 @@ async function main(): Promise<void> {
   try {
     switch (command) {
       case "provision":
-        await handleProvision(args);
+        await handleProvision(args, jsonArg ?? "{}");
         break;
       case "validate-plan":
-        await handleValidatePlan(args);
+        await handleValidatePlan(args, jsonArg ?? "{}");
         break;
       case "sign":
-        await handleSign(args);
+        await handleSign(args, jsonArg ?? "{}");
         break;
       case "ledger-append":
-        await handleLedgerAppend(args);
+        await handleLedgerAppend(args, jsonArg ?? "{}");
         break;
       case "ledger-close":
-        await handleLedgerClose(args);
+        await handleLedgerClose(args, jsonArg ?? "{}");
         break;
       case "plan-init":
         handlePlanInit(args);
@@ -488,8 +619,21 @@ async function main(): Promise<void> {
         await handleEvaluateGate(args);
         break;
       case "verify-ledger":
-        await handleVerifyLedger(args);
+        await handleVerifyLedger(args, jsonArg ?? "{}");
         break;
+      case "verify-receipt": {
+        const { verifyRunReceipt } = await import("../core/run-receipt.js");
+        const a = args as Record<string, unknown>;
+        const run_id = a["run_id"] as string;
+        const verifyBaseDir = a["baseDir"] as string | undefined;
+        if (!run_id || !verifyBaseDir) {
+          exitError({ error: "verify-receipt requires run_id and baseDir" });
+        }
+        const result = verifyRunReceipt({ run_id, baseDir: verifyBaseDir });
+        writeJson(result);
+        if (!result.valid) process.exit(1);
+        break;
+      }
       default:
         exitError({ error: `Unknown command: ${command}` });
     }

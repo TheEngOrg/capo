@@ -220,6 +220,18 @@ export class HmacSigner {
   }
 
   /**
+   * Sign an arbitrary canonical string using HMAC-SHA-256.
+   *
+   * Unlike sign(payload), this method takes a pre-built canonical string
+   * directly. Used by run-receipt.ts to sign receipt canonical strings.
+   *
+   * Returns 64 lowercase hex characters.
+   */
+  signRaw(canonical: string): string {
+    return crypto.createHmac("sha256", this.key).update(canonical).digest("hex");
+  }
+
+  /**
    * Verify a signature against a payload using constant-time comparison.
    *
    * Uses crypto.timingSafeEqual to prevent timing side-channels.

@@ -37,13 +37,16 @@ echo "    OK: plugin/ built at ${PLUGIN_DIR}"
 echo ""
 
 echo "[2/4] Registering plugin/ as teo-marketplace marketplace (--scope local)..."
-if claude plugin marketplace add "${PLUGIN_DIR}" --scope local 2>/dev/null; then
-  echo "    OK: teo-marketplace marketplace registered (or already registered)"
-else
-  # May already exist — try to continue
-  echo "    INFO: marketplace add returned non-zero (may already be registered)"
+# Always remove + re-add so the path is correct.
+# `marketplace update` alone is NOT sufficient when the registered path changed
+# (e.g., was repo root, now plugin/) — it refreshes from the old path.
+claude plugin marketplace remove teo-marketplace 2>/dev/null || true
+if ! claude plugin marketplace add "${PLUGIN_DIR}" --scope local; then
+  echo "FAIL: could not register plugin/ as teo-marketplace."
+  echo "        Ensure plugin/ was built (step 1) and contains .claude-plugin/marketplace.json."
+  exit 1
 fi
-echo "    Refreshing teo-marketplace cache..."
+echo "    OK: teo-marketplace registered at ${PLUGIN_DIR}"
 claude plugin marketplace update teo-marketplace 2>/dev/null || true
 echo ""
 

@@ -97,6 +97,29 @@ pluginJsonWithoutAgents.skills = "./skills/";
 const dstPluginJsonPath = join(dstClaudePluginDir, "plugin.json");
 writeFileSync(dstPluginJsonPath, JSON.stringify(pluginJsonWithoutAgents, null, 2) + "\n", "utf8");
 
+// ---------------------------------------------------------------------------
+// Step 6: Write plugin/.claude-plugin/marketplace.json for local dev install
+//   - plugins[].source uses "./" (relative path) so the CLI reads the plugin
+//     from the marketplace directory itself — NOT from GitHub.
+//   - Proven working format from local plugin probes: source: "./" is the
+//     directory-type local source that the plugin loader supports.
+//   - The GitHub marketplace.json at .claude-plugin/marketplace.json uses
+//     {source:"github"} and is the release/production install path.
+// ---------------------------------------------------------------------------
+const localMarketplaceJson = {
+  name: "teo-marketplace",
+  owner: { name: "TheEngOrg" },
+  plugins: [
+    {
+      name: "capo",
+      source: "./",
+      description: "Multi-agent orchestration for Claude Code",
+    },
+  ],
+};
+const dstMarketplaceJsonPath = join(dstClaudePluginDir, "marketplace.json");
+writeFileSync(dstMarketplaceJsonPath, JSON.stringify(localMarketplaceJson, null, 2) + "\n", "utf8");
+
 console.log("build:plugin complete");
 console.log(`  agents : ${readdirSync(dstAgentsDir).length} files`);
 console.log(`  hooks  : ${readdirSync(dstHooksDir).length} files`);

@@ -9,5 +9,5 @@
   },
   "repository": "https://github.com/TheEngOrg/capo",
   "license": "MIT",
-  "skills": "./skills/"
+  "skills": "./src/plugin/skills/"
 }

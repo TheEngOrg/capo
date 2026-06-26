@@ -25,7 +25,7 @@
 //   R-3 keyring co-location: HmacSigner uses same base as ledger when TEO_LEDGER_DIR is set
 // =============================================================================
 
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
@@ -79,8 +79,9 @@ async function tryImportResolveDefaultLedgerBase(): Promise<
   ((env?: NodeJS.ProcessEnv) => string) | undefined
 > {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment
     const mod = (await import("./ledger.js")) as any;
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
     return mod.resolveDefaultLedgerBase as (env?: NodeJS.ProcessEnv) => string;
   } catch {
     return undefined;

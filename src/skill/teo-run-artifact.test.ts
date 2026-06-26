@@ -105,6 +105,7 @@ describe("teo-run validate-artifact CLI — misuse", () => {
     expect(exitCode).toBe(0);
     expect(stdout).toMatchObject({
       valid: false,
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       errors: expect.arrayContaining([expect.stringMatching(/unknown artifact type/i)]),
     });
   });
@@ -122,6 +123,7 @@ describe("teo-run validate-artifact CLI — misuse", () => {
     // Must exit 0 (repair + valid parse → { valid: true })
     expect(exitCode).toBe(0);
     // Result must be a valid JSON object with a boolean `valid` field
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     expect(stdout).toMatchObject({ valid: expect.any(Boolean) });
   });
 
@@ -158,6 +160,7 @@ describe("teo-run validate-artifact CLI — misuse", () => {
     expect(exitCode).toBe(0);
     expect(stdout).toMatchObject({
       valid: false,
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       errors: expect.arrayContaining([expect.anything()]),
     });
   });
@@ -209,6 +212,7 @@ describe("teo-run validate-artifact CLI — boundary", () => {
     expect(exitCode).toBe(0);
     expect(stdout).toMatchObject({
       valid: false,
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       errors: expect.arrayContaining([expect.anything()]),
     });
   });
@@ -258,6 +262,7 @@ describe("teo-run validate-artifact CLI — golden path", () => {
     const input = JSON.stringify({ type: "BOGUS", payload: {} });
     const { stdoutRaw } = runCli("validate-artifact", input);
 
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
     expect(() => JSON.parse(stdoutRaw.trim())).not.toThrow();
   });
 });

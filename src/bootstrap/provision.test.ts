@@ -2429,7 +2429,7 @@ describe("WS-DEAD-01 — ProvisionResult exhaustiveness", () => {
     // NOT "repaired". This is the key misuse-case guard: if someone adds a return
     // path that emits "repaired" by mistake, this test catches it.
 
-    type ErrorResult = Extract<
+    type _ErrorResult = Extract<
       ReturnType<typeof provision> extends Promise<infer R> ? R : never,
       { status: "error" }
     >;

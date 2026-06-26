@@ -69,6 +69,7 @@ describe("repairJson() — misuse", () => {
     }
     if (!threw) {
       // If it didn't throw, the returned string must not parse as valid JSON
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-return
       expect(() => JSON.parse(result as string)).toThrow();
     }
     // Either path satisfies the fail-closed contract
@@ -85,6 +86,7 @@ describe("repairJson() — misuse", () => {
       threw = true;
     }
     if (!threw) {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-return
       expect(() => JSON.parse(result as string)).toThrow();
     }
     expect(threw || true).toBe(true);
@@ -237,6 +239,7 @@ describe("repairJson() — boundary: specific repair transformations", () => {
   // B-R4: unclosed object → best-effort close, result is parseable
   it("B-R4. unclosed object brace: '{\"a\": 1' → result is parseable JSON (best-effort close)", () => {
     const result = repairJson('{"a": 1');
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
     expect(() => JSON.parse(result as string)).not.toThrow();
     expect(JSON.parse(result as string)).toMatchObject({ a: 1 });
   });
@@ -244,6 +247,7 @@ describe("repairJson() — boundary: specific repair transformations", () => {
   // B-R5: unclosed array → best-effort close, result is parseable
   it("B-R5. unclosed array bracket: '[1, 2' → result is parseable JSON (best-effort close)", () => {
     const result = repairJson("[1, 2");
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
     expect(() => JSON.parse(result as string)).not.toThrow();
     const parsed = JSON.parse(result as string) as unknown[];
     expect(Array.isArray(parsed)).toBe(true);

@@ -245,7 +245,7 @@ describe("StubAdapter.sagePlan — boundary", () => {
     let threw = false;
     try {
       plan = await stub.sagePlan(emptyProjectRequest, {});
-    } catch (_e) {
+    } catch {
       threw = true;
     }
 

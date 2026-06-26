@@ -54,7 +54,7 @@ function runCli(
     },
   });
 
-  const stdoutRaw = result.stdout ?? "";
+  const stdoutRaw = result.stdout;
   let stdout: unknown = stdoutRaw;
   try {
     stdout = JSON.parse(stdoutRaw.trim());
@@ -66,7 +66,7 @@ function runCli(
     exitCode: result.status ?? 1,
     stdout,
     stdoutRaw,
-    stderr: result.stderr ?? "",
+    stderr: result.stderr,
   };
 }
 
@@ -96,10 +96,7 @@ afterEach(() => {
 // Helpers: read a receipt file from disk given a run_id
 // ---------------------------------------------------------------------------
 
-function readReceiptFromRunId(
-  run_id: string,
-  baseDir: string
-): Record<string, unknown> | null {
+function readReceiptFromRunId(run_id: string, baseDir: string): Record<string, unknown> | null {
   const uuid = run_id.replace("urn:teo:run:", "");
   const receiptPath = path.join(baseDir, "receipts", `${uuid}.json`);
   if (!fs.existsSync(receiptPath)) return null;
@@ -123,7 +120,7 @@ describe("run-receipt CLI — misuse: verify-receipt unknown run_id (AC-5)", () 
     expect(exitCode).toBe(1);
     const result = stdout as Record<string, unknown>;
     expect(result["valid"]).toBe(false);
-    expect(String(result["reason"] ?? "")).toMatch(/receipt not found/i);
+    expect(String(result["reason"] as string)).toMatch(/receipt not found/i);
   });
 
   it("unknown run_id → stdout reason does NOT contain a stack trace (AC-5)", () => {
@@ -138,7 +135,7 @@ describe("run-receipt CLI — misuse: verify-receipt unknown run_id (AC-5)", () 
 
     // No Node.js Error stack in stdout
     expect(stdoutRaw).not.toMatch(/at\s+\w+\s+\(/);
-    expect(String(result["reason"] ?? "")).not.toContain("Error:");
+    expect(String(result["reason"] as string)).not.toContain("Error:");
   });
 
   it("missing run_id field in args → exit 1, error in stdout (AC-5)", () => {
@@ -148,6 +145,7 @@ describe("run-receipt CLI — misuse: verify-receipt unknown run_id (AC-5)", () 
     const { exitCode, stdout } = runCli("verify-receipt", input);
 
     expect(exitCode).toBe(1);
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     expect(stdout).toMatchObject({ error: expect.anything() });
   });
 
@@ -155,6 +153,7 @@ describe("run-receipt CLI — misuse: verify-receipt unknown run_id (AC-5)", () 
     const { exitCode, stdout } = runCli("verify-receipt", "{not valid json}}");
 
     expect(exitCode).toBe(1);
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     expect(stdout).toMatchObject({ error: expect.stringMatching(/json/i) });
   });
 });
@@ -164,10 +163,10 @@ describe("run-receipt CLI — misuse: verify-receipt unknown run_id (AC-5)", () 
 // ---------------------------------------------------------------------------
 
 describe("run-receipt CLI — misuse: verify-receipt tampered receipts (AC-3, AC-4)", () => {
-  let baseDir: string;
+  let _baseDir: string;
 
   beforeEach(() => {
-    baseDir = makeTempDir();
+    _baseDir = makeTempDir();
   });
 
   it("tampered command field → exit 1, {valid:false, reason:'signature invalid'} (AC-3)", () => {
@@ -199,10 +198,7 @@ describe("run-receipt CLI — misuse: verify-receipt tampered receipts (AC-3, AC
     const stored = readReceiptFromRunId(run_id, ledgerBase)!;
     stored["command"] = "TAMPERED";
     const uuid = run_id.replace("urn:teo:run:", "");
-    fs.writeFileSync(
-      path.join(ledgerBase, "receipts", `${uuid}.json`),
-      JSON.stringify(stored)
-    );
+    fs.writeFileSync(path.join(ledgerBase, "receipts", `${uuid}.json`), JSON.stringify(stored));
 
     // Step 3: verify → must fail
     const verifyInput = JSON.stringify({ run_id, baseDir: ledgerBase });
@@ -211,7 +207,7 @@ describe("run-receipt CLI — misuse: verify-receipt tampered receipts (AC-3, AC
     expect(exitCode).toBe(1);
     const result = stdout as Record<string, unknown>;
     expect(result["valid"]).toBe(false);
-    expect(String(result["reason"] ?? "")).toMatch(/signature invalid/i);
+    expect(String(result["reason"] as string)).toMatch(/signature invalid/i);
   });
 
   it("hand-crafted 64-char all-zero sig → exit 1, {valid:false, reason:'signature invalid'} (AC-4)", () => {
@@ -242,10 +238,7 @@ describe("run-receipt CLI — misuse: verify-receipt tampered receipts (AC-3, AC
     const stored = readReceiptFromRunId(run_id, ledgerBase)!;
     stored["sig"] = "0".repeat(64); // 64 chars, wrong content
     const uuid = run_id.replace("urn:teo:run:", "");
-    fs.writeFileSync(
-      path.join(ledgerBase, "receipts", `${uuid}.json`),
-      JSON.stringify(stored)
-    );
+    fs.writeFileSync(path.join(ledgerBase, "receipts", `${uuid}.json`), JSON.stringify(stored));
 
     const verifyInput = JSON.stringify({ run_id, baseDir: ledgerBase });
     const { exitCode, stdout } = runCli("verify-receipt", verifyInput);
@@ -253,7 +246,7 @@ describe("run-receipt CLI — misuse: verify-receipt tampered receipts (AC-3, AC
     expect(exitCode).toBe(1);
     const result = stdout as Record<string, unknown>;
     expect(result["valid"]).toBe(false);
-    expect(String(result["reason"] ?? "")).toMatch(/signature invalid/i);
+    expect(String(result["reason"] as string)).toMatch(/signature invalid/i);
   });
 });
 
@@ -262,7 +255,8 @@ describe("run-receipt CLI — misuse: verify-receipt tampered receipts (AC-3, AC
 // ---------------------------------------------------------------------------
 
 describe("run-receipt CLI — boundary: all commands emit run_id + sig in stdout (AC-1)", () => {
-  const UUID_V4_RE = /^urn:teo:run:[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const UUID_V4_RE =
+    /^urn:teo:run:[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   const SIG_RE = /^[0-9a-f]{64}$/;
 
   it("ledger-append stdout includes run_id and sig (AC-1)", () => {
@@ -287,8 +281,8 @@ describe("run-receipt CLI — boundary: all commands emit run_id + sig in stdout
 
     expect(exitCode).toBe(0);
     const result = stdout as Record<string, unknown>;
-    expect(String(result["run_id"] ?? "")).toMatch(UUID_V4_RE);
-    expect(String(result["sig"] ?? "")).toMatch(SIG_RE);
+    expect(String(result["run_id"] as string)).toMatch(UUID_V4_RE);
+    expect(String(result["sig"] as string)).toMatch(SIG_RE);
   });
 
   it("ledger-close stdout includes run_id and sig (AC-1)", () => {
@@ -303,8 +297,8 @@ describe("run-receipt CLI — boundary: all commands emit run_id + sig in stdout
 
     expect(exitCode).toBe(0);
     const result = stdout as Record<string, unknown>;
-    expect(String(result["run_id"] ?? "")).toMatch(UUID_V4_RE);
-    expect(String(result["sig"] ?? "")).toMatch(SIG_RE);
+    expect(String(result["run_id"] as string)).toMatch(UUID_V4_RE);
+    expect(String(result["sig"] as string)).toMatch(SIG_RE);
   });
 
   it("sign stdout includes run_id and sig (AC-1)", () => {
@@ -326,9 +320,9 @@ describe("run-receipt CLI — boundary: all commands emit run_id + sig in stdout
 
     expect(exitCode).toBe(0);
     const result = stdout as Record<string, unknown>;
-    expect(String(result["run_id"] ?? "")).toMatch(UUID_V4_RE);
+    expect(String(result["run_id"] as string)).toMatch(UUID_V4_RE);
     // Note: 'sig' here is the RECEIPT sig, 'signature' is the HmacSigner output
-    expect(String(result["sig"] ?? "")).toMatch(SIG_RE);
+    expect(String(result["sig"] as string)).toMatch(SIG_RE);
   });
 
   it("validate-plan stdout includes run_id and sig on success (AC-1)", () => {
@@ -353,8 +347,8 @@ describe("run-receipt CLI — boundary: all commands emit run_id + sig in stdout
 
     expect(exitCode).toBe(0);
     const result = stdout as Record<string, unknown>;
-    expect(String(result["run_id"] ?? "")).toMatch(UUID_V4_RE);
-    expect(String(result["sig"] ?? "")).toMatch(SIG_RE);
+    expect(String(result["run_id"] as string)).toMatch(UUID_V4_RE);
+    expect(String(result["sig"] as string)).toMatch(SIG_RE);
   });
 
   it("validate-artifact stdout includes run_id and sig (AC-1)", () => {
@@ -375,8 +369,8 @@ describe("run-receipt CLI — boundary: all commands emit run_id + sig in stdout
 
     expect(exitCode).toBe(0);
     const result = stdout as Record<string, unknown>;
-    expect(String(result["run_id"] ?? "")).toMatch(UUID_V4_RE);
-    expect(String(result["sig"] ?? "")).toMatch(SIG_RE);
+    expect(String(result["run_id"] as string)).toMatch(UUID_V4_RE);
+    expect(String(result["sig"] as string)).toMatch(SIG_RE);
   });
 
   it("verify-ledger stdout includes run_id and sig on success (AC-1)", () => {
@@ -412,8 +406,8 @@ describe("run-receipt CLI — boundary: all commands emit run_id + sig in stdout
 
     expect(exitCode).toBe(0);
     const result = stdout as Record<string, unknown>;
-    expect(String(result["run_id"] ?? "")).toMatch(UUID_V4_RE);
-    expect(String(result["sig"] ?? "")).toMatch(SIG_RE);
+    expect(String(result["run_id"] as string)).toMatch(UUID_V4_RE);
+    expect(String(result["sig"] as string)).toMatch(SIG_RE);
   });
 
   it("provision failure also emits run_id and sig (outcome:FAIL) (AC-1, AC-7)", () => {
@@ -437,8 +431,8 @@ describe("run-receipt CLI — boundary: all commands emit run_id + sig in stdout
     expect(exitCode).toBe(1);
     const result = stdout as Record<string, unknown>;
     // FAIL receipt must still carry run_id + sig (AC-7)
-    expect(String(result["run_id"] ?? "")).toMatch(UUID_V4_RE);
-    expect(String(result["sig"] ?? "")).toMatch(SIG_RE);
+    expect(String(result["run_id"] as string)).toMatch(UUID_V4_RE);
+    expect(String(result["sig"] as string)).toMatch(SIG_RE);
   });
 });
 
@@ -566,7 +560,7 @@ describe("run-receipt CLI — boundary: args_hash is SHA-256 of raw args string 
     const run_id = (stdout as Record<string, unknown>)["run_id"] as string;
     const stored = readReceiptFromRunId(run_id, baseDir)!;
 
-    expect(String(stored["args_hash"] ?? "")).toMatch(/^sha256:[0-9a-f]{64}$/);
+    expect(String(stored["args_hash"] as string)).toMatch(/^sha256:[0-9a-f]{64}$/);
   });
 
   it("different args strings produce different args_hash values in stored receipts (AC-6)", () => {

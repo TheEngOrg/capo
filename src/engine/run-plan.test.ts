@@ -1857,7 +1857,7 @@ describe("WS-SIGN-02 — CLOSE event signature in RunResult", () => {
     let signCallCount = 0;
     const signSpy = vi.spyOn(HmacSigner.prototype, "sign").mockImplementation(function (
       this: InstanceType<typeof HmacSigner>,
-      payload
+      _payload
     ) {
       signCallCount++;
       if (signCallCount === 1) {

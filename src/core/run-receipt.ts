@@ -122,8 +122,10 @@ export function buildRunReceipt(input: RunReceiptInput): RunReceipt {
   if (!input.actor_id || input.actor_id.length === 0) {
     throw new Error("RunReceiptInput.actor_id must not be empty.");
   }
-  if (input.outcome !== "OK" && input.outcome !== "FAIL") {
-    throw new Error(`RunReceiptInput.outcome must be "OK" or "FAIL", got "${input.outcome}".`);
+  if ((input.outcome as string) !== "OK" && (input.outcome as string) !== "FAIL") {
+    throw new Error(
+      `RunReceiptInput.outcome must be "OK" or "FAIL", got "${input.outcome as string}".`
+    );
   }
 
   const run_id = `urn:teo:run:${crypto.randomUUID()}`;
@@ -190,10 +192,10 @@ export function writeRunReceipt(receipt: RunReceipt, baseDir: string): void {
  * @param opts.run_id  - The URN run identifier (urn:teo:run:<uuid>).
  * @param opts.baseDir - The base directory containing the receipts/ subdirectory.
  */
-export function verifyRunReceipt(opts: {
-  run_id: string;
-  baseDir: string;
-}): { valid: boolean; reason?: string } {
+export function verifyRunReceipt(opts: { run_id: string; baseDir: string }): {
+  valid: boolean;
+  reason?: string;
+} {
   const uuid = opts.run_id.slice("urn:teo:run:".length);
   const receiptPath = path.join(opts.baseDir, "receipts", `${uuid}.json`);
 

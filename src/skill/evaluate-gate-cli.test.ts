@@ -252,6 +252,7 @@ describe("WS-06: gate-profile enforcement", () => {
 
       expect(exitCode).toBe(1);
       expect(stdout).toMatchObject({
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         error: expect.stringMatching(/json/i),
       });
     });

@@ -8,18 +8,25 @@
 #   plugin. Run it before tagging any release. Wire it into WS-GO-07 (alpha
 #   release gate) as a pre-tag step.
 #
-# WHY `claude plugin validate` ALONE IS INSUFFICIENT
+# WHY THE VALIDATE STEP ALONE IS INSUFFICIENT
 #   validate and install use different validators. This exact mismatch caused
 #   the WS-GO-02 regression:
-#     - An explicit array of individual .md file paths passes `claude plugin validate`
+#     - An explicit array of individual .md file paths passes the validate linter
 #       but produces Agents(0) silently at install time — the array format is not
 #       the working format even though the linter accepts it.
 #     - `"agents": "./src/plugin/agents/"` (directory string) is the WORKING format:
-#       validate accepts it AND install correctly loads all agents from the directory.
-#     - Relative paths containing `../` passed validate but were rejected at
+#       the linter accepts it AND install correctly loads all agents from the directory.
+#     - Relative paths containing `../` passed the linter but were rejected at
 #       install (path traversal guard at install time)
 #   This script catches both classes of failure by running the full install
 #   sequence, not just the linter.
+#
+# BUILD BEFORE VALIDATE
+#   Step 0 builds the plugin artifact first (produces plugin/.claude-plugin/plugin.json).
+#   The SOURCE manifest at .claude-plugin/plugin.json has "agents": "./src/plugin/agents/"
+#   which the validate command REJECTS ("agents: Invalid input"). The built artifact
+#   has the agents field stripped and passes both validate and install.
+#   Always build before validating.
 #
 # MARKETPLACE SOURCE
 #   The committed marketplace.json uses the GitHub source form:
@@ -41,10 +48,23 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-PLUGIN_JSON="${REPO_ROOT}/.claude-plugin/plugin.json"
+PLUGIN_JSON="${REPO_ROOT}/plugin/.claude-plugin/plugin.json"
 
 echo "=== CAPO Plugin Release Verification Gate ==="
 echo "Repo: ${REPO_ROOT}"
+echo ""
+
+# ---------------------------------------------------------------------------
+# Step 0: build the plugin artifact so plugin/.claude-plugin/plugin.json exists
+# ---------------------------------------------------------------------------
+echo "[0/5] Building plugin artifact..."
+cd "${REPO_ROOT}"
+if ! npm run build:plugin; then
+  echo "✘ FAIL: build — npm run build:plugin exited non-zero."
+  echo "        Fix build errors before releasing."
+  exit 1
+fi
+echo "    OK: plugin artifact built (plugin/.claude-plugin/plugin.json ready)"
 echo ""
 
 # ---------------------------------------------------------------------------

@@ -195,6 +195,7 @@ describe("release-gate — boundary: required files exist and are parseable", ()
 
   it("hooks/hooks.json exists and is valid JSON", () => {
     expect(fs.existsSync(HOOKS_JSON), "hooks/hooks.json is missing").toBe(true);
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
     expect(() => JSON.parse(fs.readFileSync(HOOKS_JSON, "utf8"))).not.toThrow();
   });
 

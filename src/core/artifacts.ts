@@ -24,7 +24,7 @@ export function repairJson(raw: string): string {
   // not a real repair — throw so callers know the input is unrecoverable.
   if (!raw.trimStart().startsWith('"')) {
     try {
-      const parsed = JSON.parse(repaired);
+      const parsed: unknown = JSON.parse(repaired);
       if (typeof parsed === "string" && repaired === JSON.stringify(raw)) {
         throw new Error(`Input is not repairable JSON: ${raw}`);
       }

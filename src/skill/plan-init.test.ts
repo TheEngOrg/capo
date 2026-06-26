@@ -85,6 +85,7 @@ describe("plan-init CLI — misuse: missing required fields and invalid values",
     const { exitCode, stdout } = runCli("plan-init", input);
 
     expect(exitCode).toBe(1);
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     expect(stdout).toMatchObject({ error: expect.any(String) });
     const err = (stdout as Record<string, unknown>)["error"] as string;
     expect(err.length).toBeGreaterThan(0);
@@ -97,6 +98,7 @@ describe("plan-init CLI — misuse: missing required fields and invalid values",
     const { exitCode, stdout } = runCli("plan-init", input);
 
     expect(exitCode).toBe(1);
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     expect(stdout).toMatchObject({ error: expect.any(String) });
     const err = (stdout as Record<string, unknown>)["error"] as string;
     expect(err.length).toBeGreaterThan(0);
@@ -109,6 +111,7 @@ describe("plan-init CLI — misuse: missing required fields and invalid values",
     const { exitCode, stdout } = runCli("plan-init", input);
 
     expect(exitCode).toBe(1);
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     expect(stdout).toMatchObject({ error: expect.any(String) });
   });
 
@@ -123,6 +126,7 @@ describe("plan-init CLI — misuse: missing required fields and invalid values",
     const { exitCode, stdout } = runCli("plan-init", input);
 
     expect(exitCode).toBe(1);
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     expect(stdout).toMatchObject({ error: expect.any(String) });
   });
 
@@ -137,6 +141,7 @@ describe("plan-init CLI — misuse: missing required fields and invalid values",
     const { exitCode, stdout } = runCli("plan-init", input);
 
     expect(exitCode).toBe(1);
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     expect(stdout).toMatchObject({ error: expect.any(String) });
   });
 
@@ -145,6 +150,7 @@ describe("plan-init CLI — misuse: missing required fields and invalid values",
     const input = JSON.stringify({ session_id: 42, project_id: "proj-abc" });
     const { exitCode, stdout } = runCli("plan-init", input);
     expect(exitCode).toBe(1);
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     expect(stdout).toMatchObject({ error: expect.stringContaining("session_id") });
   });
 
@@ -153,6 +159,7 @@ describe("plan-init CLI — misuse: missing required fields and invalid values",
     const input = JSON.stringify({ session_id: "sess-001", project_id: 99 });
     const { exitCode, stdout } = runCli("plan-init", input);
     expect(exitCode).toBe(1);
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     expect(stdout).toMatchObject({ error: expect.stringContaining("project_id") });
   });
 
@@ -167,6 +174,7 @@ describe("plan-init CLI — misuse: missing required fields and invalid values",
     const { exitCode, stdout } = runCli("plan-init", input);
 
     expect(exitCode).toBe(1);
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     expect(stdout).toMatchObject({ error: expect.any(String) });
   });
 });
@@ -183,6 +191,7 @@ describe("plan-init CLI — boundary: empty strings and optional fields", () => 
     const { exitCode, stdout } = runCli("plan-init", input);
 
     expect(exitCode).toBe(1);
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     expect(stdout).toMatchObject({ error: expect.any(String) });
   });
 
@@ -193,6 +202,7 @@ describe("plan-init CLI — boundary: empty strings and optional fields", () => 
     const { exitCode, stdout } = runCli("plan-init", input);
 
     expect(exitCode).toBe(1);
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     expect(stdout).toMatchObject({ error: expect.any(String) });
   });
 
@@ -346,6 +356,7 @@ describe("plan-init CLI — golden path: valid inputs return ok:true with requir
     const { exitCode, stdoutRaw } = runCli("plan-init", input);
 
     expect(exitCode).toBe(0);
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
     expect(() => JSON.parse(stdoutRaw.trim())).not.toThrow();
   });
 

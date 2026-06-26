@@ -127,7 +127,7 @@ const PLAN_WITH_TARGET_DIR: Plan = {
  * A minimal valid Plan with ONE AGENT task that has NO target_dir.
  * This is the plan that should keep backend = "none".
  */
-const PLAN_WITHOUT_TARGET_DIR: Plan = {
+const _PLAN_WITHOUT_TARGET_DIR: Plan = {
   plan_id: "plan-no-target-dir",
   project_id: "test-project",
   created_at: "2026-06-23T00:00:00.000Z",

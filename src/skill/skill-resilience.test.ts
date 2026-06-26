@@ -64,7 +64,7 @@ vi.mock("node:fs", async (importOriginal) => {
 // ---------------------------------------------------------------------------
 
 import { invokeSkill, type SkillOptions } from "./skill.js";
-import type { SkillResult } from "./skill.js";
+import type { SkillResult as _SkillResult } from "./skill.js";
 import { provision } from "../bootstrap/provision.js";
 import type { ProvisionResult } from "../bootstrap/provision.js";
 import { runPlan } from "../engine/run-plan.js";

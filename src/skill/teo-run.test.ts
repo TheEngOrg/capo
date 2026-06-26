@@ -150,6 +150,7 @@ describe("teo-run CLI — misuse: unknown command and malformed JSON", () => {
     const { exitCode, stdout } = runCli("frobnicate", "{}");
 
     expect(exitCode).toBe(1);
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     expect(stdout).toMatchObject({ error: expect.stringContaining("frobnicate") });
   });
 
@@ -172,6 +173,7 @@ describe("teo-run CLI — misuse: unknown command and malformed JSON", () => {
 
     expect(exitCode).toBe(1);
     expect(stdout).toMatchObject({
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       error: expect.stringMatching(/json/i),
     });
   });
@@ -182,6 +184,7 @@ describe("teo-run CLI — misuse: unknown command and malformed JSON", () => {
 
     expect(exitCode).toBe(1);
     expect(stdout).toMatchObject({
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       error: expect.stringMatching(/json/i),
     });
   });
@@ -226,6 +229,7 @@ describe("teo-run CLI — misuse: unknown command and malformed JSON", () => {
     expect(exitCode).toBe(0);
     expect(stdout).toMatchObject({
       valid: false,
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       errors: expect.arrayContaining([expect.anything()]),
     });
   });
@@ -424,6 +428,7 @@ describe("teo-run CLI — golden path: each command returns expected output", ()
     const input = JSON.stringify({
       baseDir: keyringBase,
       keyring_id: "default",
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       payload: JSON.parse(payload),
     });
 
@@ -524,6 +529,7 @@ describe("teo-run CLI — WS-GO-04 S8: provision fail-closed BLOCKED → exit no
       });
 
       // stdout must be parseable JSON even on BLOCKED
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-return
       expect(() => JSON.parse(stdoutRaw.trim())).not.toThrow();
 
       // stdout must have status "error" on BLOCKED

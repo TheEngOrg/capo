@@ -101,6 +101,7 @@ describe("plugin-manifest — boundary: agents field must exist and be non-empty
 
   it("plugin.json must be valid JSON", () => {
     const raw = fs.readFileSync(PLUGIN_JSON, "utf8");
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
     expect(() => JSON.parse(raw)).not.toThrow();
   });
 

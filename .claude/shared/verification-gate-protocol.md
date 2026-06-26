@@ -180,7 +180,7 @@ The VCS intercept is an **optional, additive** layer configured per-project base
 
 ## Adding the Verification Gate to a New Project
 
-1. Run `mg-init` — sets enforcement level during routing preferences
+1. Run `teo-init` — sets enforcement level during routing preferences
 2. The `TaskCompleted` hook is always installed (via `settings.json`)
 3. Optionally configure VCS intercept for the project's VCS
 4. The Capo secondary verification runs automatically during pipeline execution

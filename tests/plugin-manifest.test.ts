@@ -210,12 +210,12 @@ describe("plugin.json boundary checks", () => {
     ).toMatch(/^\d+\.\d+\.\d+/);
   });
 
-  it('B-03: version is "1.0.2" (current release — update on each release bump)', () => {
+  it('B-03: version is "1.0.3" (current release — update on each release bump)', () => {
     const version = manifest["version"] as string;
     expect(
       version,
-      `version must be "1.0.2" for this release — found: "${version}". Update this assertion when bumping the version.`
-    ).toBe("1.0.2");
+      `version must be "1.0.3" for this release — found: "${version}". Update this assertion when bumping the version.`
+    ).toBe("1.0.3");
   });
 });
 

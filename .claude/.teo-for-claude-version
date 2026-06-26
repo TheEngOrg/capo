@@ -1,3 +1,2 @@
-teo_version: 4.3.0
-mg_base_version: 6.2.0
-edition: pilot-alpha
+capo_version: 1.0.3
+edition: dev

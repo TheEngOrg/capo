@@ -15,17 +15,13 @@ CLAUDE_DIR="$PROJECT_DIR/.claude"
 
 # Read versions + edition — primary: .teo-for-claude-version; fallback: TEO_PROJECT
 TEO_VERSION="unknown"
-MG_VERSION="unknown"
 EDITION=""
 if [[ -f "$CLAUDE_DIR/.teo-for-claude-version" ]]; then
-    TEO_VERSION=$(awk '/^teo_version:/ {print $NF}' "$CLAUDE_DIR/.teo-for-claude-version" 2>/dev/null || echo "unknown")
-    MG_VERSION=$(awk '/^mg_base_version:/ {print $NF}' "$CLAUDE_DIR/.teo-for-claude-version" 2>/dev/null || echo "unknown")
+    TEO_VERSION=$(awk '/^capo_version:/ {print $NF}' "$CLAUDE_DIR/.teo-for-claude-version" 2>/dev/null || echo "unknown")
     EDITION=$(awk '/^edition:/ {print $NF}' "$CLAUDE_DIR/.teo-for-claude-version" 2>/dev/null || echo "")
     [[ -z "$TEO_VERSION" ]] && TEO_VERSION="unknown"
-    [[ -z "$MG_VERSION" ]] && MG_VERSION="unknown"
 elif [[ -f "$CLAUDE_DIR/TEO_PROJECT" ]]; then
     TEO_VERSION=$(awk '/^TEO Version:/ {print $NF}' "$CLAUDE_DIR/TEO_PROJECT" 2>/dev/null || echo "unknown")
-    MG_VERSION=$(awk '/^MG Base:/ {print $NF}' "$CLAUDE_DIR/TEO_PROJECT" 2>/dev/null || echo "unknown")
 fi
 
 # Session status derived from edition field (defaults to "unknown" if absent)

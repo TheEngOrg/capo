@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document defines the 6-phase pipeline for AI-assisted website creation using MG agents. Phases are sequential gates except where noted. Content integration is part of the Design iteration loop — it is not a separate phase.
+This document defines the 6-phase pipeline for AI-assisted website creation using CAPO agents. Phases are sequential gates except where noted. Content integration is part of the Design iteration loop — it is not a separate phase.
 
 ## Pipeline Phases
 

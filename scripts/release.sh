@@ -84,6 +84,15 @@ node -e "
 echo "Bumped .claude-plugin/plugin.json -> $VERSION"
 
 # ---------------------------------------------------------------------------
+# 8a. Bump capo_version in .claude/.teo-for-claude-version
+# ---------------------------------------------------------------------------
+if [[ -f ".claude/.teo-for-claude-version" ]]; then
+  sed -i.bak "s/^capo_version:.*/capo_version: ${VERSION}/" .claude/.teo-for-claude-version
+  rm -f .claude/.teo-for-claude-version.bak
+  echo "Bumped .claude/.teo-for-claude-version capo_version -> $VERSION"
+fi
+
+# ---------------------------------------------------------------------------
 # 9. Run npm run bundle
 # ---------------------------------------------------------------------------
 echo "Running npm run bundle..."

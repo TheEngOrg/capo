@@ -25,10 +25,7 @@ coverage/
 .claude/skills/
 
 # TEO session-local state — kept out of git
-.claude/memory/traces/
-.claude/memory/pipeline/
-.claude/memory/deployments/
-.claude/memory/handoffs/
+.claude/memory/
 .claude/agent-memory/
 .claude/agent-memory-local/
 .claude/settings.local.json

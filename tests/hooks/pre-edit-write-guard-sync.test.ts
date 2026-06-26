@@ -49,7 +49,7 @@ import * as path from "node:path";
 //     file is present and well-formed as a regression guard against future drift.
 //
 // HOW TO RUN THE FULL SUITE LOCALLY
-//   LOCAL_ONLY_TESTS=1 npx vitest run src/hooks/pre-edit-write-guard-sync.test.ts
+//   LOCAL_ONLY_TESTS=1 npx vitest run tests/hooks/pre-edit-write-guard-sync.test.ts
 //
 // WHAT "PASS" MEANS FOR WS-SYNC-01
 //   All tests in Group B (failing now) and Group C (identity) must pass with
@@ -147,7 +147,7 @@ describe("WS-SYNC-01 — misuse: canonical hooks/pre-edit-write-guard.sh has all
 // the 5 entries. They are written as "should contain X" assertions so that
 // once dev syncs the file, they flip to green — no test edits required.
 //
-// To run: LOCAL_ONLY_TESTS=1 npx vitest run src/hooks/pre-edit-write-guard-sync.test.ts
+// To run: LOCAL_ONLY_TESTS=1 npx vitest run tests/hooks/pre-edit-write-guard-sync.test.ts
 // =============================================================================
 
 describe("WS-SYNC-01 — misuse: deployed .claude/hooks/pre-edit-write-guard.sh is missing PROTECTED_PREFIXES (FAILS NOW — LOCAL_ONLY_TESTS required)", () => {

@@ -472,11 +472,11 @@ describe("misuse: src/core/plan-builder.test.ts must not refer to Sage in prose 
   });
 });
 
-describe("misuse: src/agents/load.test.ts must not use SAGE_BLOCKED_TOOLS identifier", () => {
+describe("misuse: tests/agents/load.test.ts must not use SAGE_BLOCKED_TOOLS identifier", () => {
   it("load.test.ts does not contain SAGE_BLOCKED_TOOLS constant name", () => {
     // MISUSE: the constant was named SAGE_BLOCKED_TOOLS at line 96 and used at
     // line 301. The persona has been renamed to Capo; the constant must follow.
-    const content = readFile("src/agents/load.test.ts");
+    const content = readFile("tests/agents/load.test.ts");
     expect(content).not.toContain("SAGE_BLOCKED_TOOLS");
   });
 });

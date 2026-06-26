@@ -28,9 +28,9 @@ import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 
 // Derive repo root from this file's location.
-// This file lives at src/__tests__/ws-mg-cleanup.test.ts — two directories up is the repo root.
+// This file lives at tests/ws-mg-cleanup.test.ts — one directory up is the repo root.
 // NEVER hardcode /tmp/... or /Users/... paths per project policy.
-const REPO_ROOT = new URL("../../", import.meta.url).pathname;
+const REPO_ROOT = new URL("../", import.meta.url).pathname;
 
 // ─── AC-1: .claude/.teo-for-claude-version format ────────────────────────────
 // STATUS: GREEN

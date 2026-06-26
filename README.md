@@ -10,7 +10,7 @@ It installs as a Claude Code plugin. No daemon, no server, no API key — everyt
 
 ```
 /plugin marketplace add TheEngOrg/capo
-/plugin install teo@teo-marketplace
+/plugin install capo@teo-marketplace
 ```
 
 Then start any workflow with `/teo`.

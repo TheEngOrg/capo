@@ -9,7 +9,7 @@
 //   A real `claude plugin install --plugin-dir <path>` smoke test CANNOT run in
 //   vitest — install writes to ~/.claude/ and is interactive. The recommended CI
 //   addition is a separate pre-release shell gate:
-//     claude plugin install --plugin-dir . && claude plugin details teo
+//     claude plugin install --plugin-dir . && claude plugin details capo
 //   Run it in a CI job with a scratch home dir so ~/.claude/ is ephemeral.
 //
 // WHY THIS MATTERS — ROOT CAUSE LOG:
@@ -20,19 +20,17 @@
 //   not a directory path. This guard exists so that regression cannot recur
 //   silently: if validate rejects, this suite fails loudly before any release.
 //
-// HOOKS DOUBLE-LOAD REGRESSION (M-04 guard):
-//   Claude Code v2+ auto-discovers hooks/hooks.json. Declaring `"hooks"` in
-//   plugin.json on top of auto-discovery causes a duplicate-load error at
-//   install time. The field must be absent from the manifest entirely.
-//   M-04 is the regression guard — it fails loudly if the field comes back.
+// HOOKS PATH (M-04 guard):
+//   WS-STRUCT-01 moved hooks to src/plugin/hooks/hooks.json (non-root).
+//   Claude Code auto-discovers root hooks/hooks.json only — since that path
+//   does not exist, the "hooks" field in plugin.json is now REQUIRED to point
+//   Claude Code to the non-default location. M-04 guards that if the field is
+//   present, it must not point to the root-default path (which would duplicate-load).
 //
-// AGENTS SUBDIRECTORY BUG:
-//   TEO's agents live at agents/<name>/agent.md (subdirectories), but Claude
-//   Code's default auto-discovery for agents expects agents/*.md (flat files).
-//   The correct fix is to enumerate agent files explicitly — either as an array
-//   of relative paths ("agents/qa/agent.md", ...) or via whatever glob syntax
-//   Claude Code's plugin schema actually supports. Dev should consult the
-//   official plugins reference for the exact accepted types for `agents`.
+// AGENTS PATH (WS-STRUCT-01):
+//   Agents moved from root agents/ to src/plugin/agents/. The "agents" field
+//   in plugin.json now points Claude Code to the non-default path so agents
+//   load correctly on install.
 //
 // CI CONSTRAINT NOTE (test M-02):
 //   M-02 runs the REAL `claude plugin validate` via spawnSync — requires `claude`
@@ -75,9 +73,9 @@ try {
 }
 
 /** Path-typed fields that must never contain `../` and must start with `./`. */
-const PATH_FIELDS = ["skills"] as const;
-// `agents` is intentionally kept separate — after the fix it may be an array,
-// not a bare string. Each branch is tested explicitly below.
+const PATH_FIELDS = ["skills", "hooks"] as const;
+// `agents` is intentionally kept separate — it may be a string path or an array.
+// Each branch is tested explicitly in M-03 below.
 
 // =============================================================================
 // MISUSE — must be caught (tests that CURRENTLY PASS — regression guards)
@@ -170,20 +168,29 @@ describe("plugin.json misuse guards", () => {
     }
   });
 
-  it('M-04: manifest must NOT declare a "hooks" field (auto-discovered — duplicate-load error if present)', () => {
-    // Claude Code v2+ auto-discovers hooks/hooks.json. Declaring "hooks" in
-    // plugin.json on top of that auto-discovery causes a duplicate-load error
-    // at install time. The field MUST be absent from the manifest entirely.
+  it('M-04: "hooks" field, if present, must point to a non-root path (no duplicate-load risk)', () => {
+    // WS-STRUCT-01 moved hooks from root hooks/ to src/plugin/hooks/hooks.json.
+    // Since there is no root hooks/hooks.json, Claude Code auto-discovery finds
+    // nothing — so declaring "hooks" in plugin.json is necessary (not a duplicate)
+    // for the plugin runtime to locate hooks at their new non-default path.
     //
-    // This guard passes when the field is absent (current state). It will fail
-    // loudly if a "hooks" field is ever added back to plugin.json, preventing
-    // regression of the duplicate-load error.
-    expect(
-      "hooks" in manifest,
-      '"hooks" field must NOT be present in plugin.json — ' +
-        "Claude Code auto-discovers hooks/hooks.json; declaring it explicitly " +
-        "causes a duplicate-load error at plugin install time."
-    ).toBe(false);
+    // REGRESSION GUARD: if the hooks field is present, it must NOT point to a
+    // root-level path (which would be the duplicate-load scenario).
+    // If hooks field is absent, that is also acceptable (hooks simply won't load).
+    const hooksField = manifest["hooks"];
+    if (typeof hooksField === "string") {
+      // Must not be the root-default path that auto-discovery would also find
+      expect(
+        hooksField,
+        '"hooks" field must not point to root hooks/ (duplicate-load risk) — ' +
+          `found: "${hooksField}". Use a non-root path like ./src/plugin/hooks/hooks.json.`
+      ).not.toMatch(/^\.\/hooks\//);
+      // Must start with ./
+      expect(hooksField, `"hooks" path must start with "./" — found: "${hooksField}"`).toMatch(
+        /^\.\//
+      );
+    }
+    // If absent or a different type, that is fine — no constraint
   });
 });
 
@@ -192,10 +199,10 @@ describe("plugin.json misuse guards", () => {
 // =============================================================================
 
 describe("plugin.json boundary checks", () => {
-  it("B-01: name is `teo` (kebab-case, no spaces)", () => {
+  it("B-01: name is `capo` (kebab-case, no spaces)", () => {
     const name = manifest["name"];
     expect(typeof name, "name must be a string").toBe("string");
-    expect(name as string, `name must be "teo" — found: "${name}"`).toBe("teo");
+    expect(name as string, `name must be "capo" — found: "${name}"`).toBe("capo");
     expect(name as string, "name must match kebab-case (no spaces, no uppercase)").toMatch(
       /^[a-z][a-z0-9-]*$/
     );

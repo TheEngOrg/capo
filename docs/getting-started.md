@@ -6,7 +6,7 @@ CAPO ships as a Claude Code plugin from its own marketplace. In any Claude Code 
 
 ```
 /plugin marketplace add TheEngOrg/capo
-/plugin install teo@teo-marketplace
+/plugin install capo@teo-marketplace
 ```
 
 That registers the marketplace and installs the plugin into your user scope. The plugin's agents, skills, and hooks load from the plugin cache — nothing is written into your project.
@@ -54,7 +54,7 @@ Capo routes it to the right specialist and surfaces their answer.
 ## Uninstall
 
 ```
-/plugin uninstall teo@teo-marketplace
+/plugin uninstall capo@teo-marketplace
 /plugin marketplace remove teo-marketplace
 ```
 

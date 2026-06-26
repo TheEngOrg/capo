@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # =============================================================================
-# scripts/verify-plugin-install.sh — TEO Plugin RELEASE Verification Gate
+# scripts/verify-plugin-install.sh — CAPO Plugin RELEASE Verification Gate
 # =============================================================================
 #
 # PURPOSE
-#   This is the mandatory pre-release verification gate for the TEO Claude Code
+#   This is the mandatory pre-release verification gate for the CAPO Claude Code
 #   plugin. Run it before tagging any release. Wire it into WS-GO-07 (alpha
 #   release gate) as a pre-tag step.
 #
@@ -32,7 +32,7 @@
 #   CI (no chmod needed):  bash scripts/verify-plugin-install.sh
 #   Or wire via npm:  add "verify:plugin": "bash scripts/verify-plugin-install.sh" to package.json
 #
-# IDEMPOTENT — safe to re-run. Uninstalls teo before each install attempt so
+# IDEMPOTENT — safe to re-run. Uninstalls capo before each install attempt so
 # the install is always a fresh test.
 # =============================================================================
 
@@ -42,7 +42,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 PLUGIN_JSON="${REPO_ROOT}/.claude-plugin/plugin.json"
 
-echo "=== TEO Plugin Release Verification Gate ==="
+echo "=== CAPO Plugin Release Verification Gate ==="
 echo "Repo: ${REPO_ROOT}"
 echo ""
 
@@ -84,17 +84,17 @@ echo ""
 # ---------------------------------------------------------------------------
 # Step 3: clean slate — uninstall any existing teo installation
 # ---------------------------------------------------------------------------
-echo "[3/5] Cleaning existing teo installation (if any)..."
-claude plugin uninstall teo 2>/dev/null || true
+echo "[3/5] Cleaning existing capo installation (if any)..."
+claude plugin uninstall capo 2>/dev/null || true
 echo "    OK: clean slate ready"
 echo ""
 
 # ---------------------------------------------------------------------------
 # Step 4: install from github marketplace
 # ---------------------------------------------------------------------------
-echo "[4/5] Installing teo from github marketplace..."
-if ! claude plugin install teo@teo-marketplace; then
-  echo "✘ FAIL: install — claude plugin install teo@teo-marketplace exited non-zero."
+echo "[4/5] Installing capo from github marketplace..."
+if ! claude plugin install capo@teo-marketplace; then
+  echo "✘ FAIL: install — claude plugin install capo@teo-marketplace exited non-zero."
   echo "        This is the gate that catches validate-passing / install-failing bugs."
   exit 1
 fi
@@ -105,8 +105,8 @@ echo ""
 # Step 5: verify plugin details are resolvable post-install AND asset counts
 # ---------------------------------------------------------------------------
 echo "[5/5] Verifying installed plugin details and asset counts..."
-DETAILS_OUTPUT="$(claude plugin details teo 2>&1)" || {
-  echo "✘ FAIL: details — claude plugin details teo exited non-zero."
+DETAILS_OUTPUT="$(claude plugin details capo 2>&1)" || {
+  echo "✘ FAIL: details — claude plugin details capo exited non-zero."
   echo "        Plugin installed but is not resolvable. Check plugin registry state."
   exit 1
 }
@@ -154,7 +154,7 @@ echo ""
 # ---------------------------------------------------------------------------
 # PASS
 # ---------------------------------------------------------------------------
-echo "✔ PASS: teo plugin install verified"
+echo "✔ PASS: capo plugin install verified"
 echo ""
 echo "NOTE: This verified the PUBLIC github-sourced marketplace (TheEngOrg/capo)."
 echo "      This is the canonical pre-tag gate. Run before tagging any release."

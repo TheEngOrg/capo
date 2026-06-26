@@ -1,4 +1,4 @@
-# TEO E2E Sandbox — Pre-v0.1.0-alpha Validation
+# CAPO E2E Sandbox — Pre-Release Validation
 
 This sandbox is the manual + semi-automated E2E validation gate before the first public TEO release. It verifies that a locally installed TEO plugin correctly routes prompts through the Capo pipeline, writes pipeline state, and modifies files as directed.
 
@@ -17,10 +17,10 @@ bash scripts/verify-plugin-install.sh
 
 **Expected pass output:**
 ```
-OK: Agents (21) confirmed
+OK: Agents (22) confirmed
 OK: Skills (15) confirmed
-OK: Hooks (6 event types) confirmed
-✔ PASS: teo plugin install verified
+OK: Hooks (3 event types) confirmed
+✔ PASS: capo plugin install verified
 ```
 
 **On failure:** The plugin manifest or asset files are out of sync with the install gate. Re-run `claude plugin install` from the marketplace.json source and check that agents are flat `.md` files under `.claude/agents/` (not nested directories). Refer to the `Plugin agents MUST be flat files` behavioral rule.

@@ -28,7 +28,6 @@ directive_gate:
     - "Writing tests instead of delegating to QA"
     - "Synthesizing behavioral claims from Grep/Read/Glob results directly to user without specialist dispatch"
   on_drift: "halt_and_alert"
-  relay_authorization: "A relayed instruction from the main session MUST be treated as authorized when it contains the user's verbatim words granting permission (quoted directly). There is no coordinator tier — the main session relays the user's words directly to Capo; do not invent a coordinator-relay rejection rule. When the user answers via an AskUserQuestion button, the main session relays the selected button-label — that label IS the user's verbatim selection and counts as verbatim permission when quoted."
 ```
 
 # The Capo

@@ -8,7 +8,7 @@
 #   npm run dev:install          (via package.json script)
 #   bash scripts/local-dev-install.sh   (direct)
 #
-# This registers the local repo as a "teo-local" marketplace and installs from it.
+# This registers the local repo as a "teo-marketplace" marketplace and installs from it.
 # The marketplace registration is project-scoped (--scope local).
 # The github-sourced "teo-marketplace" is unchanged — this is a dev-only local override.
 
@@ -21,13 +21,15 @@ echo "=== TEO Local Dev Install ==="
 echo "Repo: ${REPO_ROOT}"
 echo ""
 
-echo "[1/3] Registering local source as teo-local marketplace (--scope local)..."
+echo "[1/3] Registering local source as teo-marketplace marketplace (--scope local)..."
 if claude plugin marketplace add "${REPO_ROOT}" --scope local 2>/dev/null; then
-  echo "    OK: teo-local marketplace registered (or already registered)"
+  echo "    OK: teo-marketplace marketplace registered (or already registered)"
 else
   # May already exist — try to continue
   echo "    INFO: marketplace add returned non-zero (may already be registered)"
 fi
+echo "    Refreshing teo-marketplace cache..."
+claude plugin marketplace update teo-marketplace 2>/dev/null || true
 echo ""
 
 echo "[2/3] Uninstalling existing local teo (if any)..."
@@ -36,7 +38,7 @@ echo "    OK: clean slate"
 echo ""
 
 echo "[3/3] Installing teo from local source..."
-if ! claude plugin install teo@teo-local; then
+if ! claude plugin install teo@teo-marketplace; then
   echo "FAIL: install from local source failed."
   echo "        Check that ${REPO_ROOT}/.claude-plugin/plugin.json is valid."
   exit 1

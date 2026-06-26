@@ -112,7 +112,7 @@ describe("misuse: dev.md missing docs+tests obligation", () => {
     // MISUSE: if no mention of docs/documentation appears in dev.md after the
     // change, the agent will not know to address docs as part of done.
     // This must FAIL before dev adds the content.
-    const content = readFile("agents/dev.md");
+    const content = readFile("src/plugin/agents/dev.md");
     expect(containsAnyOf(content, DOC_OBLIGATION_TERMS)).toBe(true);
   });
 
@@ -120,7 +120,7 @@ describe("misuse: dev.md missing docs+tests obligation", () => {
     // MISUSE: if no mention of updating tests appears after the change, the
     // docs+tests rule is incomplete — tests half is missing.
     // This test guards against a partial implementation that only mentions docs.
-    const content = readFile("agents/dev.md");
+    const content = readFile("src/plugin/agents/dev.md");
     expect(containsAnyOf(content, TEST_OBLIGATION_TERMS)).toBe(true);
   });
 });
@@ -129,13 +129,13 @@ describe("misuse: staff-engineer.md missing documentation checklist item", () =>
   it("staff-engineer.md Review Checklist references documentation", () => {
     // MISUSE: if the staff-engineer checklist has no documentation item, the
     // gate cannot enforce the rule — it will silently pass work that skips docs.
-    const content = readFile("agents/staff-engineer.md");
+    const content = readFile("src/plugin/agents/staff-engineer.md");
     expect(containsAnyOf(content, DOC_OBLIGATION_TERMS)).toBe(true);
   });
 
   it("staff-engineer.md Review Checklist references tests updated/added", () => {
     // MISUSE: same as above but for the tests half of the checklist.
-    const content = readFile("agents/staff-engineer.md");
+    const content = readFile("src/plugin/agents/staff-engineer.md");
     expect(containsAnyOf(content, TEST_OBLIGATION_TERMS)).toBe(true);
   });
 });
@@ -145,7 +145,7 @@ describe("misuse: mirror divergence — dev.md vs .claude/agents/dev.md", () => 
     // MISUSE: if the canonical and mirror diverge, one of the two paths
     // (plugin install vs local dev) will have a different rule. All consumers
     // must see the same agent definition.
-    const canonical = readFile("agents/dev.md");
+    const canonical = readFile("src/plugin/agents/dev.md");
     const mirror = readFileOrNull(".claude/agents/dev.md");
     if (mirror === null) return; // .claude/ is gitignored; skip in CI
     expect(canonical).toBe(mirror);
@@ -155,7 +155,7 @@ describe("misuse: mirror divergence — dev.md vs .claude/agents/dev.md", () => 
 describe("misuse: mirror divergence — staff-engineer.md vs .claude/agents/staff-engineer.md", () => {
   it("agents/staff-engineer.md and .claude/agents/staff-engineer.md have identical content", () => {
     // MISUSE: same divergence risk for the staff-engineer gate.
-    const canonical = readFile("agents/staff-engineer.md");
+    const canonical = readFile("src/plugin/agents/staff-engineer.md");
     const mirror = readFileOrNull(".claude/agents/staff-engineer.md");
     if (mirror === null) return; // .claude/ is gitignored; skip in CI
     expect(canonical).toBe(mirror);
@@ -172,7 +172,7 @@ describe("boundary: dev.md captures the justified-exception nuance", () => {
     // justify why not." Without the exception vocabulary, devs read this as an
     // unconditional mandate and waste time documenting trivial fixes.
     // A test that only checks DOC_OBLIGATION_TERMS misses this half.
-    const content = readFile("agents/dev.md");
+    const content = readFile("src/plugin/agents/dev.md");
     expect(containsAnyOf(content, EXCEPTION_TERMS)).toBe(true);
   });
 
@@ -181,7 +181,7 @@ describe("boundary: dev.md captures the justified-exception nuance", () => {
     // that reads "update docs or justify; always update tests" gets a mixed
     // signal and will behave inconsistently on mechanical test-free changes.
     // Both halves of the rule need the justified-exception clause.
-    const content = readFile("agents/dev.md");
+    const content = readFile("src/plugin/agents/dev.md");
     // The file must contain the exception vocabulary at least once in the
     // vicinity of a test-obligation term. We assert both are present in the
     // same file — co-location in the same section is enforced by golden-path
@@ -196,18 +196,18 @@ describe("boundary: dev-haiku.md carries the same docs+tests obligation", () => 
     // BOUNDARY: dev-haiku is spawned for MECHANICAL workstreams. If only dev.md
     // is updated, the haiku-tier agent will silently skip docs on the 60%+ of
     // workstreams it handles. The same obligation must appear in both agents.
-    const content = readFile("agents/dev-haiku.md");
+    const content = readFile("src/plugin/agents/dev-haiku.md");
     expect(containsAnyOf(content, DOC_OBLIGATION_TERMS)).toBe(true);
   });
 
   it("agents/dev-haiku.md contains a reference to tests obligation", () => {
-    const content = readFile("agents/dev-haiku.md");
+    const content = readFile("src/plugin/agents/dev-haiku.md");
     expect(containsAnyOf(content, TEST_OBLIGATION_TERMS)).toBe(true);
   });
 
   it("agents/dev-haiku.md mentions the justified-exception path", () => {
     // BOUNDARY: the exception nuance must reach the haiku tier as well.
-    const content = readFile("agents/dev-haiku.md");
+    const content = readFile("src/plugin/agents/dev-haiku.md");
     expect(containsAnyOf(content, EXCEPTION_TERMS)).toBe(true);
   });
 });
@@ -216,7 +216,7 @@ describe("boundary: mirror divergence — dev-haiku.md vs .claude/agents/dev-hai
   it("agents/dev-haiku.md and .claude/agents/dev-haiku.md have identical content", () => {
     // BOUNDARY: the haiku mirror must also receive the update. Updating only
     // the canonical and forgetting the mirror is the most common drift pattern.
-    const canonical = readFile("agents/dev-haiku.md");
+    const canonical = readFile("src/plugin/agents/dev-haiku.md");
     const mirror = readFileOrNull(".claude/agents/dev-haiku.md");
     if (mirror === null) return; // .claude/ is gitignored; skip in CI
     expect(canonical).toBe(mirror);
@@ -233,7 +233,7 @@ describe("boundary: staff-engineer checklist items are BLOCKING", () => {
     // Acceptable vocabulary: "BLOCK", "blocking", "MUST", "required" paired
     // with the docs/tests mention. We test for the BLOCKING indicator in the
     // same file that has the documentation checklist item.
-    const content = readFile("agents/staff-engineer.md");
+    const content = readFile("src/plugin/agents/staff-engineer.md");
     const blockTerms = ["BLOCK", "blocking", "hard block", "hard-block"];
     expect(containsAnyOf(content, blockTerms)).toBe(true);
   });
@@ -243,7 +243,7 @@ describe("boundary: teo-build SKILL.md and its mirror are consistent", () => {
   it("skills/teo-build/SKILL.md and .claude/skills/teo-build/SKILL.md have identical content", () => {
     // BOUNDARY: skill files also have canonical + mirror pairs. Divergence here
     // means the process doc update is visible in only one execution path.
-    const canonical = readFile("skills/teo-build/SKILL.md");
+    const canonical = readFile("src/plugin/skills/teo-build/SKILL.md");
     const mirror = readFileOrNull(".claude/skills/teo-build/SKILL.md");
     if (mirror === null) return; // .claude/ is gitignored; skip in CI
     expect(canonical).toBe(mirror);
@@ -252,7 +252,7 @@ describe("boundary: teo-build SKILL.md and its mirror are consistent", () => {
 
 describe("boundary: teo-code-review SKILL.md and its mirror are consistent", () => {
   it("skills/teo-code-review/SKILL.md and .claude/skills/teo-code-review/SKILL.md have identical content", () => {
-    const canonical = readFile("skills/teo-code-review/SKILL.md");
+    const canonical = readFile("src/plugin/skills/teo-code-review/SKILL.md");
     const mirror = readFileOrNull(".claude/skills/teo-code-review/SKILL.md");
     if (mirror === null) return; // .claude/ is gitignored; skip in CI
     expect(canonical).toBe(mirror);
@@ -269,7 +269,7 @@ describe("golden: dev.md Definition of Done includes docs+tests with exception",
     // GOLDEN: both the obligation and the exception must be present. A file
     // with only the obligation fails the nuance check; one with only the
     // exception language fails the obligation check.
-    const content = readFile("agents/dev.md");
+    const content = readFile("src/plugin/agents/dev.md");
     expect(containsAnyOf(content, DOC_OBLIGATION_TERMS)).toBe(true);
     expect(containsAnyOf(content, TEST_OBLIGATION_TERMS)).toBe(true);
     expect(containsAnyOf(content, EXCEPTION_TERMS)).toBe(true);
@@ -278,7 +278,7 @@ describe("golden: dev.md Definition of Done includes docs+tests with exception",
 
 describe("golden: dev-haiku.md Definition of Done includes docs+tests with exception", () => {
   it("dev-haiku.md contains documentation obligation AND exception vocabulary together", () => {
-    const content = readFile("agents/dev-haiku.md");
+    const content = readFile("src/plugin/agents/dev-haiku.md");
     expect(containsAnyOf(content, DOC_OBLIGATION_TERMS)).toBe(true);
     expect(containsAnyOf(content, TEST_OBLIGATION_TERMS)).toBe(true);
     expect(containsAnyOf(content, EXCEPTION_TERMS)).toBe(true);
@@ -287,17 +287,17 @@ describe("golden: dev-haiku.md Definition of Done includes docs+tests with excep
 
 describe("golden: staff-engineer.md has blocking checklist items for docs and tests", () => {
   it("staff-engineer.md has documentation obligation item in Review Checklist", () => {
-    const content = readFile("agents/staff-engineer.md");
+    const content = readFile("src/plugin/agents/staff-engineer.md");
     expect(containsAnyOf(content, DOC_OBLIGATION_TERMS)).toBe(true);
   });
 
   it("staff-engineer.md has tests obligation item in Review Checklist", () => {
-    const content = readFile("agents/staff-engineer.md");
+    const content = readFile("src/plugin/agents/staff-engineer.md");
     expect(containsAnyOf(content, TEST_OBLIGATION_TERMS)).toBe(true);
   });
 
   it("staff-engineer.md marks the new checklist items as BLOCKING", () => {
-    const content = readFile("agents/staff-engineer.md");
+    const content = readFile("src/plugin/agents/staff-engineer.md");
     const blockTerms = ["BLOCK", "blocking", "hard block", "hard-block"];
     expect(containsAnyOf(content, blockTerms)).toBe(true);
   });
@@ -307,7 +307,7 @@ describe("golden: staff-engineer.md has blocking checklist items for docs and te
     // exception vocabulary tells the reviewer to accept a justified skip.
     // Without this, staff-engineer blocks everything including intentional
     // no-doc mechanical changes.
-    const content = readFile("agents/staff-engineer.md");
+    const content = readFile("src/plugin/agents/staff-engineer.md");
     expect(containsAnyOf(content, EXCEPTION_TERMS)).toBe(true);
   });
 });
@@ -316,31 +316,31 @@ describe("golden: all mirrors match their canonical source", () => {
   it("agents/dev.md === .claude/agents/dev.md", () => {
     const mirror = readFileOrNull(".claude/agents/dev.md");
     if (mirror === null) return; // .claude/ is gitignored; skip in CI
-    expect(readFile("agents/dev.md")).toBe(mirror);
+    expect(readFile("src/plugin/agents/dev.md")).toBe(mirror);
   });
 
   it("agents/dev-haiku.md === .claude/agents/dev-haiku.md", () => {
     const mirror = readFileOrNull(".claude/agents/dev-haiku.md");
     if (mirror === null) return; // .claude/ is gitignored; skip in CI
-    expect(readFile("agents/dev-haiku.md")).toBe(mirror);
+    expect(readFile("src/plugin/agents/dev-haiku.md")).toBe(mirror);
   });
 
   it("agents/staff-engineer.md === .claude/agents/staff-engineer.md", () => {
     const mirror = readFileOrNull(".claude/agents/staff-engineer.md");
     if (mirror === null) return; // .claude/ is gitignored; skip in CI
-    expect(readFile("agents/staff-engineer.md")).toBe(mirror);
+    expect(readFile("src/plugin/agents/staff-engineer.md")).toBe(mirror);
   });
 
   it("skills/teo-build/SKILL.md === .claude/skills/teo-build/SKILL.md", () => {
     const mirror = readFileOrNull(".claude/skills/teo-build/SKILL.md");
     if (mirror === null) return; // .claude/ is gitignored; skip in CI
-    expect(readFile("skills/teo-build/SKILL.md")).toBe(mirror);
+    expect(readFile("src/plugin/skills/teo-build/SKILL.md")).toBe(mirror);
   });
 
   it("skills/teo-code-review/SKILL.md === .claude/skills/teo-code-review/SKILL.md", () => {
     const mirror = readFileOrNull(".claude/skills/teo-code-review/SKILL.md");
     if (mirror === null) return; // .claude/ is gitignored; skip in CI
-    expect(readFile("skills/teo-code-review/SKILL.md")).toBe(mirror);
+    expect(readFile("src/plugin/skills/teo-code-review/SKILL.md")).toBe(mirror);
   });
 });
 
@@ -427,7 +427,7 @@ describe("misuse(WS-SHARED-FILES): no shipped agent may contain context_manifest
 
   for (const filename of SHIPPED_AGENTS) {
     it(`agents/${filename} does NOT contain context_manifest: in its frontmatter`, () => {
-      const content = readFile(`agents/${filename}`);
+      const content = readFile(`src/plugin/agents/${filename}`);
       // Extract frontmatter only (between first two --- delimiters)
       const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
       const frontmatter = frontmatterMatch ? frontmatterMatch[1] : "";
@@ -446,7 +446,7 @@ describe("misuse(WS-SHARED-FILES): no shipped agent body may reference teo-apply
 
   for (const filename of SHIPPED_AGENTS) {
     it(`agents/${filename} body does NOT reference teo-apply-edit-contract.md`, () => {
-      const content = readFile(`agents/${filename}`);
+      const content = readFile(`src/plugin/agents/${filename}`);
       // Strip frontmatter before checking body — the shared_files list in
       // context_manifest is also a source of this string but vanishes with
       // the block strip. This test targets surviving body references only.
@@ -465,7 +465,7 @@ describe("misuse(WS-SHARED-FILES): no shipped agent body may reference teo-creat
 
   for (const filename of SHIPPED_AGENTS) {
     it(`agents/${filename} body does NOT reference teo-create-document-contract.md`, () => {
-      const content = readFile(`agents/${filename}`);
+      const content = readFile(`src/plugin/agents/${filename}`);
       const body = content.replace(/^---\n[\s\S]*?\n---\n/, "");
       expect(body).not.toContain("teo-create-document-contract.md");
     });
@@ -484,7 +484,7 @@ describe("boundary(WS-SHARED-FILES): valid frontmatter delimiters survive after 
 
   for (const filename of SHIPPED_AGENTS) {
     it(`agents/${filename} still has opening and closing --- frontmatter delimiters`, () => {
-      const content = readFile(`agents/${filename}`);
+      const content = readFile(`src/plugin/agents/${filename}`);
       // File must start with --- and have a second --- closing the block
       expect(content.startsWith("---\n")).toBe(true);
       // After the opening ---, there must be at least one more ---
@@ -501,7 +501,7 @@ describe("boundary(WS-SHARED-FILES): required frontmatter fields survive after s
 
   for (const filename of SHIPPED_AGENTS) {
     it(`agents/${filename} frontmatter still contains name, description, model, tools`, () => {
-      const content = readFile(`agents/${filename}`);
+      const content = readFile(`src/plugin/agents/${filename}`);
       const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
       const frontmatter = frontmatterMatch ? frontmatterMatch[1] : "";
       expect(frontmatter).toMatch(/^name:/m);
@@ -522,7 +522,7 @@ describe("boundary(WS-SHARED-FILES): studio-director.md shared-file links carry 
   // After the fix the references must be qualified ("if present" or equivalent).
 
   it("studio-director.md visual-formatting.md reference includes 'if present' qualification", () => {
-    const content = readFile("agents/studio-director.md");
+    const content = readFile("src/plugin/agents/studio-director.md");
     // Find the line mentioning visual-formatting.md; the "if present" hedge
     // must appear on that same line or within 3 lines following it.
     const lines = content.split("\n");
@@ -533,7 +533,7 @@ describe("boundary(WS-SHARED-FILES): studio-director.md shared-file links carry 
   });
 
   it("studio-director.md handoff-protocol.md reference includes 'if present' qualification", () => {
-    const content = readFile("agents/studio-director.md");
+    const content = readFile("src/plugin/agents/studio-director.md");
     const lines = content.split("\n");
     const refLineIdx = lines.findIndex((l) => l.includes("handoff-protocol.md"));
     expect(refLineIdx).toBeGreaterThanOrEqual(0);
@@ -552,14 +552,14 @@ describe("golden(WS-SHARED-FILES): all 22 shipped agent files exist (no accident
   // renamed a file during the cleanup pass.
 
   it("agents/ directory contains exactly 22 shipped agent files", () => {
-    const agentsDir = root("agents");
+    const agentsDir = root("src", "plugin", "agents");
     const files = fs.readdirSync(agentsDir).filter((f) => f.endsWith(".md"));
     expect(files.length).toBe(22);
   });
 
   for (const filename of SHIPPED_AGENTS) {
     it(`agents/${filename} exists on disk`, () => {
-      expect(() => readFile(`agents/${filename}`)).not.toThrow();
+      expect(() => readFile(`src/plugin/agents/${filename}`)).not.toThrow();
     });
   }
 });

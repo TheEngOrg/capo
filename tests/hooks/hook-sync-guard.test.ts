@@ -43,7 +43,7 @@ import * as path from "node:path";
 // =============================================================================
 
 const REPO_ROOT = path.resolve(__dirname, "..", "..");
-const HOOKS_DIR = path.join(REPO_ROOT, "hooks");
+const HOOKS_DIR = path.join(REPO_ROOT, "src", "plugin", "hooks");
 const HOOKS_JSON_PATH = path.join(HOOKS_DIR, "hooks.json");
 const BLOCK_NO_VERIFY = path.join(HOOKS_DIR, "block-no-verify.sh");
 const PRE_EDIT_GUARD = path.join(HOOKS_DIR, "pre-edit-write-guard.sh");

@@ -67,8 +67,8 @@ import * as os from "node:os";
 
 // These imports WILL FAIL until dev creates src/agents/load.ts.
 // That is the intended failing state.
-import { loadAgentDefinition, listAgentIds } from "./load.js";
-import type { AgentDefinition } from "./load.js";
+import { loadAgentDefinition, listAgentIds } from "../../src/agents/load.js";
+import type { AgentDefinition } from "../../src/agents/load.js";
 
 // ---------------------------------------------------------------------------
 // Constants

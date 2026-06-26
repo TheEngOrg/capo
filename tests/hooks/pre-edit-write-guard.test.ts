@@ -31,7 +31,7 @@ import * as path from "node:path";
 // TEST ORDERING: misuse → boundary → golden path (ADR-064 critical-path policy)
 // =============================================================================
 
-const SCRIPT = path.join(__dirname, "../../hooks/pre-edit-write-guard.sh");
+const SCRIPT = path.join(__dirname, "../../src/plugin/hooks/pre-edit-write-guard.sh");
 
 // Stable project root — does NOT need to exist on disk; realpath
 // --canonicalize-missing resolves paths even when targets are absent.

@@ -27,7 +27,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const SCRIPT = path.join(__dirname, "../../hooks/teo-prompt-router.sh");
+const SCRIPT = path.join(__dirname, "../../src/plugin/hooks/teo-prompt-router.sh");
 
 // ---------------------------------------------------------------------------
 // Runner — mirrors teo-prompt-router.test.ts pattern

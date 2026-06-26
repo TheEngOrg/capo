@@ -25,7 +25,7 @@ import * as path from "node:path";
 // ---------------------------------------------------------------------------
 
 const REPO_ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "../../");
-const CANONICAL = path.join(REPO_ROOT, "skills/teo/SKILL.md");
+const CANONICAL = path.join(REPO_ROOT, "src/plugin/skills/teo/SKILL.md");
 
 // ---------------------------------------------------------------------------
 // Helper: read a file and return its contents, throwing if unreadable

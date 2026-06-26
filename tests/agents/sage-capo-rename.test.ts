@@ -251,7 +251,7 @@ describe("misuse: ESCALATED-TO-SAGE must not appear in acceptance-engineer.md", 
     // MISUSE: the disposition table template and escalation trigger rules in
     // acceptance-engineer.md still had ESCALATED-TO-SAGE after PR #35.
     // All occurrences must be ESCALATED-TO-CAPO.
-    const content = readFile("agents/acceptance-engineer.md");
+    const content = readFile("src/plugin/agents/acceptance-engineer.md");
     expect(content).not.toContain("ESCALATED-TO-SAGE");
   });
 
@@ -267,7 +267,7 @@ describe("misuse: capo.md must not reference sage-result.json", () => {
   it("agents/capo.md contains zero sage-result.json references", () => {
     // MISUSE: capo.md's Turn-end Protocol and Memory Protocol sections both
     // named the old artifact path. Capo must now write capo-result.json.
-    const content = readFile("agents/capo.md");
+    const content = readFile("src/plugin/agents/capo.md");
     expect(content).not.toContain("sage-result.json");
   });
 
@@ -329,7 +329,7 @@ describe("misuse: hooks/teo-post-spawn-citation-check.sh must not refer to Sage"
   it('citation-check hook does not contain "before Sage reads it"', () => {
     // MISUSE: the BLOCK reason string in the hook named "Sage" as the consumer
     // of research files. Must now say "Capo".
-    const content = readFile("hooks/teo-post-spawn-citation-check.sh");
+    const content = readFile("src/plugin/hooks/teo-post-spawn-citation-check.sh");
     expect(content.toLowerCase()).not.toContain("before sage reads it");
   });
 });
@@ -472,11 +472,11 @@ describe("misuse: src/core/plan-builder.test.ts must not refer to Sage in prose 
   });
 });
 
-describe("misuse: src/agents/load.test.ts must not use SAGE_BLOCKED_TOOLS identifier", () => {
+describe("misuse: tests/agents/load.test.ts must not use SAGE_BLOCKED_TOOLS identifier", () => {
   it("load.test.ts does not contain SAGE_BLOCKED_TOOLS constant name", () => {
     // MISUSE: the constant was named SAGE_BLOCKED_TOOLS at line 96 and used at
     // line 301. The persona has been renamed to Capo; the constant must follow.
-    const content = readFile("src/agents/load.test.ts");
+    const content = readFile("tests/agents/load.test.ts");
     expect(content).not.toContain("SAGE_BLOCKED_TOOLS");
   });
 });
@@ -584,7 +584,7 @@ describe("boundary: mirror sync — acceptance-engineer.md canonical vs mirror",
   it("agents/acceptance-engineer.md and .claude/agents/acceptance-engineer.md are byte-identical", () => {
     // BOUNDARY: PR #35 updated canonical but missed the mirror. Both files must
     // be identical so plugin and local-dev paths see the same agent definition.
-    const canonical = readFile("agents/acceptance-engineer.md");
+    const canonical = readFile("src/plugin/agents/acceptance-engineer.md");
     const mirror = readFileOrNull(".claude/agents/acceptance-engineer.md");
     if (mirror === null) return; // mirror is gitignored; skip in CI
     expect(canonical).toBe(mirror);
@@ -595,7 +595,7 @@ describe("boundary: mirror sync — capo.md canonical vs mirror", () => {
   it("agents/capo.md and .claude/agents/capo.md are byte-identical", () => {
     // BOUNDARY: capo.md had multiple sage-result.json references. Both copies
     // must be fixed identically.
-    const canonical = readFile("agents/capo.md");
+    const canonical = readFile("src/plugin/agents/capo.md");
     const mirror = readFileOrNull(".claude/agents/capo.md");
     if (mirror === null) return; // mirror is gitignored; skip in CI
     expect(canonical).toBe(mirror);
@@ -607,7 +607,7 @@ describe("boundary: acceptance-engineer.md uses consistent ESCALATED-TO-CAPO thr
     // BOUNDARY: after the fix, the disposition enum row must show ESCALATED-TO-CAPO,
     // not be blank. We verify the correct replacement was applied — not just that
     // the wrong value was removed.
-    const content = readFile("agents/acceptance-engineer.md");
+    const content = readFile("src/plugin/agents/acceptance-engineer.md");
     expect(content).toContain("ESCALATED-TO-CAPO");
   });
 
@@ -615,7 +615,7 @@ describe("boundary: acceptance-engineer.md uses consistent ESCALATED-TO-CAPO thr
     // BOUNDARY: the "A finding MUST use ..." rule must also name ESCALATED-TO-CAPO.
     // If only the table template was fixed but the rule text wasn't, the agent
     // would read contradictory instructions.
-    const content = readFile("agents/acceptance-engineer.md");
+    const content = readFile("src/plugin/agents/acceptance-engineer.md");
     const rulePattern = /a finding must use `?escalated-to-capo`?/i;
     expect(rulePattern.test(content)).toBe(true);
   });
@@ -626,7 +626,7 @@ describe("boundary: capo.md uses capo-result.json consistently in all references
     // BOUNDARY: the Turn-end Protocol was the canonical statement of what file
     // Capo writes. If it says capo-result.json but the Memory Protocol still
     // says sage-result.json, agents will get conflicting instructions.
-    const content = readFile("agents/capo.md");
+    const content = readFile("src/plugin/agents/capo.md");
     expect(content).toContain("capo-result.json");
   });
 });
@@ -636,7 +636,7 @@ describe("boundary: capo.md does not mix old and new artifact names", () => {
     // BOUNDARY: partial rename (some lines changed, some not) is worse than
     // either extreme — it creates non-deterministic behavior. Assert both
     // the absence of the old name and presence of the new name in one test.
-    const content = readFile("agents/capo.md");
+    const content = readFile("src/plugin/agents/capo.md");
     expect(content).not.toContain("sage-result.json");
     expect(content).toContain("capo-result.json");
   });
@@ -743,13 +743,13 @@ describe("golden: all mirrors are byte-identical to their canonical sources", ()
   it("agents/acceptance-engineer.md === .claude/agents/acceptance-engineer.md", () => {
     const mirror = readFileOrNull(".claude/agents/acceptance-engineer.md");
     if (mirror === null) return; // mirror is gitignored; skip in CI
-    expect(readFile("agents/acceptance-engineer.md")).toBe(mirror);
+    expect(readFile("src/plugin/agents/acceptance-engineer.md")).toBe(mirror);
   });
 
   it("agents/capo.md === .claude/agents/capo.md", () => {
     const mirror = readFileOrNull(".claude/agents/capo.md");
     if (mirror === null) return; // mirror is gitignored; skip in CI
-    expect(readFile("agents/capo.md")).toBe(mirror);
+    expect(readFile("src/plugin/agents/capo.md")).toBe(mirror);
   });
 });
 

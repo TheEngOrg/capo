@@ -38,9 +38,9 @@ import * as path from "node:path";
 
 const REPO_ROOT = path.resolve(__dirname, "..", "..");
 const VERIFY_SCRIPT = path.join(REPO_ROOT, "scripts", "verify-plugin-install.sh");
-const HOOKS_JSON = path.join(REPO_ROOT, "hooks", "hooks.json");
-const AGENTS_DIR = path.join(REPO_ROOT, "agents");
-const SKILLS_DIR = path.join(REPO_ROOT, "skills");
+const HOOKS_JSON = path.join(REPO_ROOT, "src", "plugin", "hooks", "hooks.json");
+const AGENTS_DIR = path.join(REPO_ROOT, "src", "plugin", "agents");
+const SKILLS_DIR = path.join(REPO_ROOT, "src", "plugin", "skills");
 
 // ---------------------------------------------------------------------------
 // Helpers — filesystem-derived counts (no hardcoded integers)

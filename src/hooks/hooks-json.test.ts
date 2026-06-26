@@ -1,46 +1,34 @@
-// WS-SEC-02 — passing (post-impl, CAD gate 2)
+// WS-STARTUP-CLEANUP — passing (post-impl, CAD gate 1 spec)
 
 import { describe, it, expect } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
 // =============================================================================
-// hooks-json.test.ts — QA spec for hooks/hooks.json (WS-SEC-02 Fracture C)
+// hooks-json.test.ts — QA spec for hooks/hooks.json (WS-STARTUP-CLEANUP)
 //
-// Change under test: register hooks/pre-edit-write-guard.sh in hooks/hooks.json
-// under PreToolUse for both the "Edit" and "Write" matchers.
+// Change under test: remove 5 stub/stale hooks from hooks.json:
+//   - SessionStart: remove session-start.sh and teo-session-start-meta.sh
+//     (only capo-activation.sh remains under SessionStart)
+//   - Remove entire PostToolUse, TaskCompleted, TeammateIdle event type keys
+//     (their only scripts were no-op stubs)
 //
-// WHY THESE TESTS WILL FAIL TODAY
-//   hooks/hooks.json currently has ONE PreToolUse entry (matcher: "Bash") for
-//   block-no-verify.sh. It has NO entries for matcher "Edit" or "Write", and
-//   pre-edit-write-guard.sh is not referenced anywhere. Tests asserting the
-//   presence of Edit/Write matchers with pre-edit-write-guard.sh will fail
-//   until dev adds those entries.
+// POST-IMPL EVENT TYPE COUNT: 3
+//   SessionStart    [1 hook]:  capo-activation.sh
+//   PreToolUse      [3 hooks]: block-no-verify.sh (Bash), pre-edit-write-guard.sh (Edit + Write)
+//   UserPromptSubmit[1 hook]:  teo-prompt-router.sh
 //
-// ALSO TESTED HERE: verify-plugin-install.sh hook count gate update.
-//   After WS-SEC-02 adds 2 new PreToolUse entries (Edit + Write), the installed
-//   hook count will increase from 5 to 7. The HOOKS_COUNT assertion in
-//   scripts/verify-plugin-install.sh must be updated from "5" to "7".
-//   The test below asserts the new count — it will fail until dev updates
-//   verify-plugin-install.sh AND hooks.json is confirmed to register 7 hooks.
+// PRE-IMPL STATE (what hooks.json looks like before dev acts):
+//   SessionStart    [3 hooks]: session-start.sh, capo-activation.sh, teo-session-start-meta.sh
+//   PreToolUse      [3 hooks]: block-no-verify.sh, pre-edit-write-guard.sh (Edit), pre-edit-write-guard.sh (Write)
+//   PostToolUse     [1 hook]:  post-tool-use.sh
+//   TaskCompleted   [1 hook]:  task-completed.sh
+//   TeammateIdle    [1 hook]:  teammate-idle.sh
+//   UserPromptSubmit[1 hook]:  teo-prompt-router.sh
+//   6 top-level event type keys total
 //
-// NOTE ON HOOK COUNT MATH
-//   Current hooks registered (hooks.json):
-//     SessionStart [3]: session-start.sh, capo-activation.sh, teo-session-start-meta.sh
-//     PreToolUse   [1]: block-no-verify.sh (Bash matcher)
-//     PostToolUse  [1]: post-tool-use.sh
-//     TaskCompleted[1]: task-completed.sh
-//     TeammateIdle [1]: teammate-idle.sh
-//     Total = 7 hook commands across 5 top-level entries.
-//   BUT: the verify-plugin-install.sh HOOKS_COUNT is "5" today, which likely
-//   reflects top-level hook-entry objects, not individual command count.
-//   After WS-SEC-02 adds 2 PreToolUse entries (Edit + Write), the top-level
-//   entry count becomes 7. The exact semantic (entries vs commands) is
-//   determined by what `claude plugin details` reports — dev must verify and
-//   update the gate accordingly.
-//   THE TEST BELOW asserts "7" for the updated count; if the plugin CLI counts
-//   differently, dev must update the test comment but the test assertion is the
-//   spec. Dev documents the confirmed count during implementation.
+// verify-plugin-install.sh currently asserts HOOKS_COUNT = "6". After cleanup
+// it must assert "3". Tests below cover that shell script gate as well.
 //
 // Ordering: misuse → boundary → golden path (ADR-064 critical-path policy)
 // =============================================================================
@@ -58,16 +46,13 @@ interface HookEntry {
   command: string;
 }
 
-interface PreToolUseEntry {
+interface HookGroup {
   matcher?: string;
   hooks: HookEntry[];
 }
 
 interface HooksJson {
-  hooks: {
-    PreToolUse?: PreToolUseEntry[];
-    [key: string]: unknown;
-  };
+  hooks: Record<string, HookGroup[]>;
 }
 
 function loadHooksJson(): HooksJson {
@@ -75,51 +60,105 @@ function loadHooksJson(): HooksJson {
   return JSON.parse(raw) as HooksJson;
 }
 
-function getPreToolUseEntries(): PreToolUseEntry[] {
-  return loadHooksJson().hooks.PreToolUse ?? [];
+function getEventTypeKeys(): string[] {
+  return Object.keys(loadHooksJson().hooks);
 }
 
-/** Find a PreToolUse entry by its matcher string. */
-function findEntry(matcher: string): PreToolUseEntry | undefined {
+function getAllReferencedScripts(): string[] {
+  const data = loadHooksJson();
+  const scripts: string[] = [];
+  for (const groups of Object.values(data.hooks)) {
+    for (const group of groups) {
+      for (const hook of group.hooks) {
+        const match = hook.command.match(/\/hooks\/([^"'\s]+\.sh)/);
+        if (match) scripts.push(match[1]);
+      }
+    }
+  }
+  return scripts;
+}
+
+function getSessionStartCommands(): string[] {
+  const data = loadHooksJson();
+  const ssGroups = data.hooks["SessionStart"] ?? [];
+  return ssGroups.flatMap((g) => g.hooks.map((h) => h.command));
+}
+
+function getPreToolUseEntries(): HookGroup[] {
+  return loadHooksJson().hooks["PreToolUse"] ?? [];
+}
+
+function findPreToolUseEntry(matcher: string): HookGroup | undefined {
   return getPreToolUseEntries().find((e) => e.matcher === matcher);
 }
 
-/** True when an entry's hooks array contains a command referencing the given script name. */
-function entryReferencesScript(entry: PreToolUseEntry, scriptName: string): boolean {
+function entryReferencesScript(entry: HookGroup, scriptName: string): boolean {
   return entry.hooks.some((h) => h.command.includes(scriptName));
 }
 
 // =============================================================================
-// MISUSE — current (wrong) state patterns that MUST be absent after WS-SEC-02
+// MISUSE — patterns that must NOT appear in hooks.json after cleanup
 // =============================================================================
 
-describe("hooks.json — misuse: pre-edit-write-guard.sh must not be missing (WS-SEC-02)", () => {
-  it("must NOT be the case that zero PreToolUse entries reference pre-edit-write-guard.sh", () => {
-    // FAILS today: pre-edit-write-guard.sh appears in NO PreToolUse entry.
-    // After dev implements Fracture C, it must appear in at least two (Edit + Write).
-    const entries = getPreToolUseEntries();
-    const referencesGuard = entries.some((e) =>
-      entryReferencesScript(e, "pre-edit-write-guard.sh")
-    );
-    // This expect asserts the post-impl state (guard IS referenced).
-    // It fails until dev adds the Edit and Write entries.
-    expect(referencesGuard).toBe(true);
+describe("hooks.json — misuse: stub hooks must not remain registered (WS-STARTUP-CLEANUP)", () => {
+  it("must NOT reference post-tool-use.sh in any event type", () => {
+    // post-impl: PostToolUse event type removed; post-tool-use.sh no longer referenced. Confirmed absent.
+    // The stub was a no-op exit 0 and has been removed entirely.
+    const scripts = getAllReferencedScripts();
+    expect(scripts).not.toContain("post-tool-use.sh");
   });
 
-  it("must NOT be the case that only the Bash matcher exists in PreToolUse", () => {
-    // FAILS today: only one PreToolUse entry (Bash) exists.
-    // After WS-SEC-02 there must be at least 3 (Bash + Edit + Write).
-    const entries = getPreToolUseEntries();
-    // If only Bash exists, entries.length === 1 and this assertion fails.
-    expect(entries.length).toBeGreaterThanOrEqual(3);
+  it("must NOT reference task-completed.sh in any event type", () => {
+    // post-impl: TaskCompleted event type removed; task-completed.sh no longer referenced. Confirmed absent.
+    const scripts = getAllReferencedScripts();
+    expect(scripts).not.toContain("task-completed.sh");
+  });
+
+  it("must NOT reference teammate-idle.sh in any event type", () => {
+    // post-impl: TeammateIdle event type removed; teammate-idle.sh no longer referenced. Confirmed absent.
+    const scripts = getAllReferencedScripts();
+    expect(scripts).not.toContain("teammate-idle.sh");
+  });
+
+  it("must NOT reference teo-session-start-meta.sh in any event type", () => {
+    // post-impl: teo-session-start-meta.sh removed from SessionStart in hooks.json. Confirmed absent.
+    const scripts = getAllReferencedScripts();
+    expect(scripts).not.toContain("teo-session-start-meta.sh");
+  });
+
+  it("must NOT reference session-start.sh in any event type", () => {
+    // post-impl: session-start.sh removed from SessionStart in hooks.json. Confirmed absent.
+    // session-start.sh was stale (emitted TEO branding, checked agents/capo.md
+    // which never existed in dev repo). teo-statusline.sh handles status output.
+    const scripts = getAllReferencedScripts();
+    expect(scripts).not.toContain("session-start.sh");
+  });
+
+  it("must NOT have a PostToolUse key in hooks", () => {
+    // post-impl: PostToolUse key removed from hooks.json. Confirmed absent.
+    // Removing its stub script meant this entire event type had no entries — key removed.
+    const keys = getEventTypeKeys();
+    expect(keys).not.toContain("PostToolUse");
+  });
+
+  it("must NOT have a TaskCompleted key in hooks", () => {
+    // post-impl: TaskCompleted key removed from hooks.json. Confirmed absent.
+    const keys = getEventTypeKeys();
+    expect(keys).not.toContain("TaskCompleted");
+  });
+
+  it("must NOT have a TeammateIdle key in hooks", () => {
+    // post-impl: TeammateIdle key removed from hooks.json. Confirmed absent.
+    const keys = getEventTypeKeys();
+    expect(keys).not.toContain("TeammateIdle");
   });
 });
 
 // =============================================================================
-// BOUNDARY — structural validity (these should pass today and continue after)
+// BOUNDARY — structural validity invariants (must hold before AND after cleanup)
 // =============================================================================
 
-describe("hooks.json — boundary: file is structurally valid", () => {
+describe("hooks.json — boundary: file is structurally valid (WS-STARTUP-CLEANUP)", () => {
   it("file exists at hooks/hooks.json", () => {
     expect(fs.existsSync(HOOKS_JSON)).toBe(true);
   });
@@ -128,162 +167,168 @@ describe("hooks.json — boundary: file is structurally valid", () => {
     expect(() => loadHooksJson()).not.toThrow();
   });
 
-  it('top-level object has a "hooks" key', () => {
+  it('top-level object has a "hooks" key whose value is an object', () => {
     const parsed = loadHooksJson();
     expect(parsed).toHaveProperty("hooks");
     expect(typeof parsed.hooks).toBe("object");
+    expect(parsed.hooks).not.toBeNull();
   });
 
-  it("PreToolUse key exists and is an array", () => {
-    const parsed = loadHooksJson();
-    expect(Array.isArray(parsed.hooks.PreToolUse)).toBe(true);
-  });
-
-  it("existing Bash matcher entry for block-no-verify.sh is still present (regression guard)", () => {
-    // This PASSES today and must continue to pass after WS-SEC-02.
-    // WS-SEC-02 adds entries; it must not remove or break existing ones.
-    const bashEntry = findEntry("Bash");
-    expect(bashEntry).toBeDefined();
-    expect(entryReferencesScript(bashEntry!, "block-no-verify.sh")).toBe(true);
-  });
-
-  it("each PreToolUse entry has a matcher string and a non-empty hooks array", () => {
-    // Structural invariant — every PreToolUse entry must have a matcher and at least one hook.
-    const entries = getPreToolUseEntries();
-    for (const entry of entries) {
-      expect(typeof entry.matcher).toBe("string");
-      expect(entry.matcher!.trim().length).toBeGreaterThan(0);
-      expect(Array.isArray(entry.hooks)).toBe(true);
-      expect(entry.hooks.length).toBeGreaterThan(0);
+  it("each event type value is a non-empty array", () => {
+    // Every key in hooks must have at least one group entry — empty arrays are dead weight.
+    const data = loadHooksJson();
+    for (const [eventType, groups] of Object.entries(data.hooks)) {
+      expect(Array.isArray(groups), `${eventType} value must be an array`).toBe(true);
+      expect(groups.length, `${eventType} must have at least one group`).toBeGreaterThan(0);
     }
   });
 
-  it("each hook command in PreToolUse has type 'command' and a non-empty command string", () => {
-    const entries = getPreToolUseEntries();
-    for (const entry of entries) {
-      for (const hook of entry.hooks) {
-        expect(hook.type).toBe("command");
-        expect(typeof hook.command).toBe("string");
-        expect(hook.command.trim().length).toBeGreaterThan(0);
+  it("each hook entry has type 'command' and a non-empty command string", () => {
+    const data = loadHooksJson();
+    for (const groups of Object.values(data.hooks)) {
+      for (const group of groups) {
+        for (const hook of group.hooks) {
+          expect(hook.type).toBe("command");
+          expect(typeof hook.command).toBe("string");
+          expect(hook.command.trim().length).toBeGreaterThan(0);
+        }
       }
     }
   });
-});
 
-// =============================================================================
-// GOLDEN PATH — post-impl assertions (FAIL until Fracture C is implemented)
-// =============================================================================
-
-describe("hooks.json — golden: Edit matcher with pre-edit-write-guard.sh is registered (WS-SEC-02)", () => {
-  it("PreToolUse contains an entry with matcher 'Edit'", () => {
-    // FAILS today: no Edit matcher exists in hooks.json.
-    const editEntry = findEntry("Edit");
-    expect(editEntry).toBeDefined();
-  });
-
-  it("Edit matcher entry references pre-edit-write-guard.sh in its hooks array", () => {
-    // FAILS today: no Edit matcher exists.
-    const editEntry = findEntry("Edit");
-    expect(editEntry).toBeDefined();
-    expect(entryReferencesScript(editEntry!, "pre-edit-write-guard.sh")).toBe(true);
-  });
-
-  it("Edit matcher hook command uses CLAUDE_PLUGIN_ROOT env var (not a hardcoded path)", () => {
-    // FAILS today: no Edit matcher exists.
-    // The command must reference ${CLAUDE_PLUGIN_ROOT} so the hook resolves
-    // at install time regardless of where the plugin is installed.
-    const editEntry = findEntry("Edit");
-    expect(editEntry).toBeDefined();
-    const cmd = editEntry!.hooks.find((h) =>
-      h.command.includes("pre-edit-write-guard.sh")
-    )?.command;
-    expect(cmd).toBeDefined();
-    expect(cmd).toContain("CLAUDE_PLUGIN_ROOT");
-  });
-
-  it("Edit matcher hook has type 'command'", () => {
-    // FAILS today: no Edit matcher exists.
-    const editEntry = findEntry("Edit");
-    expect(editEntry).toBeDefined();
-    const guardHook = editEntry!.hooks.find((h) => h.command.includes("pre-edit-write-guard.sh"));
-    expect(guardHook?.type).toBe("command");
-  });
-});
-
-describe("hooks.json — golden: Write matcher with pre-edit-write-guard.sh is registered (WS-SEC-02)", () => {
-  it("PreToolUse contains an entry with matcher 'Write'", () => {
-    // FAILS today: no Write matcher exists in hooks.json.
-    const writeEntry = findEntry("Write");
-    expect(writeEntry).toBeDefined();
-  });
-
-  it("Write matcher entry references pre-edit-write-guard.sh in its hooks array", () => {
-    // FAILS today: no Write matcher exists.
-    const writeEntry = findEntry("Write");
-    expect(writeEntry).toBeDefined();
-    expect(entryReferencesScript(writeEntry!, "pre-edit-write-guard.sh")).toBe(true);
-  });
-
-  it("Write matcher hook command uses CLAUDE_PLUGIN_ROOT env var (not a hardcoded path)", () => {
-    // FAILS today: no Write matcher exists.
-    const writeEntry = findEntry("Write");
-    expect(writeEntry).toBeDefined();
-    const cmd = writeEntry!.hooks.find((h) =>
-      h.command.includes("pre-edit-write-guard.sh")
-    )?.command;
-    expect(cmd).toBeDefined();
-    expect(cmd).toContain("CLAUDE_PLUGIN_ROOT");
-  });
-
-  it("Write matcher hook has type 'command'", () => {
-    // FAILS today: no Write matcher exists.
-    const writeEntry = findEntry("Write");
-    expect(writeEntry).toBeDefined();
-    const guardHook = writeEntry!.hooks.find((h) => h.command.includes("pre-edit-write-guard.sh"));
-    expect(guardHook?.type).toBe("command");
-  });
-});
-
-describe("hooks.json — golden: hook command path consistency (WS-SEC-02)", () => {
-  it("Edit and Write matcher commands reference the same script path structure as Bash/block-no-verify", () => {
-    // The Bash entry uses: "${CLAUDE_PLUGIN_ROOT}/hooks/block-no-verify.sh"
-    // The new Edit/Write entries must use the same structural pattern.
-    // FAILS today: no Edit or Write entries exist.
-    const editEntry = findEntry("Edit");
-    const writeEntry = findEntry("Write");
-    expect(editEntry).toBeDefined();
-    expect(writeEntry).toBeDefined();
-
-    for (const entry of [editEntry!, writeEntry!]) {
-      const guardHook = entry.hooks.find((h) => h.command.includes("pre-edit-write-guard.sh"));
-      expect(guardHook).toBeDefined();
-      // Must follow the same CLAUDE_PLUGIN_ROOT pattern as the Bash entry
-      expect(guardHook!.command).toMatch(/CLAUDE_PLUGIN_ROOT.*hooks.*pre-edit-write-guard\.sh/);
+  it("every command referencing a hook script uses CLAUDE_PLUGIN_ROOT (no hardcoded paths)", () => {
+    const data = loadHooksJson();
+    for (const groups of Object.values(data.hooks)) {
+      for (const group of groups) {
+        for (const hook of group.hooks) {
+          if (hook.command.includes(".sh")) {
+            expect(hook.command, `command must use CLAUDE_PLUGIN_ROOT: ${hook.command}`).toContain(
+              "CLAUDE_PLUGIN_ROOT"
+            );
+          }
+        }
+      }
     }
   });
 
-  it("hooks.json round-trips through JSON.parse → JSON.stringify cleanly after additions", () => {
-    // Catches BOM, trailing commas, or encoding issues introduced during dev edit.
+  it("hooks.json round-trips through JSON.parse → JSON.stringify cleanly", () => {
+    // Catches BOM, trailing commas, or encoding issues from dev edits.
     const raw = fs.readFileSync(HOOKS_JSON, "utf8");
     const parsed: unknown = JSON.parse(raw);
     const reparsed: unknown = JSON.parse(JSON.stringify(parsed));
     expect(reparsed).toEqual(parsed);
   });
+
+  it("PreToolUse key exists and is an array with at least 3 entries (Bash + Edit + Write)", () => {
+    // Regression guard: WS-STARTUP-CLEANUP must not disturb PreToolUse entries.
+    const data = loadHooksJson();
+    expect(Array.isArray(data.hooks["PreToolUse"])).toBe(true);
+    expect((data.hooks["PreToolUse"] ?? []).length).toBeGreaterThanOrEqual(3);
+  });
 });
 
 // =============================================================================
-// verify-plugin-install.sh — hook count gate must be updated to "6"
-//
-// WS-HOOK-COUNT-FIX: the gate was asserting HOOKS_COUNT = "8", which is the
-// count of individual matcher/entry objects within event types (e.g. PreToolUse
-// alone has 3 — Bash, Edit, Write). The `claude plugin details` CLI reports
-// hooks by distinct event type count, not by individual entry objects.
-//
-// hooks/hooks.json has 6 top-level event type keys:
-//   SessionStart, PreToolUse, PostToolUse, TaskCompleted, TeammateIdle,
-//   UserPromptSubmit
-// `claude plugin details teo` therefore reports Hooks (6).
-// No hook is missing — all 6 event types are registered and confirmed present
-// by a real `claude plugin install`. The gate was counting the wrong thing.
-// Dev must update verify-plugin-install.sh to assert HOOKS_COUNT = "6".
+// GOLDEN PATH — post-impl assertions
 // =============================================================================
+
+describe("hooks.json — golden: exactly 3 event types after stub removal (WS-STARTUP-CLEANUP)", () => {
+  it("hooks has exactly 3 top-level event type keys", () => {
+    // post-impl: 3 event types remain (SessionStart, PreToolUse, UserPromptSubmit). Confirmed.
+    const keys = getEventTypeKeys();
+    expect(keys).toHaveLength(3);
+  });
+
+  it("the 3 event type keys are SessionStart, PreToolUse, UserPromptSubmit", () => {
+    // post-impl: PostToolUse, TaskCompleted, TeammateIdle all removed. Exactly these 3 remain.
+    const keys = getEventTypeKeys().sort();
+    expect(keys).toEqual(["PreToolUse", "SessionStart", "UserPromptSubmit"].sort());
+  });
+});
+
+describe("hooks.json — golden: SessionStart has exactly capo-activation.sh (WS-STARTUP-CLEANUP)", () => {
+  it("SessionStart group has exactly one hook command", () => {
+    // post-impl: SessionStart has exactly 1 command. Previously 3 (session-start.sh,
+    // capo-activation.sh, teo-session-start-meta.sh). The other 2 have been removed.
+    // Only capo-activation.sh remains. Confirmed.
+    const commands = getSessionStartCommands();
+    expect(commands).toHaveLength(1);
+  });
+
+  it("the single SessionStart command references capo-activation.sh", () => {
+    // post-impl: capo-activation.sh is the sole SessionStart command. Confirmed.
+    const commands = getSessionStartCommands();
+    expect(commands).toHaveLength(1);
+    expect(commands[0]).toContain("capo-activation.sh");
+  });
+
+  it("the SessionStart capo-activation.sh command uses CLAUDE_PLUGIN_ROOT", () => {
+    // Ensures the solo remaining SessionStart hook uses the portable path pattern.
+    const commands = getSessionStartCommands();
+    expect(commands[0]).toContain("CLAUDE_PLUGIN_ROOT");
+  });
+});
+
+describe("hooks.json — golden: PreToolUse registry intact after cleanup (WS-STARTUP-CLEANUP)", () => {
+  it("Bash matcher entry for block-no-verify.sh is still present (regression guard)", () => {
+    // WS-STARTUP-CLEANUP removes stubs; it must not disturb PreToolUse.
+    const bashEntry = findPreToolUseEntry("Bash");
+    expect(bashEntry).toBeDefined();
+    expect(entryReferencesScript(bashEntry!, "block-no-verify.sh")).toBe(true);
+  });
+
+  it("Edit matcher entry for pre-edit-write-guard.sh is still present (regression guard)", () => {
+    const editEntry = findPreToolUseEntry("Edit");
+    expect(editEntry).toBeDefined();
+    expect(entryReferencesScript(editEntry!, "pre-edit-write-guard.sh")).toBe(true);
+  });
+
+  it("Write matcher entry for pre-edit-write-guard.sh is still present (regression guard)", () => {
+    const writeEntry = findPreToolUseEntry("Write");
+    expect(writeEntry).toBeDefined();
+    expect(entryReferencesScript(writeEntry!, "pre-edit-write-guard.sh")).toBe(true);
+  });
+
+  it("UserPromptSubmit still references teo-prompt-router.sh", () => {
+    const data = loadHooksJson();
+    const groups = data.hooks["UserPromptSubmit"] ?? [];
+    const refs = groups.flatMap((g) => g.hooks.map((h) => h.command));
+    expect(refs.some((cmd) => cmd.includes("teo-prompt-router.sh"))).toBe(true);
+  });
+});
+
+// =============================================================================
+// verify-plugin-install.sh — hook count gate must be updated to "3"
+//
+// WS-STARTUP-CLEANUP drops 3 event types (PostToolUse, TaskCompleted, TeammateIdle).
+// `claude plugin details teo` reports hooks by distinct event type count.
+//
+// hooks/hooks.json post-impl has 3 top-level event type keys:
+//   SessionStart, PreToolUse, UserPromptSubmit
+// Dev must update verify-plugin-install.sh to assert HOOKS_COUNT = "3".
+// =============================================================================
+
+describe("verify-plugin-install.sh — hook count gate must assert 3 (WS-STARTUP-CLEANUP)", () => {
+  it("verify-plugin-install.sh exists at scripts/verify-plugin-install.sh", () => {
+    expect(fs.existsSync(VERIFY_SCRIPT)).toBe(true);
+  });
+
+  it('verify-plugin-install.sh does NOT assert HOOKS_COUNT = "6"', () => {
+    // post-impl: script no longer asserts HOOKS_COUNT = "6".
+    // Event type count dropped to 3 and the assertion was updated accordingly. Confirmed.
+    const content = fs.readFileSync(VERIFY_SCRIPT, "utf8");
+    expect(content).not.toMatch(/HOOKS_COUNT.*"6"/);
+  });
+
+  it('verify-plugin-install.sh asserts HOOKS_COUNT = "3"', () => {
+    // post-impl: script now asserts HOOKS_COUNT = "3". Confirmed.
+    const content = fs.readFileSync(VERIFY_SCRIPT, "utf8");
+    expect(content).toMatch(/HOOKS_COUNT.*"3"/);
+  });
+
+  it("verify-plugin-install.sh OK message references Hooks (3)", () => {
+    // post-impl: OK message now references Hooks (3 event types). Confirmed.
+    // The message was updated to reference 3 event types.
+    const content = fs.readFileSync(VERIFY_SCRIPT, "utf8");
+    expect(content).toMatch(/Hooks \(3/);
+  });
+});

@@ -3,12 +3,7 @@
     "SessionStart": [
       {
         "hooks": [
-          { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/session-start.sh\"" },
-          { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/capo-activation.sh\"" },
-          {
-            "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/teo-session-start-meta.sh\""
-          }
+          { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/capo-activation.sh\"" }
         ]
       }
     ],
@@ -35,27 +30,6 @@
             "type": "command",
             "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/pre-edit-write-guard.sh\""
           }
-        ]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "hooks": [
-          { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use.sh\"" }
-        ]
-      }
-    ],
-    "TaskCompleted": [
-      {
-        "hooks": [
-          { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/task-completed.sh\"" }
-        ]
-      }
-    ],
-    "TeammateIdle": [
-      {
-        "hooks": [
-          { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/teammate-idle.sh\"" }
         ]
       }
     ],

@@ -122,7 +122,7 @@ PASS: all E2E trace checks complete
 
 ## Known Limitations
 
-**HMAC signed ledger is NOT verified.** `src/core` and `src/engine` (the deterministic guardrails, gate runner, and signed audit ledger) are not wired to the plugin execution path. The post-tool-use and task-completed hooks are stubs that exit 0. `verify-traces.sh` explicitly skips ledger checks and prints a note explaining this. Tracked in the TEO Roadmap — the runtime must be wired before the ledger assertion can become a gate.
+**HMAC signed ledger is NOT verified.** `src/core` and `src/engine` (the deterministic guardrails, gate runner, and signed audit ledger) are not wired to the plugin execution path. `verify-traces.sh` explicitly skips ledger checks and prints a note explaining this. Tracked in the TEO Roadmap — the runtime must be wired before the ledger assertion can become a gate.
 
 **STEP-3A and STEP-3B overwrite the same `capo-result.json`.** If you need to validate both states independently, run STEP-4 after STEP-3A before running STEP-3B.
 

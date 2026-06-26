@@ -134,10 +134,10 @@ else
   PASS=false
 fi
 
-if [ "${HOOKS_COUNT}" = "6" ]; then
-  echo "    OK: Hooks (6 event types) confirmed"
+if [ "${HOOKS_COUNT}" = "3" ]; then
+  echo "    OK: Hooks (3 event types) confirmed"
 else
-  echo "✘ FAIL: expected Hooks (6 event types), got '${HOOKS_COUNT}'"
+  echo "✘ FAIL: expected Hooks (3 event types), got '${HOOKS_COUNT}'"
   PASS=false
 fi
 

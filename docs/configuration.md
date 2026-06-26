@@ -57,22 +57,15 @@ Custom skills are available alongside CAPO's built-in skills. There's no registr
 
 ## Hooks
 
-CAPO ships 10 hook scripts in `.claude/hooks/`. 9 of the 10 are actively registered in `hooks/hooks.json`. The tenth (`teo-post-spawn-citation-check.sh`) is present on disk but intentionally not yet registered — it's pending Component C gate completion.
+CAPO ships 5 hook scripts in `hooks/`. 4 of the 5 are actively registered in `hooks/hooks.json`. The fifth (`teo-post-spawn-citation-check.sh`) is present on disk but intentionally not yet registered — it's pending Component C gate completion.
 
 | Event | Script | What it does |
 |-------|--------|--------------|
-| SessionStart | `session-start.sh` | Prints version info |
 | SessionStart | `capo-activation.sh` | Loads the Capo/orchestrator persona |
-| SessionStart | `teo-session-start-meta.sh` | Stub — exits 0, no-op |
 | PreToolUse/Bash | `block-no-verify.sh` | Blocks `--no-verify` and signing-bypass flags in git commands |
 | PreToolUse/Edit | `pre-edit-write-guard.sh` | Blocks unauthorized Edit on protected paths (requires bypass token) |
 | PreToolUse/Write | `pre-edit-write-guard.sh` | Blocks unauthorized Write on protected paths (requires bypass token) |
-| PostToolUse | `post-tool-use.sh` | Stub — exits 0, no-op |
-| TaskCompleted | `task-completed.sh` | Stub — exits 0, no-op |
-| TeammateIdle | `teammate-idle.sh` | Stub — exits 0, no-op |
 | UserPromptSubmit | `teo-prompt-router.sh` | Routes `/teo` prompts to Capo orchestrator; injects additionalContext for substantive prompts; utility keywords pass through |
-
-The three stub hooks are placeholders for future functionality. They do nothing now.
 
 ### Pending registration
 

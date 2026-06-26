@@ -3,7 +3,7 @@
  *
  * AC-1  bin/teo-run.js is NOT tracked in git
  * AC-2  .gitignore covers bin/teo-run.js.map
- * AC-3  postinstall script present in package.json
+ * AC-3  postinstall script REMOVED (build is now explicit via build:plugin)
  * AC-4  esbuild.config.mjs has sourcemap: "external"
  * AC-5  esbuild.config.mjs reads TEO_VERSION dynamically (createRequire, no hardcoded "1.0.0")
  * AC-6  npm run bundle produces bin/teo-run.js AND bin/teo-run.js.map  (skipped in CI)
@@ -41,14 +41,14 @@ describe("AC-2: .gitignore covers bin/teo-run.js.map", () => {
   });
 });
 
-// ─── AC-3: postinstall must exist in package.json ───────────────────────────
+// ─── AC-3: postinstall must NOT exist in package.json (WS-BUILD-PLUGIN removed it) ─
 
-describe("AC-3: postinstall script in package.json", () => {
-  it('scripts.postinstall === "npm run bundle"', () => {
+describe("AC-3: postinstall script removed from package.json", () => {
+  it("scripts.postinstall is undefined (build is now explicit via build:plugin)", () => {
     const pkg = JSON.parse(readFileSync(join(REPO_ROOT, "package.json"), "utf8")) as {
       scripts?: Record<string, string>;
     };
-    expect(pkg.scripts?.postinstall).toBe("npm run bundle");
+    expect(pkg.scripts?.postinstall).toBeUndefined();
   });
 });
 

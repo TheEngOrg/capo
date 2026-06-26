@@ -6,6 +6,8 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
+    "build:plugin": "node scripts/build-plugin.mjs",
+    "build:all": "npm run build && npm run build:plugin",
     "bundle": "tsc --noEmit && node esbuild.config.mjs",
     "test": "vitest run",
     "test:cov": "vitest run --coverage",
@@ -16,7 +18,6 @@
     "format:check": "prettier --check \"src/**/*.ts\" \"*.config.{ts,js}\" \"scripts/**/*.mjs\"",
     "check-lockfile": "node scripts/check-lockfile.mjs",
     "prepare": "husky",
-    "postinstall": "npm run bundle",
     "dev:install": "bash scripts/local-dev-install.sh",
     "release": "bash scripts/release.sh"
   },

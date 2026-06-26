@@ -79,6 +79,10 @@ try {
   manifest = {};
 }
 
+// Read package.json once as canonical version source
+const pkgRaw = fs.readFileSync(path.join(REPO_ROOT, "package.json"), "utf8");
+const pkgVersion = (JSON.parse(pkgRaw) as { version: string }).version;
+
 /** Path-typed fields that must never contain `../` and must start with `./`. */
 const PATH_FIELDS = ["skills", "hooks"] as const;
 // `agents` is intentionally kept separate — it may be a string path or an array.
@@ -224,12 +228,11 @@ describe("plugin.json boundary checks", () => {
     ).toMatch(/^\d+\.\d+\.\d+/);
   });
 
-  it('B-03: version is "1.0.3" (current release — update on each release bump)', () => {
+  it("B-03: version matches package.json (current release — do not hard-code)", () => {
     const version = manifest["version"] as string;
-    expect(
-      version,
-      `version must be "1.0.3" for this release — found: "${version}". Update this assertion when bumping the version.`
-    ).toBe("1.0.3");
+    expect(version, `plugin.json version must match package.json version (${pkgVersion})`).toBe(
+      pkgVersion
+    );
   });
 });
 

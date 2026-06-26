@@ -7,7 +7,7 @@
 //   branding. The statusline banner reads:
 //     "TEO v4.3.0 | MG v6.2.0 | pilot-alpha | Capo: missing"
 //   Every field is wrong. This workstream removes all MG-era references and
-//   releases v1.0.3.
+//   releases a clean version with CAPO branding.
 //
 // WHAT THESE TESTS VERIFY:
 //   AC-1 (misuse-first): .teo-for-claude-version must not contain MG-era keys
@@ -15,7 +15,7 @@
 //   AC-3 (misuse-first): session-start.sh must not contain any MG string
 //   AC-4 (misuse-first): website-creation-process.md must not say "MG agents"
 //   AC-5 (misuse-first): visual-formatting.md must not contain specific MG phrases
-//   AC-6 (golden):       Version 1.0.3 across package.json, plugin.json, and version file
+//   AC-6 (golden):       Version consistency across package.json, plugin.json, and version file
 //   AC-7 (golden):       release.sh updates .teo-for-claude-version on release
 //
 // IMPLEMENTATION STATUS: GREEN as of WS-MG-CLEANUP-RELEASE
@@ -31,6 +31,12 @@ import { join } from "node:path";
 // This file lives at tests/ws-mg-cleanup.test.ts — one directory up is the repo root.
 // NEVER hardcode /tmp/... or /Users/... paths per project policy.
 const REPO_ROOT = new URL("../", import.meta.url).pathname;
+
+// Read package.json once — canonical version source of truth for all version assertions.
+const _pkg = JSON.parse(readFileSync(join(REPO_ROOT, "package.json"), "utf8")) as {
+  version: string;
+};
+const CURRENT_VERSION = _pkg.version;
 
 // ─── AC-1: .claude/.teo-for-claude-version format ────────────────────────────
 // STATUS: GREEN
@@ -70,10 +76,11 @@ describe("AC-1: .teo-for-claude-version format", () => {
     expect(content).toMatch(/^\s*capo_version\s*:/m);
   });
 
-  it("GOLDEN: capo_version is 1.0.3", () => {
+  it("GOLDEN: capo_version matches package.json (current release)", () => {
     const content = readFileSync(VERSION_FILE, "utf8");
-    // Accept `capo_version: 1.0.3` with any surrounding whitespace
-    expect(content).toMatch(/^\s*capo_version\s*:\s*1\.0\.3\s*$/m);
+    // Build a dynamic regex that matches the exact current version
+    const escaped = CURRENT_VERSION.replace(/\./g, "\\.");
+    expect(content).toMatch(new RegExp(`^\\s*capo_version\\s*:\\s*${escaped}\\s*$`, "m"));
   });
 
   it("GOLDEN: edition field is 'dev'", () => {
@@ -195,43 +202,35 @@ describe("AC-5: visual-formatting.md no stale MG product-identity phrases", () =
 // ─── AC-6: Version consistency across all three version carriers ──────────────
 // STATUS: GREEN
 
-describe("AC-6: version 1.0.3 across package.json, plugin.json, and version file", () => {
+describe("AC-6: version consistency across package.json, plugin.json, and version file", () => {
   // STATUS: GREEN
 
   const PKG_JSON = join(REPO_ROOT, "package.json");
   const PLUGIN_JSON = join(REPO_ROOT, ".claude-plugin", "plugin.json");
   const VERSION_FILE = join(REPO_ROOT, ".claude", ".teo-for-claude-version");
 
-  // ── Misuse: stale 1.0.2 in any of the three carriers ────────────────────
-  it("MISUSE: package.json must NOT be version '1.0.2'", () => {
-    const pkg = JSON.parse(readFileSync(PKG_JSON, "utf8")) as { version: string };
-    expect(pkg.version).not.toBe("1.0.2");
+  const pkg = JSON.parse(readFileSync(PKG_JSON, "utf8")) as { version: string };
+  const currentVersion = pkg.version;
+
+  // ── Golden: all three carriers agree on the current release ─────────────
+  it("GOLDEN: package.json version is a valid semver (canonical source of truth)", () => {
+    expect(currentVersion).toMatch(/^\d+\.\d+\.\d+/);
   });
 
-  it("MISUSE: plugin.json must NOT be version '1.0.2'", () => {
+  it("GOLDEN: plugin.json version matches package.json (cross-carrier consistency)", () => {
     const plugin = JSON.parse(readFileSync(PLUGIN_JSON, "utf8")) as { version: string };
-    expect(plugin.version).not.toBe("1.0.2");
+    expect(
+      plugin.version,
+      `plugin.json (${plugin.version}) must match package.json (${currentVersion})`
+    ).toBe(currentVersion);
   });
 
-  it("MISUSE: .teo-for-claude-version must NOT contain 'capo_version: 1.0.2'", () => {
+  it("GOLDEN: .teo-for-claude-version capo_version matches package.json (current release)", () => {
     const content = readFileSync(VERSION_FILE, "utf8");
-    expect(content).not.toMatch(/^\s*capo_version\s*:\s*1\.0\.2\s*$/m);
-  });
-
-  // ── Golden: all three carriers agree on 1.0.3 ───────────────────────────
-  it("GOLDEN: package.json version === '1.0.3'", () => {
-    const pkg = JSON.parse(readFileSync(PKG_JSON, "utf8")) as { version: string };
-    expect(pkg.version).toBe("1.0.3");
-  });
-
-  it("GOLDEN: .claude-plugin/plugin.json version === '1.0.3'", () => {
-    const plugin = JSON.parse(readFileSync(PLUGIN_JSON, "utf8")) as { version: string };
-    expect(plugin.version).toBe("1.0.3");
-  });
-
-  it("GOLDEN: .claude/.teo-for-claude-version capo_version is '1.0.3'", () => {
-    const content = readFileSync(VERSION_FILE, "utf8");
-    expect(content).toMatch(/^\s*capo_version\s*:\s*1\.0\.3\s*$/m);
+    const escaped = CURRENT_VERSION.replace(/\./g, "\\.");
+    expect(content, `capo_version must be ${CURRENT_VERSION}`).toMatch(
+      new RegExp(`^\\s*capo_version\\s*:\\s*${escaped}\\s*$`, "m")
+    );
   });
 });
 

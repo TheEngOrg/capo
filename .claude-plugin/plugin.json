@@ -1,7 +1,7 @@
 {
   "name": "capo",
   "displayName": "CAPO — The Engineering Org",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Multi-agent orchestration for Claude Code. Enforces QA-first CAD development through prompt-gated pipeline discipline and harness-enforced hook walls.",
   "author": {
     "name": "TheEngOrg",

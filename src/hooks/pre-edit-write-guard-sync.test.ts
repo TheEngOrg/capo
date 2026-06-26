@@ -59,9 +59,15 @@ import * as path from "node:path";
 // =============================================================================
 
 const REPO_ROOT = path.resolve(__dirname, "..", "..");
-const CANONICAL_GUARD = path.join(REPO_ROOT, "hooks", "pre-edit-write-guard.sh");
+const CANONICAL_GUARD = path.join(REPO_ROOT, "src", "plugin", "hooks", "pre-edit-write-guard.sh");
 const DEPLOYED_GUARD = path.join(REPO_ROOT, ".claude", "hooks", "pre-edit-write-guard.sh");
-const CANONICAL_BLOCK_NO_VERIFY = path.join(REPO_ROOT, "hooks", "block-no-verify.sh");
+const CANONICAL_BLOCK_NO_VERIFY = path.join(
+  REPO_ROOT,
+  "src",
+  "plugin",
+  "hooks",
+  "block-no-verify.sh"
+);
 const DEPLOYED_BLOCK_NO_VERIFY = path.join(REPO_ROOT, ".claude", "hooks", "block-no-verify.sh");
 
 /**

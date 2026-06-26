@@ -24,7 +24,7 @@ import * as path from "node:path";
 //   Exit code 2 = blocked. Exit code 0 = allowed.
 // =============================================================================
 
-const SCRIPT = path.join(__dirname, "../../hooks/block-no-verify.sh");
+const SCRIPT = path.join(__dirname, "../plugin/hooks/block-no-verify.sh");
 
 /**
  * Build the JSON payload that Claude Code's PreToolUse hook receives.

@@ -13,7 +13,7 @@ import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const SCRIPT = path.join(__dirname, "../../hooks/teo-prompt-router.sh");
+const SCRIPT = path.join(__dirname, "../plugin/hooks/teo-prompt-router.sh");
 
 /**
  * Run the router script with a given prompt string.

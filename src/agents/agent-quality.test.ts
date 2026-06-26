@@ -55,7 +55,7 @@ describe("misuse: AGENT-SAGE-DELETED — agents/sage.md must not exist after Pha
     // re-introduced (or never deleted). The Sage→Capo rename (WS-RENAME-T2)
     // requires this file to be gone. Any tracked path that re-creates it is a
     // regression.
-    const fullPath = root("agents/sage.md");
+    const fullPath = root("src/plugin/agents/sage.md");
     expect(fs.existsSync(fullPath), "agents/sage.md must not exist after Phase B").toBe(false);
   });
 
@@ -66,7 +66,7 @@ describe("misuse: AGENT-SAGE-DELETED — agents/sage.md must not exist after Pha
     // Phase B hardening touched capo.md, not just removed sage.md.
     //
     // Currently FAILING: capo.md Team Roster does not list studio-director.
-    const content = readFile("agents/capo.md");
+    const content = readFile("src/plugin/agents/capo.md");
     expect(content).toContain("`studio-director`");
   });
 });
@@ -86,7 +86,7 @@ describe("misuse: AGENT-SE-TESTCOV-CMD — staff-engineer must specify npm run t
     // cannot skip the coverage step. Vague "run tests" instruction is a gap.
     //
     // Currently FAILING: staff-engineer.md does not contain this string.
-    const content = readFile("agents/staff-engineer.md");
+    const content = readFile("src/plugin/agents/staff-engineer.md");
     expect(content).toContain("npm run test:cov");
   });
 });
@@ -98,7 +98,7 @@ describe("misuse: AGENT-SE-COVERAGE-CITE — staff-engineer must cite actual cov
     // reviewer to cite/include/paste coverage percentages in the review output.
     //
     // Currently FAILING: staff-engineer.md contains no such language.
-    const content = readFile("agents/staff-engineer.md");
+    const content = readFile("src/plugin/agents/staff-engineer.md");
     const hasCitationRequirement =
       /\bcite\b/i.test(content) ||
       /include.*coverage.*(number|percent|%)/i.test(content) ||
@@ -119,7 +119,7 @@ describe("misuse: AGENT-SE-BLOCKING-CRITERIA — staff-engineer must distinguish
     // structured criteria so callers know which findings gate the pipeline.
     //
     // Currently FAILING: staff-engineer.md has no BLOCKING / ADVISORY / NON-BLOCKING language.
-    const content = readFile("agents/staff-engineer.md");
+    const content = readFile("src/plugin/agents/staff-engineer.md");
     const hasBlocking = /\bBLOCKING\b/i.test(content);
     const hasNonBlockingOrAdvisory =
       /\bADVISORY\b/i.test(content) || /\bNON-BLOCKING\b/i.test(content);
@@ -138,7 +138,7 @@ describe("misuse: AGENT-DEV-BRANCH-ISOLATION — dev must verify current branch 
     // explicitly told to verify it is on the correct branch.
     //
     // Currently FAILING: dev.md contains no branch verification language.
-    const content = readFile("agents/dev.md");
+    const content = readFile("src/plugin/agents/dev.md");
     const hasBranchCheck =
       /git branch --show-current/i.test(content) ||
       /workstream_branch/i.test(content) ||
@@ -158,7 +158,7 @@ describe("misuse: AGENT-DEVHAIKU-BRANCH-ISOLATION — dev-haiku must verify curr
     // independently; it must carry the same branch isolation requirement.
     //
     // Currently FAILING: dev-haiku.md contains no branch verification language.
-    const content = readFile("agents/dev-haiku.md");
+    const content = readFile("src/plugin/agents/dev-haiku.md");
     const hasBranchCheck =
       /git branch --show-current/i.test(content) ||
       /workstream_branch/i.test(content) ||
@@ -183,7 +183,7 @@ describe("misuse: AGENT-CAPO-SYNTHESIS-RULE — capo.md must prohibit direct syn
     // entry alone is insufficient — it fires reactively, not preventively.
     //
     // Currently FAILING: the Constitution bullets do not include any of these terms.
-    const content = readFile("agents/capo.md");
+    const content = readFile("src/plugin/agents/capo.md");
 
     // Extract the Constitution section — from ## Constitution to the next ## heading
     const constitutionMatch = content.match(/## Constitution([\s\S]*?)(?=\n## )/);
@@ -215,7 +215,7 @@ describe("misuse: AGENT-ART-ESCALATION — art-director must not escalate to eng
     // Escalating there dead-ends the issue.
     //
     // Currently FAILING (positive assertion below): capo or studio-director is not listed.
-    const content = readFile("agents/art-director.md");
+    const content = readFile("src/plugin/agents/art-director.md");
     expect(content).not.toContain("ESCALATES TO: engineering-manager");
   });
 
@@ -223,7 +223,7 @@ describe("misuse: AGENT-ART-ESCALATION — art-director must not escalate to eng
     // BOUNDARY: after the fix, art-director must name the correct escalation target.
     //
     // Currently FAILING: the file says engineering-manager.
-    const content = readFile("agents/art-director.md");
+    const content = readFile("src/plugin/agents/art-director.md");
     const hasCorrectEscalation =
       /ESCALATES TO:.*capo/i.test(content) || /ESCALATES TO:.*studio-director/i.test(content);
     expect(
@@ -239,7 +239,7 @@ describe("misuse: AGENT-PO-ESCALATION — product-owner must not escalate to eng
     // Product escalation belongs at Capo (orchestration layer) or above.
     //
     // Currently FAILING (positive assertion below): capo is not listed.
-    const content = readFile("agents/product-owner.md");
+    const content = readFile("src/plugin/agents/product-owner.md");
     expect(content).not.toContain("ESCALATES TO: engineering-manager");
   });
 
@@ -247,7 +247,7 @@ describe("misuse: AGENT-PO-ESCALATION — product-owner must not escalate to eng
     // BOUNDARY: after the fix, the product-owner must name capo as escalation target.
     //
     // Currently FAILING: the file says engineering-manager.
-    const content = readFile("agents/product-owner.md");
+    const content = readFile("src/plugin/agents/product-owner.md");
     expect(/ESCALATES TO:.*capo/i.test(content)).toBe(true);
   });
 });
@@ -258,7 +258,7 @@ describe("misuse: AGENT-CTO-ESCALATION — cto must not escalate to engineering-
     // for the CTO. CTO escalation belongs to the orchestration layer (Capo).
     //
     // Currently FAILING (positive assertion below): capo is not listed.
-    const content = readFile("agents/cto.md");
+    const content = readFile("src/plugin/agents/cto.md");
     expect(content).not.toContain("ESCALATES TO: engineering-director");
   });
 
@@ -266,7 +266,7 @@ describe("misuse: AGENT-CTO-ESCALATION — cto must not escalate to engineering-
     // BOUNDARY: after the fix, the CTO must escalate to capo, not engineering-director.
     //
     // Currently FAILING: the file says engineering-director.
-    const content = readFile("agents/cto.md");
+    const content = readFile("src/plugin/agents/cto.md");
     expect(/ESCALATES TO:.*capo/i.test(content)).toBe(true);
   });
 });
@@ -282,7 +282,7 @@ describe("misuse: AGENT-DEV-NO-DUPE-STEP4 — dev.md must not contain duplicate 
     // (After the fix, the duplicate line will be removed.)
     //
     // Currently FAILING: the string appears twice.
-    const content = readFile("agents/dev.md");
+    const content = readFile("src/plugin/agents/dev.md");
     const occurrences = content.split("4. Verify coverage >= 99%").length - 1;
     expect(
       occurrences,
@@ -297,7 +297,7 @@ describe("misuse: AGENT-DEVHAIKU-NO-DUPE-STEP4 — dev-haiku.md must not contain
     // identical copy-paste error: "4. Verify coverage >= 99%" appears twice.
     //
     // Currently FAILING: the string appears twice.
-    const content = readFile("agents/dev-haiku.md");
+    const content = readFile("src/plugin/agents/dev-haiku.md");
     const occurrences = content.split("4. Verify coverage >= 99%").length - 1;
     expect(
       occurrences,
@@ -321,7 +321,7 @@ describe("misuse: AGENT-SKILL-DIRECTIVE-GATE — skills/teo/SKILL.md must have d
     // All agent-level files should carry a directive_gate.
     //
     // Currently FAILING: skills/teo/SKILL.md has no directive_gate: block.
-    const content = readFile("skills/teo/SKILL.md");
+    const content = readFile("src/plugin/skills/teo/SKILL.md");
     expect(content).not.toContain("directive_gate:");
   });
 });
@@ -337,7 +337,7 @@ describe("boundary: AGENT-SE-PRAGMATIC-SCOPE — 'pragmatic excellence' must not
     // (99% coverage, zero critical vulnerabilities, etc.).
     //
     // Currently FAILING: staff-engineer.md has no "threshold" scoping anywhere.
-    const content = readFile("agents/staff-engineer.md");
+    const content = readFile("src/plugin/agents/staff-engineer.md");
     expect(
       content,
       "agents/staff-engineer.md must contain 'threshold' to scope pragmatic-excellence language away from gate compliance"
@@ -353,7 +353,7 @@ describe("misuse: AGENT-STUDIO-DIRECTIVE-GATE — studio-director.md must have d
     // directive_gate to prevent role drift.
     //
     // Currently FAILING: studio-director.md has no directive_gate: block.
-    const content = readFile("agents/studio-director.md");
+    const content = readFile("src/plugin/agents/studio-director.md");
     expect(content).toContain("directive_gate:");
   });
 });
@@ -365,7 +365,7 @@ describe("misuse: AGENT-SECENG-ESCALATION — security-engineer must not escalat
     // (orchestration layer). Routing to engineering-manager dead-ends security risk.
     //
     // Currently FAILING (positive assertion below): correct target not listed.
-    const content = readFile("agents/security-engineer.md");
+    const content = readFile("src/plugin/agents/security-engineer.md");
     expect(content).not.toContain("ESCALATES TO: engineering-manager");
   });
 
@@ -374,7 +374,7 @@ describe("misuse: AGENT-SECENG-ESCALATION — security-engineer must not escalat
     // as the escalation target.
     //
     // Currently FAILING: the file says engineering-manager.
-    const content = readFile("agents/security-engineer.md");
+    const content = readFile("src/plugin/agents/security-engineer.md");
     const hasCorrectEscalation =
       /ESCALATES TO:.*staff-engineer/i.test(content) || /ESCALATES TO:.*capo/i.test(content);
     expect(

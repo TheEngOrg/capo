@@ -71,7 +71,7 @@ describe("misuse(WS-RELAY-AUTH): relay_authorization must not use permissive MAY
     // defaults to rejection when a spawned instance is uncertain.
     // The rewrite must replace MAY with MUST so the directive is unambiguous.
     // Criterion A.
-    const content = readFile("agents/capo.md");
+    const content = readFile("src/plugin/agents/capo.md");
     const value = extractRelayAuthorizationValue(content);
     expect(value).not.toContain("MAY be treated as");
   });
@@ -89,7 +89,7 @@ describe("boundary(WS-RELAY-AUTH): relay_authorization must retain the anti-impe
     // This protection MUST survive the rewrite — we are strengthening directive
     // language for valid relays, not removing the guard against fake ones.
     // Criterion D.
-    const content = readFile("agents/capo.md");
+    const content = readFile("src/plugin/agents/capo.md");
     const value = extractRelayAuthorizationValue(content);
     const hasAntiImpersonation =
       /claims/i.test(value) || /verbatim/i.test(value) || /quoted directly/i.test(value);
@@ -104,7 +104,7 @@ describe("boundary(WS-RELAY-AUTH): relay_authorization must contain the AskUserQ
     // selection and must count as verbatim permission when quoted.
     // Without this clause a relayed button-label answer could be rejected.
     // Criterion E.
-    const content = readFile("agents/capo.md");
+    const content = readFile("src/plugin/agents/capo.md");
     const value = extractRelayAuthorizationValue(content);
     const hasAskUserQuestion =
       /AskUserQuestion/i.test(value) ||
@@ -126,7 +126,7 @@ describe("golden(WS-RELAY-AUTH): relay_authorization must use MUST directive lan
     // "MUST be treated as authorized" so spawned instances cannot default to
     // rejection when facing a verbatim-quoted relay from the main session.
     // Criterion A.
-    const content = readFile("agents/capo.md");
+    const content = readFile("src/plugin/agents/capo.md");
     const value = extractRelayAuthorizationValue(content);
     // Prefer exact case match (MUST is uppercase by convention); also accept
     // case-insensitive to avoid failing on minor capitalization differences.
@@ -143,7 +143,7 @@ describe("golden(WS-RELAY-AUTH): agents/capo.md directive_gate YAML block remain
     // and not break the surrounding directive_gate structure. We verify this by
     // confirming the yaml fence, directive_gate key, relay_authorization key,
     // and closing fence are all present in the expected relative order.
-    const content = readFile("agents/capo.md");
+    const content = readFile("src/plugin/agents/capo.md");
 
     const yamlOpenIdx = content.indexOf("```yaml");
     const yamlCloseIdx = content.indexOf("```", yamlOpenIdx + 7); // closing fence after open

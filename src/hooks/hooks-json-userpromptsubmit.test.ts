@@ -13,7 +13,7 @@ import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const HOOKS_JSON_PATH = path.join(__dirname, "../../hooks/hooks.json");
+const HOOKS_JSON_PATH = path.join(__dirname, "../plugin/hooks/hooks.json");
 
 // ---------------------------------------------------------------------------
 // MISUSE / BOUNDARY: structure guards — assert the file is parseable and

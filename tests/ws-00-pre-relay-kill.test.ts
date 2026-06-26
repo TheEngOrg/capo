@@ -43,11 +43,11 @@ import * as path from "node:path";
 // ---------------------------------------------------------------------------
 const REPO_ROOT = path.resolve(__dirname, "..");
 
-const PLUGIN_CAPO_PATH = path.join(REPO_ROOT, "agents", "capo.md");
+const PLUGIN_CAPO_PATH = path.join(REPO_ROOT, "src", "plugin", "agents", "capo.md");
 const HOW_IT_WORKS_PATH = path.join(REPO_ROOT, "docs", "how-it-works.md");
 const SANDBOX_README_PATH = path.join(REPO_ROOT, "sandbox", "README.md");
 const ADR_072_PATH = path.join(REPO_ROOT, "docs", "adr", "ADR-072.md");
-const SKILL_TEO_PATH = path.join(REPO_ROOT, "skills", "teo", "SKILL.md");
+const SKILL_TEO_PATH = path.join(REPO_ROOT, "src", "plugin", "skills", "teo", "SKILL.md");
 
 // Load files that must exist unconditionally; ENOENT surfaces as a clear test failure.
 const pluginCapoContent = fs.readFileSync(PLUGIN_CAPO_PATH, "utf8");

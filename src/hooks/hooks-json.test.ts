@@ -34,7 +34,7 @@ import * as path from "node:path";
 // =============================================================================
 
 const REPO_ROOT = path.resolve(__dirname, "..", "..");
-const HOOKS_JSON = path.join(REPO_ROOT, "hooks", "hooks.json");
+const HOOKS_JSON = path.join(REPO_ROOT, "src", "plugin", "hooks", "hooks.json");
 const VERIFY_SCRIPT = path.join(REPO_ROOT, "scripts", "verify-plugin-install.sh");
 
 // ---------------------------------------------------------------------------

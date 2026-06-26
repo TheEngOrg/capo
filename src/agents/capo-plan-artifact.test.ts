@@ -53,7 +53,7 @@ describe("misuse(WS-03): agents/capo.md does not exist or is not readable", () =
     // would produce a confusing ENOENT error instead of a clear assertion
     // failure. An existence guard here surfaces the real problem immediately.
     // After WS-03 this test remains green — the file must always be present.
-    expect(() => readFile("agents/capo.md")).not.toThrow();
+    expect(() => readFile("src/plugin/agents/capo.md")).not.toThrow();
   });
 });
 
@@ -64,7 +64,7 @@ describe("misuse(WS-03): agents/capo.md contains legacy GATEWAY_SPAWN_REQUEST te
     // model regressed — agents reading this directive will emit the old fenced
     // delimiter block instead of calling Task() directly, causing a deadlock.
     // This test is a regression guard: it must stay GREEN after every edit.
-    const content = readFile("agents/capo.md");
+    const content = readFile("src/plugin/agents/capo.md");
     expect(content).not.toContain("GATEWAY_SPAWN_REQUEST");
   });
 });
@@ -82,7 +82,7 @@ describe("misuse(WS-03): agents/capo.md uses 'Dispatcher' as an identity label",
     // "Dispatcher" as an identity — i.e., "I am the Dispatcher" or section
     // headers like "## Dispatcher Protocol". We check the capitalized form
     // which is used only as a label/identity, not in generic dispatch prose.
-    const content = readFile("agents/capo.md");
+    const content = readFile("src/plugin/agents/capo.md");
     // Allow "dispatcher" (lowercase) in generic prose; reject "Dispatcher"
     // used as an identity noun. The identity form is always capitalized.
     const identityPattern = /\bDispatcher\b/g;
@@ -105,7 +105,7 @@ describe("boundary(WS-03): agents/capo.md does not contain PLAN_ARTIFACT section
     // to capo.md. If this string is absent, the entire protocol is missing.
     // The string must appear either as a section header (## PLAN_ARTIFACT) or
     // prominently as a protocol name — dev chooses the exact form.
-    const content = readFile("agents/capo.md");
+    const content = readFile("src/plugin/agents/capo.md");
     expect(content).toContain("PLAN_ARTIFACT");
   });
 });
@@ -118,7 +118,7 @@ describe("boundary(WS-03): agents/capo.md does not contain __DEFERRED__ placehol
     // definition, Capo will either omit prompts entirely (incomplete artifact)
     // or inline them all upfront (defeating the deferred design).
     // This string must appear in the section that describes the two-phase format.
-    const content = readFile("agents/capo.md");
+    const content = readFile("src/plugin/agents/capo.md");
     expect(content).toContain("__DEFERRED__");
   });
 });
@@ -130,7 +130,7 @@ describe("boundary(WS-03): agents/capo.md does not reference plan_id field", () 
     // protocol description must reference it. Absence here means the schema
     // example is incomplete and any generated artifact would fail
     // validateArtifact({ type: "PLAN_ARTIFACT", payload: ... }).
-    const content = readFile("agents/capo.md");
+    const content = readFile("src/plugin/agents/capo.md");
     expect(content).toContain("plan_id");
   });
 });
@@ -141,7 +141,7 @@ describe("boundary(WS-03): agents/capo.md does not reference task_id field", () 
     // PLAN_ARTIFACT. Without task_id in the protocol description, Capo-generated
     // artifacts will omit the field that STEP_RESULT_ARTIFACT and GATE_RESULT_ARTIFACT
     // use to correlate results back to their originating task. The wiring breaks.
-    const content = readFile("agents/capo.md");
+    const content = readFile("src/plugin/agents/capo.md");
     expect(content).toContain("task_id");
   });
 });
@@ -172,7 +172,7 @@ describe("golden(WS-03): agents/capo.md JSON example block contains required Pla
     // survives minor formatting differences in the example. An actual JSON parse
     // that validates against PlanSchema would be stronger but is golden-path
     // work for a follow-up acceptance-engineer test.
-    const content = readFile("agents/capo.md");
+    const content = readFile("src/plugin/agents/capo.md");
     expect(content).toContain("plan_id");
     expect(content).toContain("project_id");
     expect(content).toContain("created_at");
@@ -188,7 +188,7 @@ describe("golden(WS-03): agents/capo.md describes a two-phase output format", ()
     // acceptance criteria and used in agent spawn prompts. Using a different
     // term (e.g. "sequential", "staged") would break the shared vocabulary
     // that QA and dev use to identify the pattern in future workstreams.
-    const content = readFile("agents/capo.md");
+    const content = readFile("src/plugin/agents/capo.md");
     const hasTwoPhase = content.includes("two-phase") || content.includes("Two-Phase");
     expect(hasTwoPhase).toBe(true);
   });
@@ -202,7 +202,7 @@ describe("golden(WS-03): agents/capo.md does not contain legacy 'mkdir' command"
     // accidentally carried over, or (b) dev copy-pasted a block that included
     // shell commands. Either way it is out of scope for capo.md and should not
     // appear after WS-03's clean edit of the PLAN_ARTIFACT section.
-    const content = readFile("agents/capo.md");
+    const content = readFile("src/plugin/agents/capo.md");
     expect(content).not.toContain("mkdir");
   });
 });
@@ -219,7 +219,7 @@ describe("golden(WS-03): PLAN_ARTIFACT section appears before Turn-end Protocol 
     // If either string is absent this test fails with a clear indexOf === -1
     // result, which is intentional: both must be present for the ordering to
     // be meaningful. (The boundary tests above catch absence individually.)
-    const content = readFile("agents/capo.md");
+    const content = readFile("src/plugin/agents/capo.md");
     const planArtifactIdx = content.indexOf("PLAN_ARTIFACT");
     const turnEndIdx = content.indexOf("Turn-end Protocol");
 

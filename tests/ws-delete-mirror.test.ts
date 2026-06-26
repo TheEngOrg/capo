@@ -40,8 +40,14 @@ import * as path from "node:path";
 // ---------------------------------------------------------------------------
 const REPO_ROOT = path.resolve(__dirname, "..");
 
-const CAPO_ACTIVATION_PATH = path.join(REPO_ROOT, "hooks", "capo-activation.sh");
-const PRE_EDIT_GUARD_PATH = path.join(REPO_ROOT, "hooks", "pre-edit-write-guard.sh");
+const CAPO_ACTIVATION_PATH = path.join(REPO_ROOT, "src", "plugin", "hooks", "capo-activation.sh");
+const PRE_EDIT_GUARD_PATH = path.join(
+  REPO_ROOT,
+  "src",
+  "plugin",
+  "hooks",
+  "pre-edit-write-guard.sh"
+);
 const RELAY_KILL_TEST_PATH = path.join(REPO_ROOT, "tests", "ws-00-pre-relay-kill.test.ts");
 const PACKAGE_JSON_PATH = path.join(REPO_ROOT, "package.json");
 const LOCAL_DEV_INSTALL_PATH = path.join(REPO_ROOT, "scripts", "local-dev-install.sh");

@@ -30,7 +30,7 @@ import * as path from "node:path";
 // ---------------------------------------------------------------------------
 const REPO_ROOT = path.resolve(__dirname, "..");
 
-const SOURCE_PATH = path.join(REPO_ROOT, "skills", "teo", "SKILL.md");
+const SOURCE_PATH = path.join(REPO_ROOT, "src", "plugin", "skills", "teo", "SKILL.md");
 
 // ---------------------------------------------------------------------------
 // Load file content once. If the file is missing the test will fail naturally

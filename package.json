@@ -1,6 +1,6 @@
 {
   "name": "@the-eng-org/teo",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "TEO v5 — deterministic multi-agent orchestration for Claude Code",
   "private": true,
   "type": "module",

@@ -195,7 +195,7 @@ For agent spawning, team banners, workstream boards, error display, escalation, 
 ## Version History
 
 **Version 2.0.0** (2026-03-26)
-- Transferred ownership from MG to TEO
+- Adopted by CAPO (The Eng Org)
 - Added ANSI color definitions with brand palette alignment
 - Added session banner specification
 - Added TEO-only badges: CAPO (indigo) and COMPLIANCE (red)
@@ -206,5 +206,5 @@ For agent spawning, team banners, workstream boards, error display, escalation, 
 - Consolidated as single source of truth — all agents and skills reference this document
 
 **Version 1.0.0** (2026-03-04)
-- Initial MG community version
+- Initial TEO community version
 - Basic badge system, output modes, ASCII art patterns

@@ -1,0 +1,11 @@
+{
+  "schema_version": "1.0.0",
+  "workstream_id": "WS-GO-07-swap",
+  "phase": "qa-spec",
+  "from_agent": "qa",
+  "to_phase": "dev",
+  "artifact_paths": [
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/src/tests/marketplace-github-source.test.ts"
+  ],
+  "timestamp": "2026-06-22T17:50:40Z"
+}

@@ -1,0 +1,11 @@
+{
+  "schema_version": "1.0.0",
+  "workstream_id": "ws-04",
+  "phase": "qa-spec",
+  "from_agent": "qa",
+  "to_phase": "dev",
+  "artifact_paths": [
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/src/skill/teo-build-skill.test.ts"
+  ],
+  "timestamp": "2026-06-25T03:13:00.000Z"
+}

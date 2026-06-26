@@ -1,0 +1,15 @@
+{
+  "schema_version": "1.0.0",
+  "workstream_id": "WS-SANDBOX-E2E",
+  "phase": "dev",
+  "from_agent": "dev",
+  "to_phase": "qa-validate",
+  "artifact_paths": [
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/sandbox/README.md",
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/sandbox/scripts/validate-plugin.sh",
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/sandbox/scripts/verify-traces.sh",
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/sandbox/fixtures/broken-readme.md",
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/sandbox/fixtures/broken-readme.md.original"
+  ],
+  "timestamp": "2026-06-22T17:54:31Z"
+}

@@ -1,0 +1,5 @@
+{
+  "schema_version": "1.0.0",
+  "additional_protected_paths": ["vitest.config.ts"],
+  "additional_enforced_paths": []
+}

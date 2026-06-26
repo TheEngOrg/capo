@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+# teo-stat — Safe wrapper around `stat` with a fixed output format
+#
+# Usage: .claude/scripts/teo-stat <file-path>
+#
+# Fixed format: "%Sm %z %N" → modification time, size in bytes, file name
+# macOS only (uses `stat -f`). On Linux, falls back to `stat --format`.
+# User-supplied flags (anything starting with '-') are rejected.
+# Credential paths (~/.ssh/, ~/.aws/, etc.) are rejected.
+#
+# Exit codes:
+#   0 = stat succeeded
+#   1 = validation error
+#   other = stat exit code (pass-through)
+
+set -euo pipefail
+
+# [1] Reject flag-like arguments first (format string override attempt)
+# Check all args before the arg-count guard so the diagnostic is clear.
+for arg in "$@"; do
+    if [[ "$arg" == -* ]]; then
+        echo "error: invalid flag — format string override is blocked; teo-stat uses a fixed format: $arg" >&2
+        exit 1
+    fi
+done
+
+# [2] Arg count guard
+if [[ $# -ne 1 ]]; then
+    echo "error: usage: teo-stat <file-path>" >&2
+    exit 1
+fi
+
+FILE="${1}"
+
+# [3] Injection guard — reject shell metacharacters
+if [[ "$FILE" =~ [';|&$`(){}><'] ]]; then
+    echo "error: invalid argument — shell metacharacter detected in path: $FILE" >&2
+    exit 1
+fi
+
+# [4] Credential path guard
+for pattern in '.ssh/' '.ssh$' '.aws/' '.aws$' '.config/' '.config$'; do
+    if [[ "$FILE" =~ $pattern ]]; then
+        echo "error: invalid path — credential path access blocked: $FILE" >&2
+        exit 1
+    fi
+done
+
+# [5] Execute with fixed format
+# macOS: stat -f "%Sm %z %N"
+# Linux: stat --format="%y %s %n" (fallback)
+if stat -f "" /dev/null >/dev/null 2>&1; then
+    # macOS stat supports -f flag
+    exec stat -f "%Sm %z %N" "$FILE"
+else
+    # Linux fallback — modification time, size, filename
+    exec stat --format="%y %s %n" "$FILE"
+fi

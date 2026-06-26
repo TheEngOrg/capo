@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# ============================================================================
+# teo-uuidgen — Generate a UUID v4 string
+# ============================================================================
+# Prints a lowercase UUID v4 to stdout. Used by the /teo gateway (SKILL.md)
+# to generate the execution_id for teo-issue-identity-token before Capo spawns.
+#
+# Priority:
+#   1. uuidgen (macOS / most BSDs) — lowercased via tr
+#   2. /dev/urandom via od + awk (portable POSIX fallback)
+#
+# No python, no perl, no external interpreters. No arguments accepted.
+#
+# Usage:
+#   EXECUTION_ID=$(.claude/scripts/teo-uuidgen)
+#
+# Exit 0 = success (UUID printed to stdout)
+# Exit 1 = both generation methods failed
+# ============================================================================
+set -euo pipefail
+
+# Reject any arguments — this script takes no args
+if [[ $# -gt 0 ]]; then
+  printf 'ERROR: teo-uuidgen takes no arguments\n' >&2
+  exit 1
+fi
+
+# Method 1: uuidgen (macOS, FreeBSD, some Linux distros)
+if command -v uuidgen >/dev/null 2>&1; then
+  uuidgen | tr '[:upper:]' '[:lower:]'
+  exit 0
+fi
+
+# Method 2: /dev/urandom via od + awk (portable POSIX — no python/perl)
+# Constructs a v4 UUID: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
+# where y is one of 8, 9, a, b (variant bits 10xx)
+if [[ -r /dev/urandom ]]; then
+  od -A n -N 16 -t x1 /dev/urandom \
+    | tr -d ' \n' \
+    | awk '{
+        s = $0
+        # Force v4 version nibble
+        v4 = substr(s,1,8) "-" substr(s,9,4) "-4" substr(s,14,3) "-"
+        # Force variant bits: first nibble of group 4 is 8,9,a, or b
+        v = substr(s,17,1)
+        if (v == "0" || v == "1" || v == "2" || v == "3") v = "8"
+        else if (v == "4" || v == "5" || v == "6" || v == "7") v = "9"
+        else if (v == "8" || v == "9" || v == "a" || v == "b") v = "a"
+        else v = "b"
+        v4 = v4 v substr(s,18,3) "-" substr(s,21,12)
+        print v4
+      }'
+  exit 0
+fi
+
+printf 'ERROR: teo-uuidgen: no UUID generation method available (uuidgen not found, /dev/urandom not readable)\n' >&2
+exit 1

@@ -1,0 +1,16 @@
+{
+  "workstream_id": "ws-software-engineer-rename",
+  "status": "complete",
+  "files_modified": [
+    "agents/software-engineer.md",
+    "agents/dev-haiku.md",
+    "agents/staff-engineer.md",
+    "agents/engineering-manager.md",
+    "agents/capo.md",
+    "agents/qa.md",
+    "scripts/verify-plugin-install.sh",
+    "src/agents/doctest-gate.test.ts"
+  ],
+  "tests_passing": "43/43 (1 skip AC-31b which is intentional .skip)",
+  "coverage": "N/A — agent markdown files, not src/ code"
+}

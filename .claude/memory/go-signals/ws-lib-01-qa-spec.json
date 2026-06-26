@@ -1,0 +1,13 @@
+{
+  "schema_version": "1.0.0",
+  "workstream_id": "WS-LIB-01",
+  "phase": "qa-spec",
+  "from_agent": "qa",
+  "to_phase": "dev",
+  "artifact_paths": [
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/src/lib/ed25519.test.ts",
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/src/lib/schema.test.ts",
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/.claude/memory/test-specs.json"
+  ],
+  "timestamp": "2026-06-24T23:06:00Z"
+}

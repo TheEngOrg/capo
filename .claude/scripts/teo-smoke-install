@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+# teo-smoke-install — Run teo-init --force on a single target project directory
+#
+# Usage: .claude/scripts/teo-smoke-install <target-dir>
+#
+# Delegates to installer/teo-init --force <target-dir>.
+# Guards: metacharacter injection, path traversal, root allow-list ($HOME tree only).
+#
+# Exit codes:
+#   0 = teo-init succeeded
+#   1 = validation error or teo-init failed
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${0}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+# [1] Arg count guard
+if [[ $# -ne 1 ]]; then
+    echo "error: usage: teo-smoke-install <target-dir>" >&2
+    exit 1
+fi
+
+TARGET="${1}"
+
+# [2] Dot-dot traversal guard
+if [[ "$TARGET" == *".."* ]]; then
+    echo "error: invalid path — '..' not allowed in target: $TARGET" >&2
+    exit 1
+fi
+
+# [3] Injection guard — reject shell metacharacters
+if [[ "$TARGET" =~ [';|&$`(){}><'] ]]; then
+    echo "error: invalid argument — shell metacharacter detected in target: $TARGET" >&2
+    exit 1
+fi
+
+# [4] Root allow-list: target must resolve under $HOME
+RESOLVED="$TARGET"
+if command -v realpath >/dev/null; then
+    RESOLVED="$(realpath "$TARGET" 2>/dev/null || echo "$TARGET")"
+fi
+
+# macOS uses /var/folders/... (symlink to /private/var/folders/...) as TMPDIR
+TMPDIR_CANONICAL="${TMPDIR:-/tmp}"
+if command -v realpath >/dev/null; then
+    TMPDIR_CANONICAL="$(realpath "$TMPDIR_CANONICAL" 2>/dev/null || echo "$TMPDIR_CANONICAL")"
+fi
+
+ALLOWED=0
+if [[ "$RESOLVED" == "$HOME"/* || "$RESOLVED" == "$HOME" ]]; then
+    ALLOWED=1
+elif [[ "$RESOLVED" == "/tmp"/* || "$RESOLVED" == "/tmp" ]]; then
+    ALLOWED=1
+elif [[ "$RESOLVED" == "/private/tmp"/* || "$RESOLVED" == "/private/tmp" ]]; then
+    ALLOWED=1
+elif [[ -n "$TMPDIR_CANONICAL" && ( "$RESOLVED" == "$TMPDIR_CANONICAL"/* || "$RESOLVED" == "$TMPDIR_CANONICAL" ) ]]; then
+    ALLOWED=1
+fi
+
+if [[ "$ALLOWED" -eq 0 ]]; then
+    echo "error: invalid path — target must be under home directory, outside allowed root: $TARGET" >&2
+    echo "  resolved: $RESOLVED" >&2
+    echo "  allowed:  \$HOME ($HOME), /tmp, and \$TMPDIR ($TMPDIR_CANONICAL)" >&2
+    exit 1
+fi
+
+# [5] Locate teo-init
+TEO_INIT="$PROJECT_ROOT/installer/teo-init"
+if [[ ! -x "$TEO_INIT" ]]; then
+    echo "error: teo-init not found or not executable at: $TEO_INIT" >&2
+    exit 1
+fi
+
+# [6] Execute
+exec "$TEO_INIT" --force "$TARGET"

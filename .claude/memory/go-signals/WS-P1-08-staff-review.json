@@ -1,0 +1,13 @@
+{
+  "schema_version": "1.0.0",
+  "workstream_id": "WS-P1-08",
+  "phase": "staff-review",
+  "from_agent": "staff-engineer",
+  "to_phase": "commit",
+  "artifact_paths": [
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/src/skill/skill.ts",
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/src/skill/skill.test.ts",
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/.claude/memory/pipeline/staff-engineer-output.json"
+  ],
+  "timestamp": "2026-06-20T01:30:00Z"
+}

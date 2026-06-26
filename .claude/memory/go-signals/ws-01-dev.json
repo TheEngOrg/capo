@@ -1,0 +1,15 @@
+{
+  "schema_version": "1.0.0",
+  "workstream_id": "ws-01",
+  "phase": "dev",
+  "from_agent": "dev",
+  "to_phase": "staff-review",
+  "artifact_paths": [
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/src/skill/teo-run-entry.ts",
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/hooks/teo-prompt-router.sh",
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/src/skill/plan-init.test.ts",
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/src/hooks/plan-init-validate-artifact-flag.test.ts",
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/bin/teo-run.js"
+  ],
+  "timestamp": "2026-06-25T00:17:00Z"
+}

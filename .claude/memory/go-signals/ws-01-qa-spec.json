@@ -1,0 +1,12 @@
+{
+  "schema_version": "1.0.0",
+  "workstream_id": "ws-01",
+  "phase": "qa-spec",
+  "from_agent": "qa",
+  "to_phase": "dev",
+  "artifact_paths": [
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/src/skill/plan-init.test.ts",
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/src/hooks/plan-init-validate-artifact-flag.test.ts"
+  ],
+  "timestamp": "2026-06-24T17:00:00.000Z"
+}

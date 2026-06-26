@@ -1,0 +1,13 @@
+{
+  "schema_version": "1.0.0",
+  "workstream_id": "ws-lib-01",
+  "phase": "dev",
+  "from_agent": "dev",
+  "to_phase": "staff-review",
+  "artifact_paths": [
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/src/lib/ed25519.ts",
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/src/lib/schema.ts",
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/src/core/artifacts.ts"
+  ],
+  "timestamp": "2026-06-24T16:13:00Z"
+}

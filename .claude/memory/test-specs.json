@@ -1,0 +1,85 @@
+{
+  "workstream_id": "WS-02",
+  "status": "tests_written",
+  "branch": "feat/ws-02-evaluate-gate-cli",
+  "authored_by": "qa",
+  "timestamp": "2026-06-24T19:21:00Z",
+  "test_files": [
+    {
+      "path": "src/lib/ed25519.test.ts",
+      "type": "unit",
+      "test_count": 17,
+      "covers": [
+        "misuse: tampered sig returns false (not throws)",
+        "misuse: sig valid for other payload returns false",
+        "misuse: sig valid for other public key returns false",
+        "misuse: wrong-length public key propagates library error unchanged",
+        "misuse: wrong-length private key to signAsync propagates error",
+        "misuse: wrong-length private key to getPublicKeyAsync propagates error",
+        "boundary: empty payload round-trips",
+        "boundary: 1 MiB payload round-trips",
+        "boundary: signature is always 64 bytes",
+        "boundary: public key is always 32 bytes",
+        "golden: sign then verify succeeds",
+        "golden: getPublicKeyAsync is deterministic",
+        "golden: signAsync is deterministic (RFC 8032)",
+        "golden: exported names are functions",
+        "golden: wrapper transparent vs raw @noble/ed25519 import",
+        "source-scan: revocation.ts no longer imports @noble/ed25519 directly",
+        "source-scan: install-sig.ts no longer imports @noble/ed25519 directly"
+      ]
+    },
+    {
+      "path": "src/lib/schema.test.ts",
+      "type": "unit",
+      "test_count": 29,
+      "covers": [
+        "misuse: z.string().safeParse(42) → { success: false } with ZodError issues",
+        "misuse: z.number().safeParse('string') → { success: false }",
+        "misuse: z.boolean().safeParse(0) → { success: false }",
+        "misuse: z.object({}).strict() rejects unknown keys",
+        "misuse: z.object({ x: z.string() }).strict() rejects extra keys alongside valid",
+        "misuse: z.enum rejects out-of-range value",
+        "misuse: z.array(z.string()) rejects numeric array",
+        "misuse: z.literal rejects non-matching value",
+        "misuse: z.union rejects value outside union members",
+        "misuse: z.object rejects when required field absent",
+        "boundary: optional field absent → success",
+        "boundary: optional field present → success",
+        "boundary: empty array is valid for z.array",
+        "boundary: single-element union",
+        "boundary: empty object schema + empty input",
+        "golden: required constructors are all functions (z.object/string/array/enum/union/number/boolean/literal/optional)",
+        "golden: z.object({}).safeParse({}) → { success: true }",
+        "golden: z.string().safeParse('hello') → { success: true, data: 'hello' }",
+        "golden: z.number().safeParse(42) round-trips",
+        "golden: z.boolean().safeParse(true) round-trips",
+        "golden: z.enum(['PASS','BLOCKED']).safeParse('PASS') succeeds",
+        "golden: z.array(z.number()) round-trips",
+        "golden: z.literal round-trips",
+        "golden: z.union with valid member succeeds",
+        "golden: nested schema round-trip",
+        "golden: wrapper z is same Zod instance (typeName identity check)",
+        "source-scan: src/core/plan.ts no longer imports from zod directly",
+        "source-scan: src/core/artifacts.ts no longer imports from zod directly",
+        "source-scan: src/agents/load.ts no longer imports from zod directly"
+      ]
+    },
+    {
+      "path": "src/skill/evaluate-gate-cli.test.ts",
+      "type": "integration",
+      "test_count": 9,
+      "covers": [
+        "misuse: missing gate_id → exit 1, JSON error",
+        "misuse: missing task_id → exit 1, JSON error",
+        "misuse: missing session_id → exit 1, JSON error",
+        "misuse: malformed JSON arg → exit 1, error mentioning JSON",
+        "boundary: minimal valid input (no context) → exit 0, valid output shape",
+        "boundary: context field present → exit 0, output still valid",
+        "golden: full valid input → all output fields match input and contract",
+        "golden: L7 critical — status is UNENFORCED_MOCK, not absent, not PASS",
+        "golden: evaluated_at is valid ISO-8601 within test execution window"
+      ]
+    }
+  ]
+}

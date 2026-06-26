@@ -1,0 +1,12 @@
+{
+  "schema_version": "1.0.0",
+  "workstream_id": "WS-P1-04",
+  "phase": "qa-spec",
+  "from_agent": "qa",
+  "to_phase": "dev",
+  "artifact_paths": [
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/src/bootstrap/provision.test.ts",
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/.claude/memory/pipeline/qa-spec-output.json"
+  ],
+  "timestamp": "2026-06-19T22:34:00Z"
+}

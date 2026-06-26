@@ -1,0 +1,17 @@
+{
+  "schema_version": "1.0.0",
+  "workstream_id": "ws-06",
+  "phase": "qa-spec",
+  "from_agent": "qa",
+  "to_phase": "dev",
+  "artifact_paths": [
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/src/skill/evaluate-gate-cli.test.ts",
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/src/engine/gate-profiles/types.ts",
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/src/engine/gate-profiles/acceptance-criteria.ts",
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/src/engine/gate-profiles/qa-spec.ts",
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/src/engine/gate-profiles/dev.ts",
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/src/engine/gate-profiles/staff-review.ts",
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/src/engine/gate-profiles/index.ts"
+  ],
+  "timestamp": "2026-06-25T04:58:51Z"
+}

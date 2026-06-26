@@ -1,0 +1,12 @@
+{
+  "schema_version": "1.0.0",
+  "workstream_id": "WS-P1-04a",
+  "phase": "qa-validate-repair-path",
+  "from_agent": "qa",
+  "to_phase": "dev",
+  "artifact_paths": [
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/src/bootstrap/provision.test.ts",
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/.claude/memory/pipeline/qa-repair-path-output.json"
+  ],
+  "timestamp": "2026-06-20T20:43:07Z"
+}

@@ -1,0 +1,11 @@
+{
+  "schema_version": "1.0.0",
+  "workstream_id": "WS-SYNC-01",
+  "phase": "qa-spec",
+  "from_agent": "qa",
+  "to_phase": "dev",
+  "artifact_paths": [
+    "/Users/brodieyazaki/personal/agent-tools/the-eng-org/src/hooks/pre-edit-write-guard-sync.test.ts"
+  ],
+  "timestamp": "2026-06-23T22:10:00Z"
+}

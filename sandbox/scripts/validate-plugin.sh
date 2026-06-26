@@ -63,12 +63,16 @@ for field in name version skills hooks; do
   fi
 done
 
-# --- Check 3: agents field must NOT be present ---
+# --- Check 3: agents field MUST be present and must be a string (not an array) ---
+# Arrays produce Agents(0) silently on install; a directory string is the working format.
 
-if jq -e 'has("agents")' "${PLUGIN_JSON}" &>/dev/null; then
-  warn "agents field present — install will likely reject this"
+AGENTS_FIELD_TYPE=$(jq -r 'if has("agents") then (.agents | type) else "missing" end' "${PLUGIN_JSON}")
+if [ "${AGENTS_FIELD_TYPE}" = "string" ]; then
+  pass "plugin.json agents field is a directory string (correct)"
+elif [ "${AGENTS_FIELD_TYPE}" = "array" ]; then
+  fail "agents field is an array — arrays produce Agents(0) on install; use a directory string"
 else
-  pass "plugin.json does not have 'agents' field"
+  fail "agents field missing from plugin.json — must be a directory string pointing to agents dir"
 fi
 
 # --- Check 4: agent .md file count ---

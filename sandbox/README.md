@@ -45,7 +45,7 @@ PASS: plugin.json has required field: name
 PASS: plugin.json has required field: version
 PASS: plugin.json has required field: skills
 PASS: plugin.json has required field: hooks
-PASS: plugin.json does not have 'agents' field
+PASS: plugin.json agents field is a directory string (correct)
 PASS: agent count == 21
 PASS: skill count == 15
 PASS: all checks passed

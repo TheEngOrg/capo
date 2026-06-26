@@ -11,10 +11,11 @@
 # WHY `claude plugin validate` ALONE IS INSUFFICIENT
 #   validate and install use different validators. This exact mismatch caused
 #   the WS-GO-02 regression:
-#     - `"agents": "./agents/"` (directory string) → validate exited 0
-#     - `"agents": "./agents/"` (directory string) → install rejected it at
-#       runtime (Claude Code v2.1.185 schema requires individual .md paths or
-#       an array, not a bare directory)
+#     - An explicit array of individual .md file paths passes `claude plugin validate`
+#       but produces Agents(0) silently at install time — the array format is not
+#       the working format even though the linter accepts it.
+#     - `"agents": "./src/plugin/agents/"` (directory string) is the WORKING format:
+#       validate accepts it AND install correctly loads all agents from the directory.
 #     - Relative paths containing `../` passed validate but were rejected at
 #       install (path traversal guard at install time)
 #   This script catches both classes of failure by running the full install

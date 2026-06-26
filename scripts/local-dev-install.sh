@@ -32,17 +32,17 @@ echo "    Refreshing teo-marketplace cache..."
 claude plugin marketplace update teo-marketplace 2>/dev/null || true
 echo ""
 
-echo "[2/3] Uninstalling existing local teo (if any)..."
-claude plugin uninstall teo 2>/dev/null || true
+echo "[2/3] Uninstalling existing local capo (if any)..."
+claude plugin uninstall capo 2>/dev/null || true
 echo "    OK: clean slate"
 echo ""
 
-echo "[3/3] Installing teo from local source..."
-if ! claude plugin install teo@teo-marketplace; then
+echo "[3/3] Installing capo from local source..."
+if ! claude plugin install capo@teo-marketplace; then
   echo "FAIL: install from local source failed."
   echo "        Check that ${REPO_ROOT}/.claude-plugin/plugin.json is valid."
   exit 1
 fi
-echo "    OK: teo installed from local source"
+echo "    OK: capo installed from local source"
 echo ""
 echo "Done. Restart Claude Code to pick up the updated plugin."

@@ -3,7 +3,7 @@
   "owner": { "name": "TheEngOrg" },
   "plugins": [
     {
-      "name": "teo",
+      "name": "capo",
       "source": { "source": "github", "repo": "TheEngOrg/capo" },
       "description": "Multi-agent orchestration for Claude Code"
     }

@@ -157,20 +157,20 @@ describe("marketplace.json — boundary: structural validity", () => {
     expect((parsed.plugins as unknown[]).length).toBeGreaterThan(0);
   });
 
-  it("the teo plugin entry exists in plugins[]", () => {
+  it("the capo plugin entry exists in plugins[]", () => {
     const parsed = parseMarketplace() as { plugins?: Array<{ name?: string }> };
-    const teo = (parsed.plugins ?? []).find((p) => p.name === "teo");
-    expect(teo).toBeDefined();
+    const capo = (parsed.plugins ?? []).find((p) => p.name === "capo");
+    expect(capo).toBeDefined();
   });
 
-  it('the teo plugin entry has a "source" field that is an object (not a string)', () => {
+  it('the capo plugin entry has a "source" field that is an object (not a string)', () => {
     const parsed = parseMarketplace() as { plugins?: Array<{ name?: string; source?: unknown }> };
-    const teo = (parsed.plugins ?? []).find((p) => p.name === "teo");
-    expect(teo).toBeDefined();
+    const capo = (parsed.plugins ?? []).find((p) => p.name === "capo");
+    expect(capo).toBeDefined();
     // Must be an object — a bare string would be the pre-swap local form
-    expect(typeof teo!.source).toBe("object");
-    expect(teo!.source).not.toBeNull();
-    expect(Array.isArray(teo!.source)).toBe(false);
+    expect(typeof capo!.source).toBe("object");
+    expect(capo!.source).not.toBeNull();
+    expect(Array.isArray(capo!.source)).toBe(false);
   });
 });
 
@@ -198,10 +198,10 @@ describe("verify-plugin-install.sh — boundary: structural validity", () => {
     expect(readVerifyScript()).toContain("[4/5]");
   });
 
-  it("teo@teo-marketplace install command is still present (install target unchanged)", () => {
+  it("capo@teo-marketplace install command is still present (install target updated)", () => {
     // The install command itself — teo@teo-marketplace — is unchanged by the swap.
     // Only the marketplace registration command in Step 2 changes.
-    expect(readVerifyScript()).toContain("claude plugin install teo@teo-marketplace");
+    expect(readVerifyScript()).toContain("claude plugin install capo@teo-marketplace");
   });
 
   it("trailing NOTE block is still present after the PASS echo", () => {
@@ -217,20 +217,20 @@ describe("verify-plugin-install.sh — boundary: structural validity", () => {
 // =============================================================================
 
 describe("marketplace.json — golden: GitHub source object is correct", () => {
-  it('teo plugin source.source field equals "github"', () => {
+  it('capo plugin source.source field equals "github"', () => {
     const parsed = parseMarketplace() as {
       plugins?: Array<{ name?: string; source?: { source?: string; repo?: string } }>;
     };
-    const teo = (parsed.plugins ?? []).find((p) => p.name === "teo");
-    expect(teo?.source?.source).toBe("github");
+    const capo = (parsed.plugins ?? []).find((p) => p.name === "capo");
+    expect(capo?.source?.source).toBe("github");
   });
 
-  it('teo plugin source.repo field equals "TheEngOrg/capo"', () => {
+  it('capo plugin source.repo field equals "TheEngOrg/capo"', () => {
     const parsed = parseMarketplace() as {
       plugins?: Array<{ name?: string; source?: { source?: string; repo?: string } }>;
     };
-    const teo = (parsed.plugins ?? []).find((p) => p.name === "teo");
-    expect(teo?.source?.repo).toBe("TheEngOrg/capo");
+    const capo = (parsed.plugins ?? []).find((p) => p.name === "capo");
+    expect(capo?.source?.repo).toBe("TheEngOrg/capo");
   });
 
   it('source object has exactly the two expected fields: "source" and "repo"', () => {
@@ -238,8 +238,8 @@ describe("marketplace.json — golden: GitHub source object is correct", () => {
     const parsed = parseMarketplace() as {
       plugins?: Array<{ name?: string; source?: Record<string, unknown> }>;
     };
-    const teo = (parsed.plugins ?? []).find((p) => p.name === "teo");
-    const sourceObj = teo?.source as Record<string, unknown> | undefined;
+    const capo = (parsed.plugins ?? []).find((p) => p.name === "capo");
+    const sourceObj = capo?.source as Record<string, unknown> | undefined;
     expect(sourceObj).toBeDefined();
     const keys = Object.keys(sourceObj!).sort();
     expect(keys).toEqual(["repo", "source"]);

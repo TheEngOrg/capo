@@ -129,7 +129,7 @@ describe("hooks.json — misuse: stub hooks must not remain registered (WS-START
   it("must NOT reference session-start.sh in any event type", () => {
     // post-impl: session-start.sh removed from SessionStart in hooks.json. Confirmed absent.
     // session-start.sh was stale (emitted TEO branding, checked agents/capo.md
-    // which never existed in dev repo). teo-statusline.sh handles status output.
+    // which never existed in dev repo). Status output is handled by the plugin statusLine.
     const scripts = getAllReferencedScripts();
     expect(scripts).not.toContain("session-start.sh");
   });
@@ -300,7 +300,7 @@ describe("hooks.json — golden: PreToolUse registry intact after cleanup (WS-ST
 // verify-plugin-install.sh — hook count gate must be updated to "3"
 //
 // WS-STARTUP-CLEANUP drops 3 event types (PostToolUse, TaskCompleted, TeammateIdle).
-// `claude plugin details teo` reports hooks by distinct event type count.
+// `claude plugin details capo` reports hooks by distinct event type count.
 //
 // hooks/hooks.json post-impl has 3 top-level event type keys:
 //   SessionStart, PreToolUse, UserPromptSubmit

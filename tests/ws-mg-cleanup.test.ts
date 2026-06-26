@@ -11,7 +11,7 @@
 //
 // WHAT THESE TESTS VERIFY:
 //   AC-1 (misuse-first): .teo-for-claude-version must not contain MG-era keys
-//   AC-2 (misuse-first): teo-statusline.sh must not contain any MG string
+//   AC-2 (absence): teo-statusline.sh must not exist (removed — statusLine block deleted from settings.json)
 //   AC-3 (misuse-first): session-start.sh must not contain any MG string
 //   AC-4 (misuse-first): website-creation-process.md must not say "MG agents"
 //   AC-5 (misuse-first): visual-formatting.md must not contain specific MG phrases
@@ -82,44 +82,21 @@ describe("AC-1: .teo-for-claude-version format", () => {
   });
 });
 
-// ─── AC-2: teo-statusline.sh — no MG output ──────────────────────────────────
-// STATUS: GREEN
+// ─── AC-2: teo-statusline.sh — removed (statusLine block removed from settings.json) ──
+// STATUS: GREEN — file deleted as part of WS-STARTUP-CLEANUP (fix/ws-cleanup)
+//
+// teo-statusline.sh was the command pointed at by .claude/settings.json "statusLine".
+// Now that the statusLine block is removed from settings.json, this script is dead
+// weight and has been deleted. The absence guard below locks that state.
 
-describe("AC-2: teo-statusline.sh contains no MG references", () => {
+describe("AC-2: teo-statusline.sh is removed (statusLine block deleted from settings.json)", () => {
   // STATUS: GREEN
 
   const STATUSLINE = join(REPO_ROOT, ".claude", "scripts", "teo-statusline.sh");
 
-  // ── Misuse: literal "MG v" emission in any code path ────────────────────
-  it('MISUSE: script must NOT contain the string "MG v"', () => {
-    const content = readFileSync(STATUSLINE, "utf8");
-    // This covers the `echo "TEO v... | MG v${MG_VERSION} | ..."` line that
-    // currently emits the stale MG banner at runtime.
-    expect(content).not.toContain("MG v");
-  });
-
-  // ── Misuse: reading the stale mg_base_version field ─────────────────────
-  it("MISUSE: script must NOT reference 'mg_base_version'", () => {
-    const content = readFileSync(STATUSLINE, "utf8");
-    // Currently: `awk '/^mg_base_version:/ {print $NF}'`
-    expect(content).not.toContain("mg_base_version");
-  });
-
-  // ── Misuse: the MG_VERSION variable itself ───────────────────────────────
-  it("MISUSE: script must NOT reference 'MG_VERSION' variable", () => {
-    const content = readFileSync(STATUSLINE, "utf8");
-    // Currently declared as `MG_VERSION=""` and read in the conditional branch
-    expect(content).not.toContain("MG_VERSION");
-  });
-
-  // ── Golden: script still exists and is non-empty ────────────────────────
-  it("GOLDEN: script exists", () => {
-    expect(existsSync(STATUSLINE)).toBe(true);
-  });
-
-  it("GOLDEN: script is non-empty", () => {
-    const content = readFileSync(STATUSLINE, "utf8");
-    expect(content.trim().length).toBeGreaterThan(0);
+  // ── Absence guard: script must not exist after fix/ws-cleanup ───────────
+  it("GOLDEN: teo-statusline.sh must NOT exist (removed — was dead weight after statusLine block deleted)", () => {
+    expect(existsSync(STATUSLINE)).toBe(false);
   });
 });
 

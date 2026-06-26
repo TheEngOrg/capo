@@ -124,7 +124,8 @@ describe("hook-sync-guard — misuse: deleted stub files must not remain in hook
   it("hooks/session-start.sh must not exist (stale file removed)", () => {
     // post-impl: hooks/session-start.sh was deleted (stale file removed).
     // It emitted "TEO v${TEO_VERSION}" (wrong brand) and checked agents/capo.md
-    // (never present in dev repo). teo-statusline.sh supersedes it. Confirmed absent.
+    // (never present in dev repo). Status output handled by plugin statusLine.
+    // Confirmed absent.
     expect(fs.existsSync(path.join(HOOKS_DIR, "session-start.sh"))).toBe(false);
   });
 });

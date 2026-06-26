@@ -117,6 +117,14 @@ git tag -a "v$VERSION" -m "Release v$VERSION"
 git push origin main && git push origin "v$VERSION"
 
 # ---------------------------------------------------------------------------
-# 15. Manual gate reminder
+# 15. Update marketplace cache
 # ---------------------------------------------------------------------------
-echo "Release v$VERSION tagged and pushed. Now run: bash scripts/verify-plugin-install.sh — this is a required manual gate that agents cannot run."
+echo "[15/16] Updating teo-marketplace cache..."
+claude plugin marketplace update teo-marketplace 2>/dev/null || true
+echo "    OK: marketplace cache refreshed"
+
+# ---------------------------------------------------------------------------
+# 16. Manual gate reminder
+# ---------------------------------------------------------------------------
+echo "[16/16] Release v$VERSION tagged and pushed. Now run: bash scripts/verify-plugin-install.sh — this is a required manual gate that agents cannot run."
+echo "NOTE: Before running verify-plugin-install.sh, verify that the expected Agents/Skills/Hooks asset counts in that script are still current."

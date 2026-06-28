@@ -329,6 +329,45 @@ describe("loadAgentDefinition — boundary: injectable dir", () => {
   });
 });
 
+describe("loadAgentDefinition — boundary: inline flow sequence for disallowedTools_default", () => {
+  it("parses inline [Tool] format as a single-element string array", () => {
+    // WS-AGENT-RAILS: staff-engineer uses disallowedTools_default: [Edit] inline format.
+    // The parser must treat [X] as a flow sequence, not a scalar string.
+    writeFixture(
+      "inline-agent",
+      `---\nagent_id: inline-agent\nname: Inline Agent\nrole: A test role.\ndisallowedTools_default: [Edit]\n---\n\nBody.\n`
+    );
+    const result = loadAgentDefinition("inline-agent", tempDir);
+    expect(Array.isArray(result.disallowedTools_default)).toBe(true);
+    expect(result.disallowedTools_default).toContain("Edit");
+    expect(result.disallowedTools_default.length).toBe(1);
+  });
+
+  it("parses inline [Tool1, Tool2] format as a multi-element string array", () => {
+    writeFixture(
+      "inline-multi",
+      `---\nagent_id: inline-multi\nname: Multi Agent\nrole: A test role.\ndisallowedTools_default: [Edit, Write]\n---\n\nBody.\n`
+    );
+    const result = loadAgentDefinition("inline-multi", tempDir);
+    expect(Array.isArray(result.disallowedTools_default)).toBe(true);
+    expect(result.disallowedTools_default).toContain("Edit");
+    expect(result.disallowedTools_default).toContain("Write");
+    expect(result.disallowedTools_default.length).toBe(2);
+  });
+
+  it("parses empty inline [] format as an empty array", () => {
+    // Empty inline array must produce [] not a Zod parse error.
+    // Zod allows z.array(z.string()) to be empty.
+    writeFixture(
+      "empty-inline",
+      `---\nagent_id: empty-inline\nname: Empty Agent\nrole: A test role.\ndisallowedTools_default: []\n---\n\nBody.\n`
+    );
+    const result = loadAgentDefinition("empty-inline", tempDir);
+    expect(Array.isArray(result.disallowedTools_default)).toBe(true);
+    expect(result.disallowedTools_default.length).toBe(0);
+  });
+});
+
 describe("listAgentIds — boundary: injectable dir", () => {
   it("returns an empty array for an empty directory", () => {
     const ids = listAgentIds(tempDir);

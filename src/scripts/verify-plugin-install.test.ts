@@ -264,14 +264,14 @@ describe("verify-plugin-install — golden: PLUGIN_JSON points at the built arti
 });
 
 describe("verify-plugin-install — golden: asset count assertions are still present after fix", () => {
-  it("script still contains the Agents(22) count assertion after path fix", () => {
+  it("script still contains the Agents(23) count assertion after path fix", () => {
     // The path-fix must not drop the count assertions from step 5.
-    // Agents(22) is the expected count for the current plugin build.
+    // Agents(23) is the expected count for the current plugin build (WS-AGENT-RAILS added qa-validate.md).
     const script = readScript();
     expect(
-      script.includes('"22"'),
+      script.includes('"23"'),
       [
-        'scripts/verify-plugin-install.sh no longer contains the Agents count "22" assertion.',
+        'scripts/verify-plugin-install.sh no longer contains the Agents count "23" assertion.',
         "The path fix must not remove step 5 count checks — they are the real functional gate.",
       ].join(" ")
     ).toBe(true);

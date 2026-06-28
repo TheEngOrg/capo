@@ -141,10 +141,10 @@ HOOKS_COUNT="$(echo "${DETAILS_OUTPUT}"  | grep -i 'Hooks'  | grep -oE '\([0-9]+
 
 PASS=true
 
-if [ "${AGENTS_COUNT}" = "22" ]; then
-  echo "    OK: Agents (22) confirmed"
+if [ "${AGENTS_COUNT}" = "23" ]; then
+  echo "    OK: Agents (23) confirmed"
 else
-  echo "✘ FAIL: expected Agents (22), got '${AGENTS_COUNT}'"
+  echo "✘ FAIL: expected Agents (23), got '${AGENTS_COUNT}'"
   PASS=false
 fi
 

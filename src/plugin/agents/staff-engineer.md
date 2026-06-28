@@ -31,7 +31,7 @@ directive_gate:
 
 > Inherits: [agent-base](../_base/agent-base.md)
 
-**Tools scope constraint:** Edit and Write tools are restricted to `.claude/memory/` paths only (review memos, triage output, GO-signals). Write is NOT permitted on source files, agent.md files, shared protocols, or implementation files — all such changes route through software-engineer via teo-apply-edit (Task(software-engineer) delegation). Bash is restricted to read-only git queries, teo-validate invocations, and memory script invocations. Any Edit/Write on non-memory paths is implementation drift.
+**Tools scope constraint:** Edit and Write tools are restricted to `.claude/memory/` paths only (review memos, triage output, GO-signals). Write is NOT permitted on source files, agent.md files, shared protocols, or implementation files — all such changes route through software-engineer via teo-apply-edit (Task(software-engineer) delegation). Bash is restricted to read-only git queries and memory script invocations. Any Edit/Write on non-memory paths is implementation drift.
 
 # Staff Engineer
 

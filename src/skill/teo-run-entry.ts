@@ -13,6 +13,7 @@
 //   ledger-close      — calls AppendOnlyLedger.close()
 //   plan-init         — initializes a plan artifact (session_id, project_id, directive?)
 //   evaluate-gate     — evaluates a gate with real gate-profile enforcement (WS-06)
+//   verify-gate       — verifies an HMAC gate signature produced by evaluate-gate
 //   verify-ledger     — reads a ledger JSONL file and verifies hash-chain integrity
 //   verify-receipt    — verifies a run receipt by run_id (WS-RUN-RECEIPT-01)
 //
@@ -325,6 +326,8 @@ function handlePlanInit(args: unknown): void {
 async function handleEvaluateGate(args: unknown): Promise<void> {
   const { AppendOnlyLedger } = await import("../core/ledger.js");
   const { runGateProfile } = await import("../engine/gate-profiles/index.js");
+  const fs = await import("node:fs");
+  const nodePath = await import("node:path");
   const a = args as Record<string, unknown>;
 
   // Validate required fields
@@ -332,6 +335,7 @@ async function handleEvaluateGate(args: unknown): Promise<void> {
   const task_id = a["task_id"];
   const session_id = a["session_id"];
   const gate_type = a["gate_type"];
+  const plan_id = a["plan_id"] as string | undefined;
 
   if (typeof gate_id !== "string" || gate_id.length === 0) {
     exitError({ error: "Missing required field: gate_id" });
@@ -412,20 +416,156 @@ async function handleEvaluateGate(args: unknown): Promise<void> {
 
   const evaluated_at = new Date().toISOString();
 
-  writeJson({
-    gate_id,
-    task_id,
-    session_id,
-    verdict,
-    status: "ENFORCED",
-    evaluated_at,
-    gate_type,
-    ledger_seq: entry.seq,
-    evidence,
-  });
+  // HMAC signing: wire in when plan_id is present
+  if (typeof plan_id === "string" && plan_id.length > 0) {
+    const { HmacSigner } = await import("../core/sign.js");
+    const signerOpts: ConstructorParameters<typeof HmacSigner>[0] = {};
+    if (baseDir !== undefined) signerOpts.baseDir = baseDir;
+    const signer = new HmacSigner(signerOpts);
+
+    const payload = {
+      plan_id: plan_id,
+      task_id: task_id,
+      actor_id: "SYSTEM",
+      verdict: verdict,
+      ts: entry.ts,
+      seq: entry.seq,
+      content_hash: null,
+    };
+    const gate_sig = signer.sign(payload);
+
+    // Telemetry artifact: write/update <baseDir>/telemetry/<session_id>-gate-results.json
+    const { resolveDefaultLedgerBase } = await import("../core/ledger.js");
+    const effectiveBaseDir = baseDir ?? resolveDefaultLedgerBase();
+    const telemetryDir = nodePath.join(effectiveBaseDir, "telemetry");
+    if (!fs.existsSync(telemetryDir)) {
+      fs.mkdirSync(telemetryDir, { recursive: true });
+    }
+    const telemetryPath = nodePath.join(telemetryDir, `${session_id}-gate-results.json`);
+    const gateEntry = {
+      gate_id,
+      task_id,
+      gate_type,
+      verdict,
+      gate_sig,
+      ledger_seq: entry.seq,
+      evaluated_at,
+    };
+    let telemetry: Record<string, unknown>;
+    if (fs.existsSync(telemetryPath)) {
+      const existing = JSON.parse(fs.readFileSync(telemetryPath, "utf8")) as Record<
+        string,
+        unknown
+      >;
+      const rawGates = existing["gates"];
+      const gates: unknown[] = Array.isArray(rawGates) ? rawGates : [];
+      gates.push(gateEntry);
+      telemetry = {
+        ...existing,
+        updated_at: new Date().toISOString(),
+        gates,
+      };
+    } else {
+      telemetry = {
+        session_id,
+        plan_id,
+        updated_at: new Date().toISOString(),
+        gates: [gateEntry],
+      };
+    }
+    fs.writeFileSync(telemetryPath, JSON.stringify(telemetry), "utf8");
+
+    writeJson({
+      gate_id,
+      task_id,
+      session_id,
+      verdict,
+      status: "ENFORCED",
+      evaluated_at,
+      gate_type,
+      ledger_seq: entry.seq,
+      evidence,
+      gate_sig,
+      ts: entry.ts,
+    });
+  } else {
+    writeJson({
+      gate_id,
+      task_id,
+      session_id,
+      verdict,
+      status: "ENFORCED",
+      evaluated_at,
+      gate_type,
+      ledger_seq: entry.seq,
+      evidence,
+    });
+  }
+
   if (verdict !== "PASS") {
     process.exit(1);
   }
+}
+
+async function handleVerifyGate(args: unknown): Promise<void> {
+  const a = args as Record<string, unknown>;
+
+  const plan_id = a["plan_id"];
+  const task_id = a["task_id"];
+  const actor_id = a["actor_id"];
+  const verdict = a["verdict"];
+  const ts = a["ts"];
+  const seq = a["seq"];
+  const gate_sig = a["gate_sig"];
+  const baseDir = a["baseDir"] as string | undefined;
+
+  // Validate required fields
+  if (typeof plan_id !== "string" || plan_id.length === 0) {
+    exitError({ error: "Missing required field: plan_id" });
+  }
+  if (typeof task_id !== "string" || task_id.length === 0) {
+    exitError({ error: "Missing required field: task_id" });
+  }
+  if (typeof actor_id !== "string" || actor_id.length === 0) {
+    exitError({ error: "Missing required field: actor_id" });
+  }
+  if (typeof verdict !== "string" || verdict.length === 0) {
+    exitError({ error: "Missing required field: verdict" });
+  }
+  if (typeof ts !== "string" || ts.length === 0) {
+    exitError({ error: "Missing required field: ts" });
+  }
+  if (seq === undefined || seq === null) {
+    exitError({ error: "Missing required field: seq" });
+  }
+  if (gate_sig === undefined || gate_sig === null) {
+    exitError({ error: "Missing required field: gate_sig" });
+  }
+
+  const { HmacSigner } = await import("../core/sign.js");
+  const signerOpts: ConstructorParameters<typeof HmacSigner>[0] = {};
+  if (baseDir !== undefined) signerOpts.baseDir = baseDir;
+  const signer = new HmacSigner(signerOpts);
+
+  const payload = {
+    plan_id: plan_id,
+    task_id: task_id,
+    actor_id: actor_id,
+    verdict: verdict as import("../core/ledger.js").LedgerVerdict,
+    ts: ts,
+    seq: seq as number,
+    content_hash: null,
+  };
+
+  const valid = signer.verify(payload, gate_sig as string);
+
+  writeJson({
+    valid,
+    plan_id,
+    task_id,
+    verdict,
+    seq,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -617,6 +757,9 @@ async function main(): Promise<void> {
         break;
       case "evaluate-gate":
         await handleEvaluateGate(args);
+        break;
+      case "verify-gate":
+        await handleVerifyGate(args);
         break;
       case "verify-ledger":
         await handleVerifyLedger(args, jsonArg ?? "{}");

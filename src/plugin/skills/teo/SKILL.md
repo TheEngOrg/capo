@@ -44,13 +44,6 @@ When invoked as `/teo` with no arguments, display:
 ---
 **TEO Skills**
 
-**Utility:**
-`/teo validate` — Framework structural integrity checks
-`/teo login` — Session management
-`/teo upgrade` — Framework upgrade workflow
-`/teo audit` — Compliance audit trail
-`/teo process` — Process flow registration, validation, testing, and governance
-
 **Capo-Orchestrated:**
 `/teo plan <initiative>` — Strategic planning (assess → spec → leadership)
 `/teo build <feature>` — Full development cycle (build → review → approve)
@@ -66,13 +59,7 @@ When invoked as `/teo` with no arguments, display:
 
 ### Path 1: Utility Keywords → Direct Route
 
-| Keywords | Routes to |
-|----------|-----------|
-| `login`, `session`, `auth`, `authenticate` | `/teo-login` |
-| `validate`, `check`, `integrity`, `verify framework` | `/teo-validate` |
-| `audit`, `compliance`, `trail`, `review decisions` | `/teo-audit` |
-| `upgrade`, `update`, `version`, `migrate framework` | `/teo-upgrade` |
-| `process`, `flow`, `register process`, `describe process`, `validate process`, `check process`, `update process`, `test process`, `process safety`, `process similarity` | `/teo-process` |
+All substantive requests route to Capo via Path 2.
 
 ### Path 2: Everything Else → Capo
 
@@ -119,7 +106,6 @@ Do NOT route to Capo when a `PLAN_ARTIFACT` block is present — that would crea
 | `/teo build` expecting code | Clarify: /teo invokes Capo orchestration; Capo delegates to engineering team |
 | `/teo` with no args | Display menu. Never return an error. |
 | Input matches no keywords | Attempt interpretation. Substantive → Capo. Operational → suggest utility skill. |
-| `/teo validate` | Route to `/teo-validate` |
 
 ## Memory Protocol
 

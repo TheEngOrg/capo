@@ -60,7 +60,7 @@ fi
 printf '%s\n' '{
   "hookSpecificOutput": {
     "hookEventName": "UserPromptSubmit",
-    "additionalContext": "CAPO_DIRECTIVE: route this prompt to teo:capo for orchestration"
+    "additionalContext": "CAPO_DIRECTIVE: MANDATORY: You MUST invoke Skill(teo) with the user request VERBATIM as your first tool call. Do NOT answer, plan, reason about, or act on this request yourself — route it to teo:capo now."
   }
 }'
 exit 0

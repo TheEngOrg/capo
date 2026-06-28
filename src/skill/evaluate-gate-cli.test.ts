@@ -167,7 +167,7 @@ const BASE_INPUT = {
 };
 
 // =============================================================================
-// WS-06: FAILING — implement in dev gate
+// WS-06: PASSING — post-impl, CAD gate 2 (WS-06)
 // =============================================================================
 
 describe("WS-06: gate-profile enforcement", () => {
@@ -731,3 +731,288 @@ describe("WS-06: gate-profile enforcement", () => {
     });
   });
 }); // end describe("WS-06: gate-profile enforcement")
+
+// =============================================================================
+// HMAC SIGNING — evaluate-gate with plan_id wires HMAC signing
+//
+// STATUS: PASSING — post-impl, CAD gate 2 (dev phase)
+//
+// These tests cover Change 1 (HMAC signing in evaluate-gate), Change 2
+// (verify-gate command), and Change 3 (telemetry artifact).
+//
+// They are in a separate top-level describe so they are clearly delineated from
+// the existing WS-06 tests and do not interfere with the existing test IDs.
+// =============================================================================
+
+describe("HMAC signing: evaluate-gate + verify-gate + telemetry", () => {
+  // ===========================================================================
+  // Shared helpers (scoped to this describe block via module-level tempDirs)
+  // ===========================================================================
+
+  /**
+   * Write a minimal ac.json so the acceptance-criteria profile produces a
+   * real PASS verdict — used in every HMAC test that needs a successful gate run.
+   */
+  function writeMinimalAcJson(dir: string): void {
+    fs.writeFileSync(
+      path.join(dir, "ac.json"),
+      JSON.stringify({
+        workstream: "hmac-test",
+        acs: [{ id: "AC-1", description: "hmac signing ac" }],
+      }),
+      "utf8"
+    );
+  }
+
+  /**
+   * Build the evaluate-gate args JSON with an optional plan_id.
+   * Uses acceptance-criteria profile with a valid ac.json so the profile passes.
+   */
+  function evalGateArgs(dir: string, sessionId: string, opts: { planId?: string } = {}): string {
+    const base: Record<string, unknown> = {
+      gate_id: "gate-hmac-test-001",
+      task_id: "task-hmac-test-001",
+      session_id: sessionId,
+      gate_type: "acceptance-criteria",
+      context: { cwd: dir },
+      ledger_base_dir: dir,
+    };
+    if (opts.planId !== undefined) {
+      base["plan_id"] = opts.planId;
+    }
+    return JSON.stringify(base);
+  }
+
+  // ===========================================================================
+  // EG-HMAC-1: backward-compatibility — no plan_id → no gate_sig in output
+  // ===========================================================================
+
+  // [EG-HMAC-1] evaluate-gate WITHOUT plan_id must not produce gate_sig.
+  // This guards backward compatibility: existing callers that omit plan_id must
+  // receive the same output shape they always did (no new required fields).
+  it("[EG-HMAC-1] evaluate-gate without plan_id → gate_sig absent from output (backward-compatible)", () => {
+    const dir = makeTempDir();
+    writeMinimalAcJson(dir);
+
+    const sessionId = "session-hmac-eg1";
+    const input = evalGateArgs(dir, sessionId); // no planId
+
+    const { exitCode, stdout } = runCli("evaluate-gate", input);
+
+    expect(exitCode).toBe(0);
+    const result = stdout as Record<string, unknown>;
+    expect(result["verdict"]).toBe("PASS");
+    // gate_sig must be absent — not null, not "", not present at all
+    expect(Object.prototype.hasOwnProperty.call(result, "gate_sig")).toBe(false);
+  });
+
+  // ===========================================================================
+  // EG-HMAC-2: plan_id present → gate_sig in output, 64-char hex
+  // ===========================================================================
+
+  // [EG-HMAC-2] evaluate-gate WITH plan_id → gate_sig present in output, exactly 64 lowercase hex chars.
+  // Change 1 (HMAC signing wired into handleEvaluateGate) is implemented — now passing.
+  it("[EG-HMAC-2] evaluate-gate with plan_id → gate_sig present, 64-char lowercase hex string", () => {
+    const dir = makeTempDir();
+    writeMinimalAcJson(dir);
+
+    const sessionId = "session-hmac-eg2";
+    const input = evalGateArgs(dir, sessionId, { planId: "plan-hmac-test-001" });
+
+    const { exitCode, stdout } = runCli("evaluate-gate", input);
+
+    expect(exitCode).toBe(0);
+    const result = stdout as Record<string, unknown>;
+    expect(result["verdict"]).toBe("PASS");
+
+    // gate_sig must be present
+    expect(Object.prototype.hasOwnProperty.call(result, "gate_sig")).toBe(true);
+    const gate_sig = result["gate_sig"];
+    expect(typeof gate_sig).toBe("string");
+    // HMAC-SHA-256 produces exactly 32 bytes = 64 lowercase hex chars
+    expect((gate_sig as string).length).toBe(64);
+    expect(gate_sig as string).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  // ===========================================================================
+  // EG-HMAC-3: telemetry file written at correct path
+  // ===========================================================================
+
+  // [EG-HMAC-3] evaluate-gate WITH plan_id writes a telemetry artifact at
+  // <ledger_base_dir>/telemetry/<session_id>-gate-results.json.
+  // File must be parseable JSON with the required shape.
+  // Change 3 (telemetry artifact) is implemented — now passing.
+  it("[EG-HMAC-3] evaluate-gate with plan_id → telemetry file written, parseable JSON, gates array has 1 entry", () => {
+    const dir = makeTempDir();
+    writeMinimalAcJson(dir);
+
+    const sessionId = "session-hmac-eg3";
+    const input = evalGateArgs(dir, sessionId, { planId: "plan-hmac-test-001" });
+
+    const { exitCode, stdout } = runCli("evaluate-gate", input);
+
+    expect(exitCode).toBe(0);
+    const result = stdout as Record<string, unknown>;
+    expect(result["verdict"]).toBe("PASS");
+
+    // Telemetry file must exist at the documented path
+    const telemetryPath = path.join(dir, "telemetry", `${sessionId}-gate-results.json`);
+    expect(fs.existsSync(telemetryPath)).toBe(true);
+
+    const raw = fs.readFileSync(telemetryPath, "utf8");
+    let telemetry: Record<string, unknown>;
+    expect(() => {
+      telemetry = JSON.parse(raw) as Record<string, unknown>;
+    }).not.toThrow();
+
+    // Top-level fields
+    expect(telemetry!["session_id"]).toBe(sessionId);
+    expect(telemetry!["plan_id"]).toBe("plan-hmac-test-001");
+    expect(typeof telemetry!["updated_at"]).toBe("string");
+    // updated_at must be parseable ISO-8601
+    expect(isNaN(new Date(telemetry!["updated_at"] as string).getTime())).toBe(false);
+
+    // gates array with exactly 1 entry
+    const gates = telemetry!["gates"];
+    expect(Array.isArray(gates)).toBe(true);
+    expect((gates as unknown[]).length).toBe(1);
+
+    const gate = (gates as Record<string, unknown>[])[0]!;
+    expect(typeof gate["gate_id"]).toBe("string");
+    expect(typeof gate["task_id"]).toBe("string");
+    expect(typeof gate["gate_type"]).toBe("string");
+    expect(["PASS", "FAIL", "BLOCKED"]).toContain(gate["verdict"]);
+    expect(typeof gate["ledger_seq"]).toBe("number");
+    expect(typeof gate["evaluated_at"]).toBe("string");
+    // gate_sig must be present when plan_id was provided
+    expect(typeof gate["gate_sig"]).toBe("string");
+    expect((gate["gate_sig"] as string).length).toBe(64);
+  });
+
+  // ===========================================================================
+  // EG-HMAC-4: two consecutive calls → telemetry gates array has 2 entries
+  // ===========================================================================
+
+  // [EG-HMAC-4] Two evaluate-gate calls with the SAME session_id and plan_id
+  // must result in a telemetry file with 2 entries in the gates array.
+  // The second call must READ the existing file and APPEND — not overwrite.
+  // Change 3 (append-not-overwrite) is implemented — now passing.
+  it("[EG-HMAC-4] two consecutive evaluate-gate calls with same session_id → telemetry gates array has 2 entries", () => {
+    const dir = makeTempDir();
+    writeMinimalAcJson(dir);
+
+    const sessionId = "session-hmac-eg4";
+    const planId = "plan-hmac-test-004";
+
+    // First call
+    const input1 = JSON.stringify({
+      gate_id: "gate-hmac-eg4-001",
+      task_id: "task-hmac-eg4-001",
+      session_id: sessionId,
+      gate_type: "acceptance-criteria",
+      context: { cwd: dir },
+      ledger_base_dir: dir,
+      plan_id: planId,
+    });
+    const { exitCode: exit1 } = runCli("evaluate-gate", input1);
+    expect(exit1).toBe(0);
+
+    // Second call — same session_id, different gate_id and task_id
+    const input2 = JSON.stringify({
+      gate_id: "gate-hmac-eg4-002",
+      task_id: "task-hmac-eg4-002",
+      session_id: sessionId,
+      gate_type: "acceptance-criteria",
+      context: { cwd: dir },
+      ledger_base_dir: dir,
+      plan_id: planId,
+    });
+    const { exitCode: exit2 } = runCli("evaluate-gate", input2);
+    expect(exit2).toBe(0);
+
+    // Telemetry file must exist
+    const telemetryPath = path.join(dir, "telemetry", `${sessionId}-gate-results.json`);
+    expect(fs.existsSync(telemetryPath)).toBe(true);
+
+    const telemetry = JSON.parse(fs.readFileSync(telemetryPath, "utf8")) as Record<string, unknown>;
+    const gates = telemetry["gates"] as unknown[];
+    expect(Array.isArray(gates)).toBe(true);
+    // Two calls → two entries. If only 1, the second call overwrote instead of appending.
+    expect(gates.length).toBe(2);
+
+    // Each entry must have its own gate_id — confirm they are distinct
+    const ids = (gates as Record<string, unknown>[]).map((g) => g["gate_id"]);
+    expect(ids).toContain("gate-hmac-eg4-001");
+    expect(ids).toContain("gate-hmac-eg4-002");
+  });
+
+  // ===========================================================================
+  // EG-HMAC-5: full sign → verify round-trip through the CLI
+  // ===========================================================================
+
+  // [EG-HMAC-5] evaluate-gate (with plan_id) → verify-gate (with returned gate_sig) → valid: true.
+  // This is the integration smoke test for the entire HMAC pipeline:
+  //   - Change 1: signing wired in evaluate-gate
+  //   - Change 2: verify-gate command exists and works
+  // The same baseDir (ledger_base_dir) is used for both calls to share the keyring.
+  it("[EG-HMAC-5] evaluate-gate with plan_id, then verify-gate with returned gate_sig → valid: true", () => {
+    const dir = makeTempDir();
+    writeMinimalAcJson(dir);
+
+    const sessionId = "session-hmac-eg5";
+    const planId = "plan-hmac-test-005";
+
+    // Step 1: evaluate-gate with plan_id → must produce gate_sig
+    const evalInput = JSON.stringify({
+      gate_id: "gate-hmac-eg5-001",
+      task_id: "task-hmac-eg5-001",
+      session_id: sessionId,
+      gate_type: "acceptance-criteria",
+      context: { cwd: dir },
+      ledger_base_dir: dir,
+      plan_id: planId,
+    });
+
+    const { exitCode: evalExit, stdout: evalStdout } = runCli("evaluate-gate", evalInput);
+    expect(evalExit).toBe(0);
+
+    const evalResult = evalStdout as Record<string, unknown>;
+    expect(evalResult["verdict"]).toBe("PASS");
+
+    // gate_sig must be present — Change 1 is implemented
+    const gate_sig = evalResult["gate_sig"];
+    expect(typeof gate_sig).toBe("string");
+    expect((gate_sig as string).length).toBe(64);
+
+    // The signed payload fields are plan_id, task_id, actor_id, verdict, ts, seq
+    // ts and seq come from the ledger entry (assigned at write time)
+    const ts = evalResult["ts"] as string | undefined;
+    const ledger_seq = evalResult["ledger_seq"] as number;
+
+    expect(typeof ts).toBe("string");
+    expect(typeof ledger_seq).toBe("number");
+
+    // Step 2: verify-gate using the gate_sig and fields from evaluate-gate output
+    const verifyInput = JSON.stringify({
+      plan_id: planId,
+      task_id: "task-hmac-eg5-001",
+      actor_id: "SYSTEM",
+      verdict: evalResult["verdict"],
+      ts,
+      seq: ledger_seq,
+      gate_sig,
+      baseDir: dir, // MUST match the ledger_base_dir used above — same keyring
+    });
+
+    const { exitCode: verifyExit, stdout: verifyStdout } = runCli("verify-gate", verifyInput);
+
+    // verify-gate must exit 0 on success
+    expect(verifyExit).toBe(0);
+    const verifyResult = verifyStdout as Record<string, unknown>;
+    expect(verifyResult["valid"]).toBe(true);
+    expect(verifyResult["plan_id"]).toBe(planId);
+    expect(verifyResult["task_id"]).toBe("task-hmac-eg5-001");
+    expect(verifyResult["verdict"]).toBe("PASS");
+    expect(verifyResult["seq"]).toBe(ledger_seq);
+  });
+}); // end describe("HMAC signing: evaluate-gate + verify-gate + telemetry")

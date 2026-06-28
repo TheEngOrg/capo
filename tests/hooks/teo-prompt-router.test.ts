@@ -1,10 +1,10 @@
-// WS-HOOK-01 — passing (post-impl, CAD gate 2)
+// WS-HOOK-01 + WS-ROUTER-IMPERATIVE — passing (post-impl, CAD gate 2)
 //
 // Tests for hooks/teo-prompt-router.sh — the UserPromptSubmit hook that
 // injects CAPO_DIRECTIVE additionalContext for substantive /teo prompts.
 //
 // Ordering: misuse/boundary → golden path (per TEO convention, ADR-064)
-// These tests FAIL until dev implements hooks/teo-prompt-router.sh.
+// These tests PASS — teo-prompt-router.sh is implemented (WS-HOOK-01 + WS-ROUTER-IMPERATIVE).
 
 import { describe, it, expect } from "vitest";
 import { execSync } from "child_process";
@@ -148,5 +148,46 @@ describe("teo-prompt-router.sh — substantive /teo prompts (golden path)", () =
       hookSpecificOutput?: { hookEventName?: string; additionalContext?: string };
     };
     expect(parsed.hookSpecificOutput?.additionalContext).toContain("CAPO_DIRECTIVE");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// IMPERATIVE INJECTION CONTRACT (WS-ROUTER-IMPERATIVE)
+// Implemented: teo-prompt-router.sh now emits an unambiguous mandatory command
+// as the additionalContext string (WS-ROUTER-IMPERATIVE dev pass, 2026-06-28).
+// Pre-impl value (replaced by WS-ROUTER-IMPERATIVE): "CAPO_DIRECTIVE: route this prompt to teo:capo for orchestration"
+// ---------------------------------------------------------------------------
+
+describe("teo-prompt-router.sh — imperative injection contract", () => {
+  // Helper: parse additionalContext from a /teo prompt
+  function getAdditionalContext(prompt: string): string {
+    const { exitCode, stdout } = runRouter(prompt);
+    expect(exitCode).toBe(0);
+    const parsed = JSON.parse(stdout) as {
+      hookSpecificOutput?: { additionalContext?: string };
+    };
+    const ctx = parsed.hookSpecificOutput?.additionalContext;
+    expect(typeof ctx).toBe("string");
+    return ctx as string;
+  }
+
+  it("additionalContext contains an imperative marker — 'MANDATORY' or 'MUST' (case-insensitive)", () => {
+    const ctx = getAdditionalContext("/teo build a login page");
+    expect(/mandatory|must/i.test(ctx)).toBe(true);
+  });
+
+  it("additionalContext contains 'VERBATIM' (case-insensitive) to prevent pre-filtering of the user's request", () => {
+    const ctx = getAdditionalContext("/teo build a login page");
+    expect(/verbatim/i.test(ctx)).toBe(true);
+  });
+
+  it("additionalContext prohibits the main session from acting independently — contains 'do not', 'DO NOT', or 'don\\'t'", () => {
+    const ctx = getAdditionalContext("/teo build a login page");
+    expect(/do not|don't/i.test(ctx)).toBe(true);
+  });
+
+  it("additionalContext names the skill to invoke — contains 'Skill(', 'invoke', 'use skill', or '/teo skill' (not just a routing target)", () => {
+    const ctx = getAdditionalContext("/teo build a login page");
+    expect(/Skill\(|invoke|use skill|\/teo skill/i.test(ctx)).toBe(true);
   });
 });

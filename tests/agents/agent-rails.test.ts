@@ -290,9 +290,8 @@ describe("boundary(AC-5c): plugin manifest agents directory contains qa-validate
     const agentsField = manifest["agents"];
     expect(typeof agentsField, "plugin.json must have an agents field").toBe("string");
 
-    // Resolve the agents path relative to the manifest file
-    const manifestDir = root(".claude-plugin");
-    const agentsDir = path.resolve(manifestDir, agentsField as string);
+    // Resolve the agents path relative to the repo root (not the manifest dir)
+    const agentsDir = root(agentsField as string);
     const qaValidatePath = path.join(agentsDir, "qa-validate.md");
     expect(fs.existsSync(qaValidatePath), `qa-validate.md must exist at ${qaValidatePath}`).toBe(
       true

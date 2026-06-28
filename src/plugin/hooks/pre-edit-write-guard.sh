@@ -55,7 +55,8 @@
 # Bypass audit log: .claude/memory/traces/bypass-audit-YYYY-MM-DD.json
 #
 # See: .claude/shared/posix-write-contract.md
-# See: docs/adr/ADR-037-mechanical-write-enforcement.md
+# ADR-037 (mechanical write enforcement) lives in the Brain:
+#   wonton-agents/the-eng-org/the-eng-org-operations/Decisions/Active/platform/
 # ============================================================================
 
 set -uo pipefail

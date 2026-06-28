@@ -5,26 +5,19 @@
 //   T-01: agents/capo.md contains no GATEWAY_SPAWN_REQUEST relay protocol
 //   T-03: docs/how-it-works.md contains no "Dispatcher" identity-label usage
 //   T-04: sandbox/README.md contains no "Dispatcher" identity-label usage
-//   T-05: docs/adr/ADR-072.md exists and is non-empty
 //   T-06: skills/teo/SKILL.md contains no relay/proxy execution model language
 //
-// INTENTIONAL FAILURE STATE (before WS-00-pre is implemented):
-//   T-01: FAILS — agents/capo.md has GATEWAY_SPAWN_REQUEST throughout section 108-161
-//   T-03: FAILS — docs/how-it-works.md has "Dispatcher" identity noun on line 6 and ASCII diagram
-//   T-04: FAILS — sandbox/README.md has "Dispatcher" as architectural noun twice
-//   T-05: FAILS — docs/adr/ is empty, ADR-072.md does not exist
-//   T-06: PASSES — skills/teo/SKILL.md was already fixed in an earlier workstream
-//
-// GREEN CRITERIA (after WS-00-pre is fully implemented):
+// GREEN CRITERIA (all green post WS-00-pre):
 //   T-01: GATEWAY_SPAWN_REQUEST section removed; Capo calls Task() directly
 //   T-03: how-it-works.md updated — no capitalized-noun "Dispatcher" identity references
 //   T-04: sandbox/README.md updated — "Dispatcher" replaced with accurate routing description
-//   T-05: docs/adr/ADR-072.md authored with content describing the relay-kill decision
 //   T-06: Already green — no regression expected
 //
 // SCOPE NOTES:
 //   - T-02 (mirror-parity) was removed as part of ws-delete-mirror: the .claude/agents/
 //     mirror directory has been deleted; parity checks are no longer applicable.
+//   - T-05 (docs/adr/ADR-072.md exists) was removed: docs/adr/ was deleted from the repo;
+//     ADRs now live canonically in the Brain (wonton-agents/the-eng-org-operations/Decisions/).
 //   - We test for the specific identity-label pattern "Dispatcher" (capitalized noun used to
 //     name the architectural two-tier relay role), NOT generic "dispatcher" in any context
 //   - The SKILL.md relay-model language (old Dispatcher sentence) was already removed by
@@ -46,7 +39,6 @@ const REPO_ROOT = path.resolve(__dirname, "..");
 const PLUGIN_CAPO_PATH = path.join(REPO_ROOT, "src", "plugin", "agents", "capo.md");
 const HOW_IT_WORKS_PATH = path.join(REPO_ROOT, "docs", "how-it-works.md");
 const SANDBOX_README_PATH = path.join(REPO_ROOT, "sandbox", "README.md");
-const ADR_072_PATH = path.join(REPO_ROOT, "docs", "adr", "ADR-072.md");
 const SKILL_TEO_PATH = path.join(REPO_ROOT, "src", "plugin", "skills", "teo", "SKILL.md");
 
 // Load files that must exist unconditionally; ENOENT surfaces as a clear test failure.
@@ -171,52 +163,6 @@ describe("T-04 sandbox/README.md — no Dispatcher identity-label usage", () => 
     //             model artifact. After the fix this troubleshooting step must be rewritten.
     // PASSES AFTER: failure guidance updated to remove the relay-model reference.
     expect(sandboxReadmeContent).not.toContain("Dispatcher CLAUDE.md");
-  });
-});
-
-// =============================================================================
-// T-05 — GOLDEN-PATH
-// docs/adr/ADR-072.md must exist and be non-empty after WS-00-pre.
-//
-// ADR-072 ratifies the direct-dispatch architecture decision (relay-kill).
-// The ADR directory is currently empty — the file does not yet exist.
-// =============================================================================
-describe("T-05 ADR-072 — docs/adr/ADR-072.md must exist and be non-empty", () => {
-  it("T-05a: docs/adr/ADR-072.md exists on disk", () => {
-    // FAILS NOW:  docs/adr/ directory is empty.
-    // PASSES AFTER: dev (or technical-writer) authors ADR-072.md in docs/adr/.
-    const exists = fs.existsSync(ADR_072_PATH);
-    expect(
-      exists,
-      `ADR-072.md must exist at ${ADR_072_PATH} — author it as part of WS-00-pre`
-    ).toBe(true);
-  });
-
-  it("T-05b: docs/adr/ADR-072.md is non-empty (at least 100 characters)", () => {
-    // FAILS NOW:  file does not exist — readFileSync would throw ENOENT.
-    //             This test is written to fail clearly if T-05a also fails.
-    // PASSES AFTER: ADR-072.md is authored with decision rationale.
-    if (!fs.existsSync(ADR_072_PATH)) {
-      throw new Error(
-        `ADR-072.md does not exist at ${ADR_072_PATH}. ` +
-          "Author the file as part of WS-00-pre before this test can pass."
-      );
-    }
-    const content = fs.readFileSync(ADR_072_PATH, "utf8");
-    expect(content.trim().length).toBeGreaterThanOrEqual(100);
-  });
-
-  it("T-05c: docs/adr/ADR-072.md contains a decision title (starts with # or ## heading)", () => {
-    // FAILS NOW:  file does not exist.
-    // PASSES AFTER: ADR-072.md has a markdown heading at the top.
-    if (!fs.existsSync(ADR_072_PATH)) {
-      throw new Error(
-        `ADR-072.md does not exist at ${ADR_072_PATH}. ` +
-          "Author the file as part of WS-00-pre before this test can pass."
-      );
-    }
-    const content = fs.readFileSync(ADR_072_PATH, "utf8");
-    expect(content.trimStart()).toMatch(/^#+ /);
   });
 });
 

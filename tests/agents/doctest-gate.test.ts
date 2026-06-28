@@ -387,7 +387,7 @@ describe("golden: development-workflow.md references docs+tests as part of done"
 // =============================================================================
 
 // ---------------------------------------------------------------------------
-// Shipped agent list (22 total)
+// Shipped agent list (23 total)
 // ---------------------------------------------------------------------------
 const SHIPPED_AGENTS: string[] = [
   "acceptance-engineer.md",
@@ -405,6 +405,7 @@ const SHIPPED_AGENTS: string[] = [
   "gcp-infra-specialist.md",
   "product-manager.md",
   "product-owner.md",
+  "qa-validate.md",
   "qa.md",
   "security-engineer.md",
   "software-engineer.md",
@@ -546,15 +547,15 @@ describe("boundary(WS-SHARED-FILES): studio-director.md shared-file links carry 
 // GOLDEN PATH — all 21 files exist and are clean
 // ---------------------------------------------------------------------------
 
-describe("golden(WS-SHARED-FILES): all 22 shipped agent files exist (no accidental deletion)", () => {
+describe("golden(WS-SHARED-FILES): all 23 shipped agent files exist (no accidental deletion)", () => {
   // GOLDEN: the strip operation must not delete any agent files. A count check
   // plus per-file existence check catches a dev who accidentally deleted or
   // renamed a file during the cleanup pass.
 
-  it("agents/ directory contains exactly 22 shipped agent files", () => {
+  it("agents/ directory contains exactly 23 shipped agent files", () => {
     const agentsDir = root("src", "plugin", "agents");
     const files = fs.readdirSync(agentsDir).filter((f) => f.endsWith(".md"));
-    expect(files.length).toBe(22);
+    expect(files.length).toBe(23);
   });
 
   for (const filename of SHIPPED_AGENTS) {

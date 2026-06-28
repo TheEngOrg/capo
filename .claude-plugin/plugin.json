@@ -25,6 +25,7 @@
     "./src/plugin/agents/gcp-infra-specialist.md",
     "./src/plugin/agents/product-manager.md",
     "./src/plugin/agents/product-owner.md",
+    "./src/plugin/agents/qa-validate.md",
     "./src/plugin/agents/qa.md",
     "./src/plugin/agents/security-engineer.md",
     "./src/plugin/agents/software-engineer.md",

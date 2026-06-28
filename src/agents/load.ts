@@ -124,6 +124,14 @@ function parseYamlFlat(yaml: string): Record<string, unknown> {
       }
       result[key] = listItems;
       i = j;
+    } else if (/^\[.*\]$/.test(rawVal)) {
+      // Inline array syntax: [item1, item2, ...]
+      const inner = rawVal.slice(1, -1);
+      result[key] = inner
+        .split(",")
+        .map((s) => s.trim().replace(/^["']|["']$/g, ""))
+        .filter((s) => s.length > 0);
+      i++;
     } else {
       // Scalar value — strip optional surrounding quotes
       result[key] = rawVal.replace(/^["']|["']$/g, "");

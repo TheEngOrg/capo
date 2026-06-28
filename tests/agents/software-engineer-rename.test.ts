@@ -234,17 +234,17 @@ describe("misuse: SE-QA-IDENTITY — qa.md identity must not say 'I am NOT dev'"
 
 // ─── GROUP 7: scripts/verify-plugin-install.sh — AGENTS_COUNT ───
 
-describe("misuse: SE-AGENTS-COUNT — verify-plugin-install.sh AGENTS_COUNT must be 22", () => {
-  it("AC-30: scripts/verify-plugin-install.sh AGENTS_COUNT constant is 22 (not 21)", () => {
+describe("misuse: SE-AGENTS-COUNT — verify-plugin-install.sh AGENTS_COUNT must be 23", () => {
+  it("AC-30: scripts/verify-plugin-install.sh AGENTS_COUNT constant is not 21 (stale pre-SE-RENAME value)", () => {
     const script = readFile("scripts/verify-plugin-install.sh");
     // Parse the check line: if [ "${AGENTS_COUNT}" = "21" ]; then
-    // After the fix it must say "22"
+    // After the fix it must say "22" or higher
     const oldCheck = /\[ "\$\{AGENTS_COUNT\}" = "21" \]/.test(script);
-    expect(oldCheck, "AGENTS_COUNT check still says 21 — must be updated to 22").toBe(false);
+    expect(oldCheck, "AGENTS_COUNT check still says 21 — must be updated").toBe(false);
   });
-  it("AC-30b: scripts/verify-plugin-install.sh AGENTS_COUNT check says 22", () => {
+  it("AC-30b: scripts/verify-plugin-install.sh AGENTS_COUNT check says 23 (bumped by WS-AGENT-RAILS)", () => {
     const script = readFile("scripts/verify-plugin-install.sh");
-    expect(script).toMatch(/\$\{AGENTS_COUNT\}" = "22"/);
+    expect(script).toMatch(/\$\{AGENTS_COUNT\}" = "23"/);
   });
 });
 

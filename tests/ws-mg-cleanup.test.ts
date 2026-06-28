@@ -107,43 +107,20 @@ describe("AC-2: teo-statusline.sh is removed (statusLine block deleted from sett
   });
 });
 
-// ─── AC-3: session-start.sh — no MG output ───────────────────────────────────
-// STATUS: GREEN
+// ─── AC-3: .claude/hooks/ directory deleted (replaced by plugin system) ──────
+// STATUS: GREEN — hooks now loaded via plugin system, no local .claude/hooks/ needed
+//
+// This directory was a pre-plugin artifact. The plugin system loads hooks from
+// CLAUDE_PLUGIN_ROOT/hooks/ automatically. Deleted as part of WS-STARTUP-CLEANUP.
 
-describe("AC-3: session-start.sh contains no MG references", () => {
+describe("AC-3: .claude/hooks/ directory removed (plugin system handles hooks)", () => {
   // STATUS: GREEN
 
-  const SESSION_HOOK = join(REPO_ROOT, ".claude", "hooks", "session-start.sh");
+  const HOOKS_DIR = join(REPO_ROOT, ".claude", "hooks");
 
-  // ── Misuse: MG_VERSION variable ─────────────────────────────────────────
-  it("MISUSE: script must NOT reference 'MG_VERSION' variable", () => {
-    const content = readFileSync(SESSION_HOOK, "utf8");
-    // Currently: `MG_VERSION="unknown"` + `MG_VERSION=$(awk '/^mg_base_version:/'...)`
-    expect(content).not.toContain("MG_VERSION");
-  });
-
-  // ── Misuse: reading the stale mg_base_version field ─────────────────────
-  it("MISUSE: script must NOT reference 'mg_base_version'", () => {
-    const content = readFileSync(SESSION_HOOK, "utf8");
-    // Currently reads `mg_base_version:` via awk
-    expect(content).not.toContain("mg_base_version");
-  });
-
-  // ── Misuse: reading the stale MG Base field from TEO_PROJECT ────────────
-  it("MISUSE: script must NOT reference 'MG Base:' field from TEO_PROJECT fallback", () => {
-    const content = readFileSync(SESSION_HOOK, "utf8");
-    // Currently: `awk '/^MG Base:/ {print $NF}'` in the TEO_PROJECT fallback branch
-    expect(content).not.toContain("MG Base:");
-  });
-
-  // ── Golden: script still exists ─────────────────────────────────────────
-  it("GOLDEN: script exists", () => {
-    expect(existsSync(SESSION_HOOK)).toBe(true);
-  });
-
-  it("GOLDEN: script is non-empty", () => {
-    const content = readFileSync(SESSION_HOOK, "utf8");
-    expect(content.trim().length).toBeGreaterThan(0);
+  // ── Absence guard: local hooks directory must not exist after cleanup ────
+  it("GOLDEN: .claude/hooks/ directory must NOT exist (hooks now via plugin system)", () => {
+    expect(existsSync(HOOKS_DIR)).toBe(false);
   });
 });
 

@@ -100,33 +100,22 @@ describe("ws-delete-mirror", () => {
   });
 
   // =============================================================================
-  // T-03 — BOUNDARY
-  // capo-activation.sh MUST reference the canonical source path agents/capo.md.
+  // T-03 — BOUNDARY (UPDATED — WS-STARTUP-CLEANUP)
+  // capo-activation.sh must NOT reference agents/capo.md or .claude/agents/capo.md.
   //
-  // After fixing T-01, the hook must actively point at the right file. It is not
-  // sufficient to merely remove the bad path — if dev accidentally removes the
-  // read instruction entirely, T-01 passes but Capo's persona is never loaded.
-  // This test ensures the replacement canonical path is present.
+  // Previous state (ws-delete-mirror): hook read agents/capo.md to load Capo's persona.
+  // Current state (WS-STARTUP-CLEANUP): the plugin system loads agents automatically.
+  // The hook no longer needs to manually read any agent file. This test now verifies
+  // that both the mirror path AND the canonical read instruction are gone.
   // =============================================================================
-  describe("T-03 boundary — capo-activation.sh MUST reference agents/capo.md (canonical path)", () => {
-    it("T-03: hooks/capo-activation.sh DOES contain 'agents/capo.md' without the .claude/ prefix", () => {
-      // PASSES: the hook now contains "agents/capo.md" (canonical path, no .claude/ prefix).
-      //   Updated by ws-delete-mirror. T-01 asserts the mirror path is absent; this test
-      //   asserts the canonical replacement is present — together they pin exactly one path.
+  describe("T-03 boundary — capo-activation.sh must NOT reference agents/capo.md (plugin loads agents now)", () => {
+    it("T-03: hooks/capo-activation.sh does NOT contain 'agents/capo.md' (canonical or mirror)", () => {
+      // UPDATED: ws-delete-mirror tested that agents/capo.md was present (canonical path).
+      // WS-STARTUP-CLEANUP updates the hook to emit only a version banner; the plugin
+      // system now loads agents automatically — no manual read is needed.
       const content = fs.readFileSync(CAPO_ACTIVATION_PATH, "utf8");
-      expect(content).toContain("agents/capo.md");
-
-      // Belt-and-suspenders: confirm we're not just matching the mirror path again.
-      // If .claude/agents/capo.md is still present, T-01 catches it. This expect is
-      // a readability aid — makes the intent explicit in the test output.
-      const occurrences = content.split("agents/capo.md").length - 1;
-      const mirrorOccurrences = content.split(".claude/agents/capo.md").length - 1;
-      const canonicalOnlyOccurrences = occurrences - mirrorOccurrences;
-      expect(
-        canonicalOnlyOccurrences,
-        'capo-activation.sh must contain "agents/capo.md" without a ".claude/" prefix — ' +
-          "found only mirror-path occurrences or none at all"
-      ).toBeGreaterThanOrEqual(1);
+      expect(content).not.toContain("agents/capo.md");
+      expect(content).not.toContain(".claude/agents/capo.md");
     });
   });
 

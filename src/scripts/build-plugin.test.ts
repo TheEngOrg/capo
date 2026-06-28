@@ -5,7 +5,7 @@
 
 //
 // ARCHITECTURE
-//   src/plugin/  ← single source of truth (22 agents, hooks, skills)
+//   src/plugin/  ← single source of truth (23 agents, hooks, skills)
 //   scripts/build-plugin.mjs  ← build script (to be implemented by dev)
 //   plugin/      ← built output at repo root (gitignored, not committed)
 //   plugin/.claude-plugin/plugin.json  ← must omit "agents" field
@@ -293,11 +293,11 @@ describe("build-dependent tests (AC-2 through AC-10)", () => {
       expect(fs.statSync(SRC_PLUGIN_AGENTS_DIR).isDirectory()).toBe(true);
     });
 
-    it("src/plugin/agents/ still contains exactly 22 .md files after build", () => {
+    it("src/plugin/agents/ still contains exactly 23 .md files after build", () => {
       const entries = fs.readdirSync(SRC_PLUGIN_AGENTS_DIR);
       const mdFiles = entries.filter((f) => f.endsWith(".md"));
       // Source must retain the exact same count — build must never delete source files.
-      expect(mdFiles.length).toBe(22);
+      expect(mdFiles.length).toBe(23);
     });
 
     it("agent filenames in src/plugin/agents/ are unchanged after build", () => {

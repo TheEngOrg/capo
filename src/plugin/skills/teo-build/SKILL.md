@@ -146,6 +146,14 @@ When `ROTATION_REQUIRED` is signaled during plan execution:
 
 ## Step 0: Classify at Intake
 
+**Generate SESSION_ID** — at intake, before any spawns, derive a stable session identifier that flows into all evaluate-gate calls:
+
+```
+SESSION_ID = ws-<workstream_id>-<unix_ts>
+```
+
+Where `<workstream_id>` is the workstream identifier and `<unix_ts>` is the current Unix timestamp (seconds). Pass this value as both `session_id` and `plan_id` in every `evaluate-gate` call below.
+
 Before spawning any agent, classify the workstream by applying R1-R8 and M1-M5 rules to the ticket or request description. Run `teo-classify-workstream <workstream-id>` before spawning any agent; if the script is not found, fall back to manual classification (fail-open).
 
 ```
@@ -240,6 +248,14 @@ Run automated verification. If any check fails, route back to Dev with failure d
 - [ ] Single src/ directory + tests/
 - [ ] No package.json, framework, or CI/CD changes
 
+Once all checks above pass, call the engine to sign the gate result:
+
+```bash
+teo-run.js evaluate-gate '{"gate_id":"dev-<workstream_id>","task_id":"<workstream_id>","session_id":"'$SESSION_ID'","plan_id":"'$SESSION_ID'","gate_type":"dev"}'
+```
+
+Non-zero exit → surface `GATE_BLOCKED: mechanical dev gate failed` and halt. Do NOT report complete.
+
 Pass → report complete. No leadership review required.
 
 ## ARCHITECTURAL Track (5-6 spawns)
@@ -279,6 +295,14 @@ Task:
     Order: misuse cases → boundary cases → golden path.
 ```
 
+After the QA specialist completes, call the engine to sign the gate result:
+
+```bash
+teo-run.js evaluate-gate '{"gate_id":"qa-spec-<workstream_id>","task_id":"<workstream_id>","session_id":"'$SESSION_ID'","plan_id":"'$SESSION_ID'","gate_type":"qa-spec"}'
+```
+
+Non-zero exit → surface `GATE_BLOCKED: qa-spec gate failed` and halt. Do NOT spawn Dev.
+
 QA and Dev can run in parallel once QA has committed initial test stubs.
 
 ### Step 2: Dev Implementation
@@ -296,7 +320,15 @@ Task:
     Run Red → Green → Refactor cycle.
 ```
 
-When Dev completes, it writes a `handoff` message to `messages-dev-staff-engineer.json`.
+When Dev completes, call the engine to sign the gate result:
+
+```bash
+teo-run.js evaluate-gate '{"gate_id":"dev-<workstream_id>","task_id":"<workstream_id>","session_id":"'$SESSION_ID'","plan_id":"'$SESSION_ID'","gate_type":"dev"}'
+```
+
+Non-zero exit → surface `GATE_BLOCKED: dev gate failed` and halt. Do NOT advance to Staff Engineer review.
+
+Then Dev writes a `handoff` message to `messages-dev-staff-engineer.json`.
 
 > **Definition of done (address-or-justify):** Dev must update tests and documentation affected by the change, OR explicitly note in the handoff why neither was warranted. An unjustified skip is a BLOCK at Step 3 (Staff Engineer review).
 
@@ -325,6 +357,14 @@ Task:
     Review workstream {id} code.
     Check: standards compliance, architecture, security, performance.
 ```
+
+After the Staff Engineer specialist completes, call the engine to sign the gate result:
+
+```bash
+teo-run.js evaluate-gate '{"gate_id":"staff-review-<workstream_id>","task_id":"<workstream_id>","session_id":"'$SESSION_ID'","plan_id":"'$SESSION_ID'","gate_type":"staff-review"}'
+```
+
+Non-zero exit → surface `GATE_BLOCKED: staff-review gate failed` and halt. Do NOT advance to merge.
 
 ### Step 4: Merge
 

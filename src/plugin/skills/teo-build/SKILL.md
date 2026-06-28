@@ -146,6 +146,14 @@ When `ROTATION_REQUIRED` is signaled during plan execution:
 
 ## Step 0: Classify at Intake
 
+Generate a workstream-scoped session identifier at the start of every build:
+
+```
+SESSION_ID = ws-<workstream_id>-<unix_ts>
+```
+
+Log SESSION_ID prominently at build start. This value flows into all `evaluate-gate` calls as `session_id` and `plan_id`.
+
 Before spawning any agent, classify the workstream by applying R1-R8 and M1-M5 rules to the ticket or request description. Run `teo-classify-workstream <workstream-id>` before spawning any agent; if the script is not found, fall back to manual classification (fail-open).
 
 ```
@@ -166,13 +174,13 @@ Record classification in memory before proceeding.
 
 ```
 Step 1: Dev — writes tests + implements (full TDD cycle)  → tests_pass + coverage >= 99%
-Step 2: Bash Gate — automated verification                → mechanical_gate_passed
+Step 2: Automated gate — verification                     → mechanical_gate_passed
 Done — no leadership review
 ```
 
 ### Progressive Escalation Cascade
 
-MECHANICAL workstreams use a two-attempt Haiku cascade before the Bash Gate. The engine runs `dev-haiku` up to `max_attempts` times; on exhaustion it escalates to `dev` (Sonnet) with the full `AttemptLog` injected as `{attempt_log}`. Failure Resume formatting is engine-managed (ADR-029 §4) — no manual `=== HAIKU FAILURE RESUME ===` blocks needed.
+MECHANICAL workstreams use a two-attempt Haiku cascade before the verification gate. The engine runs `dev-haiku` up to `max_attempts` times; on exhaustion it escalates to `dev` (Sonnet) with the full `AttemptLog` injected as `{attempt_log}`. Failure Resume formatting is engine-managed (ADR-029 §4) — no manual `=== HAIKU FAILURE RESUME ===` blocks needed.
 
 **Logging:** After every cascade run (pass or escalation), the engine emits a `retry_complete` telemetry event. Additionally, append an entry to `.claude/memory/escalation-metrics.json`:
 
@@ -240,6 +248,14 @@ Run automated verification. If any check fails, route back to Dev with failure d
 - [ ] Single src/ directory + tests/
 - [ ] No package.json, framework, or CI/CD changes
 
+After all Bash Gate checks pass, evaluate the gate:
+
+```bash
+teo-run.js evaluate-gate '{"gate_id":"dev-bash-gate-<SESSION_ID>","task_id":"bash-gate","session_id":"<SESSION_ID>","gate_type":"dev"}'
+```
+
+**FAIL behavior:** If exit code is non-zero, surface `GATE_BLOCKED: Bash Gate — <stderr output>` to user and do NOT advance.
+
 Pass → report complete. No leadership review required.
 
 ## ARCHITECTURAL Track (5-6 spawns)
@@ -247,11 +263,11 @@ Pass → report complete. No leadership review required.
 **When:** Classified ARCHITECTURAL at Step 0.
 
 ```
-Step 1: QA writes tests (can overlap with Dev start)
-Step 2: Dev implements against QA tests
+Step 1: QA writes tests (can overlap with build phase)
+Step 2: Build phase — passing QA tests
 Step 2.5: Dual-specialist review (if code blocks in deliverable)
 Step 2.8: VALIDATION GATE — verify-plugin-install.sh PASS (HARD GATE, blocks L6)
-Step 3: Staff Engineer internal review
+Step 3: L6 engineer sign-off
 Step 4: /deployment-engineer merge
 ```
 
@@ -261,7 +277,7 @@ Step 4: /deployment-engineer merge
 
 Run: `bash scripts/verify-plugin-install.sh`
 
-- **PASS** (`✔ PASS: teo plugin install verified`, all asset counts confirmed) → proceed to Step 3 (Staff Engineer review).
+- **PASS** (`✔ PASS: teo plugin install verified`, all asset counts confirmed) → proceed to the engineer sign-off step.
 - **FAIL** → route back to Dev with the exact failure. Do NOT advance to L6. A FAIL here usually means the change altered an asset count/path but a downstream artifact (the gate's own assertions, plugin.json, a manifest) was not updated in the same change — fix the whole blast radius, re-run the gate.
 
 NOTE: agents cannot run the real `claude plugin install` — this gate is executed by the user/proxy. Surface it as a required pre-L6 step; the workstream is GATE_BLOCKED until the user reports the script PASS.
@@ -279,6 +295,14 @@ Task:
     Order: misuse cases → boundary cases → golden path.
 ```
 
+Evaluate QA-spec gate:
+
+```bash
+teo-run.js evaluate-gate '{"gate_id":"qa-spec-step1-<SESSION_ID>","task_id":"step-1","session_id":"<SESSION_ID>","gate_type":"qa-spec"}'
+```
+
+**FAIL:** Surface `GATE_BLOCKED: Step 1 QA-spec — <stderr>` and do not advance.
+
 QA and Dev can run in parallel once QA has committed initial test stubs.
 
 ### Step 2: Dev Implementation
@@ -295,6 +319,14 @@ Task:
     Principles: Test-first, DRY, config-over-composition.
     Run Red → Green → Refactor cycle.
 ```
+
+Evaluate dev gate:
+
+```bash
+teo-run.js evaluate-gate '{"gate_id":"dev-step2-<SESSION_ID>","task_id":"step-2","session_id":"<SESSION_ID>","gate_type":"dev"}'
+```
+
+**FAIL:** Surface `GATE_BLOCKED: Step 2 Dev — <stderr>` and do not advance.
 
 When Dev completes, it writes a `handoff` message to `messages-dev-staff-engineer.json`.
 
@@ -325,6 +357,14 @@ Task:
     Review workstream {id} code.
     Check: standards compliance, architecture, security, performance.
 ```
+
+Evaluate staff-review gate:
+
+```bash
+teo-run.js evaluate-gate '{"gate_id":"staff-review-step3-<SESSION_ID>","task_id":"step-3","session_id":"<SESSION_ID>","gate_type":"staff-review"}'
+```
+
+**FAIL:** Surface `GATE_BLOCKED: Step 3 Staff Review — <stderr>` and do not advance.
 
 ### Step 4: Merge
 

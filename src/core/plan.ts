@@ -97,7 +97,9 @@ export const PlanSchema = z.object({
   project_id: z.string().min(1),
   created_at: z.string(),
   version: z.literal("1"),
-  directive: z.enum(["BUILD", "FIX", "REVIEW", "PLAN", "ARCHITECTURAL"]).optional(),
+  directive: z
+    .enum(["BUILD", "FIX", "REVIEW", "PLAN", "ARCHITECTURAL", "IMPROVE", "SHIP"])
+    .optional(),
   tasks: z.array(TEOTaskSchema).min(1),
 });
 

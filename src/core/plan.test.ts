@@ -341,10 +341,18 @@ describe("PlanSchema — directive field boundary (WS-P1-01)", () => {
 });
 
 // ---------------------------------------------------------------------------
-// WS-P1-01: PlanSchema.directive — GOLDEN PATH (all five enum members)
+// WS-P1-01: PlanSchema.directive — GOLDEN PATH (all seven enum members)
 // ---------------------------------------------------------------------------
 describe("PlanSchema — directive field golden path (WS-P1-01)", () => {
-  const validDirectives = ["BUILD", "FIX", "REVIEW", "PLAN", "ARCHITECTURAL"] as const;
+  const validDirectives = [
+    "BUILD",
+    "FIX",
+    "REVIEW",
+    "PLAN",
+    "ARCHITECTURAL",
+    "IMPROVE",
+    "SHIP",
+  ] as const;
 
   for (const directive of validDirectives) {
     it(`parses successfully with directive: '${directive}'`, () => {

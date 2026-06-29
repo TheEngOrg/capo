@@ -2,7 +2,7 @@
 name: staff-engineer
 description: "Technical leader and code reviewer. Spawn for architectural guidance, code review, or complex technical decisions."
 model: sonnet
-tools: [Task(software-engineer), Read, Glob, Grep, Write, Bash]
+tools: [Task(software-engineer), Read, Glob, Grep, Bash]
 memory: project
 maxTurns: 300
 ---

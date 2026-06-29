@@ -547,6 +547,350 @@ describe("boundary(WS-SHARED-FILES): studio-director.md shared-file links carry 
 // GOLDEN PATH — all 21 files exist and are clean
 // ---------------------------------------------------------------------------
 
+// =============================================================================
+// ADR-075 PR2 — Revoke Edit+Write from memory-only writer agents
+//
+// These tests are RED by design. Dev removes Edit and Write from the tools:
+// frontmatter of the 5 memory-only writer agents to make them green.
+//
+// Decision Q3=B: restriction is per-agent toolset COMPOSITION — the tools:
+// frontmatter line is the authoritative capability gate, not path allowlists.
+//
+// The 5 agents under test and their required post-change tools: lines:
+//   staff-engineer:      [Task(software-engineer), Read, Glob, Grep, Bash]
+//   engineering-manager: [Task(qa, software-engineer, staff-engineer), Read, Glob, Grep, Bash]
+//   product-manager:     [Task(qa, design), Read, Glob, Grep]
+//   acceptance-engineer: [Bash, Read, Glob, Grep]
+//   studio-director:     [Read, Glob, Grep, Task, Bash]
+//
+// Ordering: misuse → boundary → golden path (ADR-064 critical-path policy)
+// =============================================================================
+
+/** Extract the tools: value from a YAML frontmatter block as a raw string. */
+function extractToolsLine(content: string): string {
+  const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
+  if (!frontmatterMatch) return "";
+  const frontmatter = frontmatterMatch[1];
+  const toolsMatch = frontmatter.match(/^tools:\s*(.+)$/m);
+  return toolsMatch ? toolsMatch[1] : "";
+}
+
+/**
+ * Parse a tools: value like "[Bash, Read, Task(foo, bar), Glob]" into a list
+ * of bare tool tokens. Task(...) entries are returned as "Task" so callers
+ * can check presence/absence separately from the Task argument string.
+ */
+function parseToolTokens(toolsValue: string): string[] {
+  // Strip surrounding brackets if present
+  const inner = toolsValue.trim().replace(/^\[/, "").replace(/\]$/, "");
+  // Split on commas that are NOT inside parentheses
+  const tokens: string[] = [];
+  let depth = 0;
+  let current = "";
+  for (const ch of inner) {
+    if (ch === "(") {
+      depth++;
+      current += ch;
+    } else if (ch === ")") {
+      depth--;
+      current += ch;
+    } else if (ch === "," && depth === 0) {
+      tokens.push(current.trim());
+      current = "";
+    } else {
+      current += ch;
+    }
+  }
+  if (current.trim()) tokens.push(current.trim());
+  return tokens;
+}
+
+/** Returns true if a bare tool name (e.g. "Edit", "Write") appears in the token list. */
+function hasTool(tokens: string[], tool: string): boolean {
+  return tokens.some((t) => t === tool || t.startsWith(`${tool}(`));
+}
+
+// ---------------------------------------------------------------------------
+// MISUSE — Edit and Write must be ABSENT from the 5 agents after the change
+// ---------------------------------------------------------------------------
+
+describe("misuse(ADR-075-PR2): staff-engineer must NOT have Edit or Write in tools:", () => {
+  it("staff-engineer.md tools: does NOT contain Edit", () => {
+    // MISUSE: staff-engineer's only write operation is memory writes via
+    // teo-agent-toolset subcommands through Bash. Direct Edit access is revoked
+    // by ADR-075 Q3=B. If Edit appears, the capability gate is incomplete.
+    const content = readFile("src/plugin/agents/staff-engineer.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    expect(hasTool(tokens, "Edit")).toBe(false);
+  });
+
+  it("staff-engineer.md tools: does NOT contain Write", () => {
+    // MISUSE: Write was used for memory writes; those are now routed through
+    // teo-agent-toolset subcommands. Write must be absent after ADR-075 PR2.
+    const content = readFile("src/plugin/agents/staff-engineer.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    expect(hasTool(tokens, "Write")).toBe(false);
+  });
+});
+
+describe("misuse(ADR-075-PR2): engineering-manager must NOT have Edit or Write in tools:", () => {
+  it("engineering-manager.md tools: does NOT contain Edit", () => {
+    // MISUSE: engineering-manager had Edit in its tools:. ADR-075 PR2 revokes it;
+    // memory writes go through teo-agent-toolset via Bash.
+    const content = readFile("src/plugin/agents/engineering-manager.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    expect(hasTool(tokens, "Edit")).toBe(false);
+  });
+
+  it("engineering-manager.md tools: does NOT contain Write", () => {
+    const content = readFile("src/plugin/agents/engineering-manager.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    expect(hasTool(tokens, "Write")).toBe(false);
+  });
+});
+
+describe("misuse(ADR-075-PR2): product-manager must NOT have Edit or Write in tools:", () => {
+  it("product-manager.md tools: does NOT contain Edit", () => {
+    // MISUSE: product-manager had Edit. ADR-075 PR2 revokes it. Product-manager
+    // had no Bash and should NOT gain Bash — it simply loses both Edit and Write.
+    const content = readFile("src/plugin/agents/product-manager.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    expect(hasTool(tokens, "Edit")).toBe(false);
+  });
+
+  it("product-manager.md tools: does NOT contain Write", () => {
+    const content = readFile("src/plugin/agents/product-manager.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    expect(hasTool(tokens, "Write")).toBe(false);
+  });
+});
+
+describe("misuse(ADR-075-PR2): acceptance-engineer must NOT have Edit or Write in tools:", () => {
+  it("acceptance-engineer.md tools: does NOT contain Edit", () => {
+    // MISUSE: acceptance-engineer had Edit in its tools:. ADR-075 PR2 revokes it.
+    // Real-binary E2E review does not require direct file editing.
+    const content = readFile("src/plugin/agents/acceptance-engineer.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    expect(hasTool(tokens, "Edit")).toBe(false);
+  });
+
+  it("acceptance-engineer.md tools: does NOT contain Write", () => {
+    const content = readFile("src/plugin/agents/acceptance-engineer.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    expect(hasTool(tokens, "Write")).toBe(false);
+  });
+});
+
+describe("misuse(ADR-075-PR2): studio-director must NOT have Edit or Write in tools:", () => {
+  it("studio-director.md tools: does NOT contain Edit", () => {
+    // MISUSE: studio-director had Edit. ADR-075 PR2 revokes it. Orchestration
+    // of media pipelines does not require direct file editing.
+    const content = readFile("src/plugin/agents/studio-director.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    expect(hasTool(tokens, "Edit")).toBe(false);
+  });
+
+  it("studio-director.md tools: does NOT contain Write", () => {
+    const content = readFile("src/plugin/agents/studio-director.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    expect(hasTool(tokens, "Write")).toBe(false);
+  });
+});
+
+describe("misuse(ADR-075-PR2): product-manager must NOT gain Bash (it had none)", () => {
+  it("product-manager.md tools: does NOT contain Bash", () => {
+    // MISUSE: product-manager did not have Bash before ADR-075 PR2 and must not
+    // gain it — its constitution prohibits direct writes, and it has no memory
+    // write path that requires Bash. Adding Bash would silently expand its
+    // capability set beyond the intended post-change toolset.
+    const content = readFile("src/plugin/agents/product-manager.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    expect(hasTool(tokens, "Bash")).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// BOUNDARY — agents that retain Bash must keep it; read-only tools must survive
+// ---------------------------------------------------------------------------
+
+describe("boundary(ADR-075-PR2): Bash retained where required for teo-agent-toolset invocation", () => {
+  it("staff-engineer.md tools: retains Bash", () => {
+    // BOUNDARY: staff-engineer retains Bash to invoke teo-agent-toolset memory
+    // write subcommands. Dropping Bash would eliminate the only memory write path
+    // available after Edit and Write are revoked.
+    const content = readFile("src/plugin/agents/staff-engineer.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    expect(hasTool(tokens, "Bash")).toBe(true);
+  });
+
+  it("engineering-manager.md tools: retains Bash", () => {
+    const content = readFile("src/plugin/agents/engineering-manager.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    expect(hasTool(tokens, "Bash")).toBe(true);
+  });
+
+  it("acceptance-engineer.md tools: retains Bash", () => {
+    // BOUNDARY: acceptance-engineer needs Bash to run real-binary acceptance
+    // tests. It already had Bash and must keep it.
+    const content = readFile("src/plugin/agents/acceptance-engineer.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    expect(hasTool(tokens, "Bash")).toBe(true);
+  });
+
+  it("studio-director.md tools: retains Bash", () => {
+    // BOUNDARY: studio-director needs Bash for media pipeline invocations
+    // (ffmpeg, etc.). It already had Bash and must keep it.
+    const content = readFile("src/plugin/agents/studio-director.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    expect(hasTool(tokens, "Bash")).toBe(true);
+  });
+});
+
+describe("boundary(ADR-075-PR2): read-only tools survive the revocation (Read, Glob, Grep)", () => {
+  const READ_TOOLS = ["Read", "Glob", "Grep"] as const;
+
+  for (const agent of [
+    "staff-engineer",
+    "engineering-manager",
+    "product-manager",
+    "acceptance-engineer",
+    "studio-director",
+  ]) {
+    for (const tool of READ_TOOLS) {
+      it(`${agent}.md tools: retains ${tool}`, () => {
+        // BOUNDARY: revoking Edit+Write must not accidentally strip read-only tools.
+        // All 5 agents had Read, Glob, Grep before the change and must keep them.
+        const content = readFile(`src/plugin/agents/${agent}.md`);
+        const tokens = parseToolTokens(extractToolsLine(content));
+        expect(hasTool(tokens, tool)).toBe(true);
+      });
+    }
+  }
+});
+
+describe("boundary(ADR-075-PR2): Task variants are preserved on agents that had them", () => {
+  it("staff-engineer.md tools: retains Task (for software-engineer)", () => {
+    // BOUNDARY: staff-engineer orchestrates software-engineer via Task. The Task
+    // capability must survive the Edit+Write strip.
+    const content = readFile("src/plugin/agents/staff-engineer.md");
+    const toolsLine = extractToolsLine(content);
+    expect(toolsLine).toContain("Task(software-engineer)");
+  });
+
+  it("engineering-manager.md tools: retains Task (for qa, software-engineer, staff-engineer)", () => {
+    const content = readFile("src/plugin/agents/engineering-manager.md");
+    const toolsLine = extractToolsLine(content);
+    expect(toolsLine).toContain("Task(");
+    // All three sub-agents must still be present in the Task argument list
+    expect(toolsLine).toContain("qa");
+    expect(toolsLine).toContain("software-engineer");
+    expect(toolsLine).toContain("staff-engineer");
+  });
+
+  it("product-manager.md tools: retains Task (for qa, design)", () => {
+    const content = readFile("src/plugin/agents/product-manager.md");
+    const toolsLine = extractToolsLine(content);
+    expect(toolsLine).toContain("Task(");
+    expect(toolsLine).toContain("qa");
+    expect(toolsLine).toContain("design");
+  });
+
+  it("studio-director.md tools: retains Task", () => {
+    const content = readFile("src/plugin/agents/studio-director.md");
+    const toolsLine = extractToolsLine(content);
+    // studio-director had a bare Task; it must still be present
+    expect(toolsLine).toContain("Task");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GOLDEN PATH — full post-change toolset composition is exactly right
+// ---------------------------------------------------------------------------
+
+describe("golden(ADR-075-PR2): post-change toolsets are exactly as specified", () => {
+  it("staff-engineer.md tools: exactly [Task(software-engineer), Read, Glob, Grep, Bash]", () => {
+    // GOLDEN: the tools: line must not contain ANY tool outside the allowed set.
+    // Extra tools (e.g. a stray Write left behind) must fail this test.
+    const content = readFile("src/plugin/agents/staff-engineer.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    // Exactly 5 tokens: Task(software-engineer), Read, Glob, Grep, Bash
+    expect(tokens).toHaveLength(5);
+    expect(hasTool(tokens, "Bash")).toBe(true);
+    expect(hasTool(tokens, "Read")).toBe(true);
+    expect(hasTool(tokens, "Glob")).toBe(true);
+    expect(hasTool(tokens, "Grep")).toBe(true);
+    expect(tokens.some((t) => t.startsWith("Task("))).toBe(true);
+    expect(hasTool(tokens, "Edit")).toBe(false);
+    expect(hasTool(tokens, "Write")).toBe(false);
+  });
+
+  it("engineering-manager.md tools: exactly [Task(qa, software-engineer, staff-engineer), Read, Glob, Grep, Bash]", () => {
+    const content = readFile("src/plugin/agents/engineering-manager.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    // Exactly 5 tokens
+    expect(tokens).toHaveLength(5);
+    expect(hasTool(tokens, "Bash")).toBe(true);
+    expect(hasTool(tokens, "Read")).toBe(true);
+    expect(hasTool(tokens, "Glob")).toBe(true);
+    expect(hasTool(tokens, "Grep")).toBe(true);
+    expect(tokens.some((t) => t.startsWith("Task("))).toBe(true);
+    expect(hasTool(tokens, "Edit")).toBe(false);
+    expect(hasTool(tokens, "Write")).toBe(false);
+  });
+
+  it("product-manager.md tools: exactly [Task(qa, design), Read, Glob, Grep]", () => {
+    const content = readFile("src/plugin/agents/product-manager.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    // Exactly 4 tokens — NO Bash
+    expect(tokens).toHaveLength(4);
+    expect(hasTool(tokens, "Read")).toBe(true);
+    expect(hasTool(tokens, "Glob")).toBe(true);
+    expect(hasTool(tokens, "Grep")).toBe(true);
+    expect(tokens.some((t) => t.startsWith("Task("))).toBe(true);
+    expect(hasTool(tokens, "Edit")).toBe(false);
+    expect(hasTool(tokens, "Write")).toBe(false);
+    expect(hasTool(tokens, "Bash")).toBe(false);
+  });
+
+  it("acceptance-engineer.md tools: exactly [Bash, Read, Glob, Grep]", () => {
+    const content = readFile("src/plugin/agents/acceptance-engineer.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    // Exactly 4 tokens
+    expect(tokens).toHaveLength(4);
+    expect(hasTool(tokens, "Bash")).toBe(true);
+    expect(hasTool(tokens, "Read")).toBe(true);
+    expect(hasTool(tokens, "Glob")).toBe(true);
+    expect(hasTool(tokens, "Grep")).toBe(true);
+    expect(hasTool(tokens, "Edit")).toBe(false);
+    expect(hasTool(tokens, "Write")).toBe(false);
+  });
+
+  it("studio-director.md tools: exactly [Read, Glob, Grep, Task, Bash]", () => {
+    const content = readFile("src/plugin/agents/studio-director.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    // Exactly 5 tokens
+    expect(tokens).toHaveLength(5);
+    expect(hasTool(tokens, "Read")).toBe(true);
+    expect(hasTool(tokens, "Glob")).toBe(true);
+    expect(hasTool(tokens, "Grep")).toBe(true);
+    expect(hasTool(tokens, "Task")).toBe(true);
+    expect(hasTool(tokens, "Bash")).toBe(true);
+    expect(hasTool(tokens, "Edit")).toBe(false);
+    expect(hasTool(tokens, "Write")).toBe(false);
+  });
+});
+
+describe("golden(ADR-075-PR2): agent count unchanged — no agents added or removed", () => {
+  it("agents/ directory still contains exactly 23 shipped agent files after PR2", () => {
+    // GOLDEN: PR2 only modifies tools: frontmatter in 5 existing agents.
+    // The total agent count must remain 23. A change in count indicates an
+    // accidental deletion, rename, or addition outside the PR2 scope.
+    const agentsDir = root("src", "plugin", "agents");
+    const files = fs.readdirSync(agentsDir).filter((f) => f.endsWith(".md"));
+    expect(files.length).toBe(23);
+  });
+});
+
 describe("golden(WS-SHARED-FILES): all 23 shipped agent files exist (no accidental deletion)", () => {
   // GOLDEN: the strip operation must not delete any agent files. A count check
   // plus per-file existence check catches a dev who accidentally deleted or

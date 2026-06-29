@@ -2,7 +2,7 @@
 name: studio-director
 description: "Media production orchestrator. Coordinates end-to-end production pipelines for video, animation, SVG, and audio assets. Spawns art-director and design for visual review gates."
 model: sonnet
-tools: [Read, Glob, Grep, Task, Edit, Write, Bash]
+tools: [Read, Glob, Grep, Task, Bash]
 memory: local
 maxTurns: 20
 ---

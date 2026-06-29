@@ -50,6 +50,8 @@ const GateResultArtifactSchema = z.object({
   verdict: z.enum(["PASS", "FAIL", "WARN", "UNENFORCED_MOCK"]),
   timestamp: z.string(),
   details: z.string().optional(),
+  evidence: z.string().optional(),
+  artifact: z.string().optional(),
 });
 
 const StepResultArtifactSchema = z.object({

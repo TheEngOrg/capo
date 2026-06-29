@@ -1,8 +1,8 @@
 // =============================================================================
 // artifacts.test.ts — WS-00: artifact schema layer + repairJson() helper
 //
-// STATUS: PASSING — src/core/artifacts.ts implemented (WS-00). These tests
-// specify the contracts that dev must implement.
+// STATUS: PASSING — src/core/artifacts.ts implemented (WS-00) + evidence/artifact fields added.
+
 //
 // Ordering: misuse → boundary → golden path (ADR-064 adversarial-first policy)
 //
@@ -526,6 +526,138 @@ describe("validateArtifact() — AC_ARTIFACT (WS-06)", () => {
       type: "AC_ARTIFACT",
       payload: { workstream: "ws-06", acs: [] },
     });
+    expect(result.valid).toBe(true);
+  });
+});
+
+// === EVIDENCE + ARTIFACT FIELDS (new) ===
+// Tests for the two new optional fields added to GateResultArtifactSchema:
+//   evidence: z.string().optional()
+//   artifact: z.string().optional()
+//
+// Ordering: misuse → boundary → golden path (ADR-064)
+// These tests are ADDITIVE — do not modify any existing test above this line.
+
+// =============================================================================
+// MISUSE: evidence and artifact type violations
+// =============================================================================
+
+describe("validateArtifact() — misuse: evidence + artifact fields", () => {
+  // M-EV1: evidence is a number (not a string) → { valid: false }
+  it("M-EV1. GATE_RESULT_ARTIFACT with evidence as number → { valid: false }", () => {
+    const payload = {
+      ...VALID_GATE_RESULT,
+      evidence: 42,
+    };
+    const result = validateArtifact({ type: "GATE_RESULT_ARTIFACT", payload });
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toBeDefined();
+    expect(result.errors!.length).toBeGreaterThan(0);
+  });
+
+  // M-EV2: artifact is a number (not a string) → { valid: false }
+  it("M-EV2. GATE_RESULT_ARTIFACT with artifact as number → { valid: false }", () => {
+    const payload = {
+      ...VALID_GATE_RESULT,
+      artifact: 99,
+    };
+    const result = validateArtifact({ type: "GATE_RESULT_ARTIFACT", payload });
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toBeDefined();
+    expect(result.errors!.length).toBeGreaterThan(0);
+  });
+});
+
+// =============================================================================
+// BOUNDARY: evidence + artifact optional field edge cases
+// =============================================================================
+
+describe("validateArtifact() — boundary: evidence + artifact fields", () => {
+  // B-EV1: evidence present as string → { valid: true }
+  it("B-EV1. GATE_RESULT_ARTIFACT with evidence string → { valid: true }", () => {
+    const payload = {
+      ...VALID_GATE_RESULT,
+      evidence: "coverage check failed, 3 files uncovered",
+    };
+    const result = validateArtifact({ type: "GATE_RESULT_ARTIFACT", payload });
+
+    expect(result.valid).toBe(true);
+  });
+
+  // B-EV2: artifact present as string → { valid: true }
+  it("B-EV2. GATE_RESULT_ARTIFACT with artifact string → { valid: true }", () => {
+    const payload = {
+      ...VALID_GATE_RESULT,
+      artifact: "/tmp/gate-run-2026-06-29.json",
+    };
+    const result = validateArtifact({ type: "GATE_RESULT_ARTIFACT", payload });
+
+    expect(result.valid).toBe(true);
+  });
+
+  // B-EV3: both evidence and artifact present → { valid: true }
+  it("B-EV3. GATE_RESULT_ARTIFACT with both evidence and artifact → { valid: true }", () => {
+    const payload = {
+      ...VALID_GATE_RESULT,
+      evidence: "coverage check failed, 3 files uncovered",
+      artifact: "/tmp/gate-run-2026-06-29.json",
+    };
+    const result = validateArtifact({ type: "GATE_RESULT_ARTIFACT", payload });
+
+    expect(result.valid).toBe(true);
+  });
+
+  // B-EV4: strict: true with evidence + artifact present (no unknown fields) → { valid: true }
+  // evidence and artifact are now schema-registered fields — strict must accept them.
+  it("B-EV4. strict: true + GATE_RESULT_ARTIFACT with evidence + artifact (no unknowns) → { valid: true }", () => {
+    const payload = {
+      ...VALID_GATE_RESULT,
+      evidence: "coverage check failed, 3 files uncovered",
+      artifact: "/tmp/gate-run-2026-06-29.json",
+    };
+    const result = validateArtifact({ type: "GATE_RESULT_ARTIFACT", payload, strict: true });
+
+    expect(result.valid).toBe(true);
+  });
+
+  // B-EV5: strict: true with evidence, artifact, AND an unknown extra_field → { valid: false }
+  // Strict mode must still reject true unknowns even when the two new fields are present.
+  it("B-EV5. strict: true + GATE_RESULT_ARTIFACT with evidence + artifact + extra_field → { valid: false }", () => {
+    const payload = {
+      ...VALID_GATE_RESULT,
+      evidence: "coverage check failed, 3 files uncovered",
+      artifact: "/tmp/gate-run-2026-06-29.json",
+      extra_field: "should not be here",
+    };
+    const result = validateArtifact({ type: "GATE_RESULT_ARTIFACT", payload, strict: true });
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toBeDefined();
+  });
+});
+
+// =============================================================================
+// GOLDEN PATH: evidence + artifact round-trip
+// =============================================================================
+
+describe("repairJson() + validateArtifact() — golden path: evidence + artifact", () => {
+  // G-EV1: raw JSON string with evidence + artifact → repairJson → validateArtifact → { valid: true }
+  it("G-EV1. raw JSON with evidence + artifact → repair → validateArtifact → { valid: true }", () => {
+    const rawJson = JSON.stringify({
+      task_id: "task-1",
+      gate_name: "coverage",
+      verdict: "PASS",
+      timestamp: "2026-06-20T00:00:00.000Z",
+      evidence: "all 142 lines covered",
+      artifact: "/tmp/coverage-report-2026-06-29.json",
+    });
+
+    const repairedStr = repairJson(rawJson);
+    const payload = JSON.parse(repairedStr as string) as unknown;
+    const result = validateArtifact({ type: "GATE_RESULT_ARTIFACT", payload });
+
     expect(result.valid).toBe(true);
   });
 });

@@ -16,3 +16,18 @@ await esbuild.build({
   minify: false,
   sourcemap: "external",
 });
+
+// Second build: teo-agent-toolset
+await esbuild.build({
+  entryPoints: ["src/cli/teo-agent-toolset/entry.ts"],
+  bundle: true,
+  platform: "node",
+  target: "node22",
+  format: "esm",
+  outfile: "bin/teo-agent-toolset.js",
+  external: ["node:*"],
+  define: { TEO_VERSION: JSON.stringify(pkg.version) },
+  banner: { js: "#!/usr/bin/env node" },
+  minify: false,
+  sourcemap: "external",
+});

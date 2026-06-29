@@ -1,7 +1,10 @@
 // WS-SPAWN-GUARD — QA spec (post-impl, all green)
-// Status: GREEN — bug fixed: line 165 now reads .agent_type (top level).
-//   makePayload() updated to match real PreToolUse payload shape (top-level agent_type).
-//   STDIN JSON SHAPE comment in script header updated (session_info removed).
+// Status: GREEN — all bugs fixed:
+//   (1) Bug 1: namespace prefix stripping for CALLER (e.g. "capo:capo" → "capo").
+//   (2) Bug 2: target read from .tool_input.subagent_type (not .tool_input.agent) + namespace stripping.
+//   (3) Default mode flipped from "observe" to "enforce".
+//   makePayload() uses legacy .tool_input.agent field (tests pre-Bug2 behavior paths).
+//   makePayloadReal() uses .tool_input.subagent_type (tests real Claude Code payload shape).
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { spawnSync } from "node:child_process";
@@ -21,7 +24,7 @@ import * as path from "node:path";
 //   D1 — Root/main session: hook must NEVER block spawns from the main session
 //        (no agent_type in stdin) unless it can reliably detect TEO context.
 //        When in doubt about root-session identity: fail-open (allow + log).
-//   D2 — Log-only default: TEO_SPAWN_GUARD_MODE defaults to "observe".
+//   D2 — Enforce default: TEO_SPAWN_GUARD_MODE defaults to "enforce".
 //        In observe mode: log every spawn decision, never exit 2.
 //   D3 — Allowlist at TEO_SPAWN_ALLOWLIST path: JSON with allowlist object.
 //
@@ -34,7 +37,7 @@ import * as path from "node:path";
 //
 // ENVIRONMENT VARS THE SCRIPT MUST RESPECT
 //   TEO_SPAWN_ALLOWLIST       Path to spawn-allowlist.json
-//   TEO_SPAWN_GUARD_MODE      "observe" (default) or "enforce"
+//   TEO_SPAWN_GUARD_MODE      "enforce" (default) or "observe"
 //   TEO_HOOK_LOG_DIR_OVERRIDE Override directory for spawn-log-YYYY-MM-DD.json
 //   TEO_PROJECT_ROOT          Override project root (for git-free test environments)
 //
@@ -110,8 +113,14 @@ afterEach(() => {
  * Build a PreToolUse payload as the hook receives it from Claude Code.
  * Uses the correct real payload shape: agent_type is a TOP-LEVEL field.
  *
+ * NOTE: uses .tool_input.agent (legacy). New tests use makePayloadReal() for real field name.
+ * Existing tests that rely on makePayload() continue to test the legacy field fallback path
+ * (.tool_input.agent) which is preserved by Bug 2 fix for backward compatibility.
+ * These tests exercise the allowlist logic via the legacy field; makePayloadReal() tests
+ * the real Claude Code payload shape (.tool_input.subagent_type).
+ *
  * @param toolName   "Agent" or "Task"
- * @param target     Spawned agent name (tool_input.agent)
+ * @param target     Spawned agent name (tool_input.agent — legacy/wrong field)
  * @param callerType Top-level .agent_type value; pass null for root/main session (field absent).
  */
 function makePayload(
@@ -122,6 +131,35 @@ function makePayload(
   const base: Record<string, unknown> = {
     tool_name: toolName,
     tool_input: { agent: target },
+    hook_event_name: "PreToolUse",
+  };
+  if (callerType !== null) {
+    base["agent_type"] = callerType;
+  }
+  return JSON.stringify(base);
+}
+
+/**
+ * Build a PreToolUse payload matching the REAL Claude Code payload shape
+ * observed via empirical hook capture (2026-06-28):
+ *   - tool_input.subagent_type for the spawned agent (NOT tool_input.agent)
+ *   - agent_type at top level may be namespace-prefixed (e.g. "capo:capo")
+ *
+ * Use this helper for Bug 1 + Bug 2 regression tests.
+ *
+ * @param toolName   "Agent" or "Task"
+ * @param target     Spawned agent name — goes into tool_input.subagent_type
+ * @param callerType Top-level .agent_type value (may be bare or namespace-prefixed);
+ *                   pass null for root/main session (field absent).
+ */
+function makePayloadReal(
+  toolName: "Agent" | "Task",
+  target: string,
+  callerType: string | null
+): string {
+  const base: Record<string, unknown> = {
+    tool_name: toolName,
+    tool_input: { subagent_type: target },
     hook_event_name: "PreToolUse",
   };
   if (callerType !== null) {
@@ -514,9 +552,9 @@ describe("teo-spawn-guard.sh — boundary: script file exists and is executable"
   });
 });
 
-describe("teo-spawn-guard.sh — boundary: default mode is observe (log-only)", () => {
-  it("exits 0 by default (observe mode) even for a disallowed spawn, when TEO_SPAWN_GUARD_MODE is unset", () => {
-    // Run without TEO_SPAWN_GUARD_MODE env var — must default to observe
+describe("teo-spawn-guard.sh — boundary: default mode is enforce", () => {
+  it("exits 2 by default (enforce mode) for a disallowed spawn, when TEO_SPAWN_GUARD_MODE is unset", () => {
+    // Run without TEO_SPAWN_GUARD_MODE env var — must default to enforce
     const result = spawnSync("bash", [SCRIPT], {
       input: makePayload("Agent", "qa", "staff-engineer"), // disallowed: staff-engineer can only spawn software-engineer
       encoding: "utf8",
@@ -530,8 +568,8 @@ describe("teo-spawn-guard.sh — boundary: default mode is observe (log-only)", 
     });
     expect(
       result.status,
-      "hook with no TEO_SPAWN_GUARD_MODE set must default to observe and exit 0"
-    ).toBe(0);
+      "hook with no TEO_SPAWN_GUARD_MODE set must default to enforce and exit 2 for disallowed spawn"
+    ).toBe(2);
   });
 });
 
@@ -1061,5 +1099,318 @@ describe("teo-spawn-guard.sh — golden: Task (legacy tool_name) handled same as
     if (log !== null) {
       expect(log.length, "Task-variant spawn must produce at least 1 log entry").toBeGreaterThan(0);
     }
+  });
+});
+
+// =============================================================================
+// NAMESPACE STRIPPING — Bug 1 + Bug 2 regression tests
+//
+// Discovered via empirical hook payload capture 2026-06-28.
+//
+// REAL payload shape:
+//   {
+//     "session_id": "...",
+//     "agent_id": "...",
+//     "agent_type": "capo:capo",          // namespace-prefixed caller (Bug 1)
+//     "hook_event_name": "PreToolUse",
+//     "tool_name": "Agent",
+//     "tool_input": {
+//       "subagent_type": "capo:qa"         // real target field + may be prefixed (Bug 2)
+//     }
+//   }
+//
+// Bug 1: Script reads CALLER=".agent_type" → gets "capo:capo" verbatim.
+//   Allowlist lookup uses "capo:capo" but key is "capo" → CALLER_IN_ALLOWLIST=false
+//   → every subagent spawn blocked in enforce mode / logged as would-block in observe.
+//   Fix: strip namespace prefix before allowlist lookup ("capo:capo" → "capo").
+//
+// Bug 2: Script reads TARGET=".tool_input.agent" but real field is ".tool_input.subagent_type"
+//   → TARGET is always empty string for real payloads. Empty TARGET falls through to
+//   root-session path or fails target-permitted check silently.
+//   Fix: read .tool_input.subagent_type; also strip namespace prefix from TARGET.
+//
+// These tests are written BEFORE the fix and MUST FAIL until both bugs are resolved.
+// =============================================================================
+
+describe("namespace stripping — Bug 1 + Bug 2 fixes", () => {
+  // ---------------------------------------------------------------------------
+  // Bug 1 — Caller namespace prefix stripping
+  // ---------------------------------------------------------------------------
+
+  it('Bug1-NS-01: namespaced caller "capo:capo" with bare allowlist key "capo" → ALLOWED in observe mode', () => {
+    // Real payload: agent_type="capo:capo", target via old field (stripped caller must match "capo")
+    // After fix: strip "capo:" prefix → CALLER="capo" → has wildcard ["*"] → allowed.
+    // Before fix: CALLER="capo:capo" → not in allowlist → would-block (observe) / blocked (enforce)
+    const payload = makePayloadReal("Agent", "qa", "capo:capo");
+    const { exitCode } = runHook(payload, { mode: "observe" });
+    expect(
+      exitCode,
+      'namespaced caller "capo:capo" must be stripped to "capo" and allowed (observe mode, exit 0)'
+    ).toBe(0);
+  });
+
+  it('Bug1-NS-02: namespaced caller "capo:capo" logs verdict "allowed" (not "would-block") in observe mode', () => {
+    const payload = makePayloadReal("Agent", "qa", "capo:capo");
+    runHook(payload, { mode: "observe" });
+
+    const log = readSpawnLog();
+    expect(log, "spawn-log must be created").not.toBeNull();
+
+    if (log !== null && log.length > 0) {
+      const entry = log[log.length - 1];
+      const verdict = String(entry["verdict"] ?? "");
+      expect(
+        verdict === "allowed" || verdict.includes("allow"),
+        `verdict must be "allowed" for capo:capo caller (after namespace strip), got: "${verdict}"`
+      ).toBe(true);
+    }
+  });
+
+  it('Bug1-NS-03: namespaced caller "capo:capo" → ALLOWED in enforce mode (exit 0, not exit 2)', () => {
+    // Before fix: "capo:capo" not found in allowlist → blocked (exit 2) in enforce mode.
+    // After fix: stripped to "capo" → wildcard → allowed (exit 0).
+    const payload = makePayloadReal("Agent", "qa", "capo:capo");
+    const { exitCode } = runHook(payload, { mode: "enforce" });
+    expect(
+      exitCode,
+      'namespaced caller "capo:capo" must be stripped to "capo" and allowed in enforce mode (exit 0)'
+    ).toBe(0);
+  });
+
+  it('Bug1-NS-04: namespaced caller "capo:engineering-manager" with bare allowlist key "engineering-manager" and permitted target "qa" → ALLOWED in observe mode', () => {
+    // engineering-manager is in allowlist and can spawn qa.
+    // Before fix: "capo:engineering-manager" not found → would-block.
+    // After fix: stripped → "engineering-manager" → permitted for qa → allowed.
+    const payload = makePayloadReal("Agent", "qa", "capo:engineering-manager");
+    const { exitCode } = runHook(payload, { mode: "observe" });
+    expect(
+      exitCode,
+      'namespaced caller "capo:engineering-manager" → qa must be allowed after stripping (observe, exit 0)'
+    ).toBe(0);
+  });
+
+  it('Bug1-NS-05: namespaced caller "capo:engineering-manager" with permitted target "qa" → ALLOWED in enforce mode', () => {
+    const payload = makePayloadReal("Agent", "qa", "capo:engineering-manager");
+    const { exitCode } = runHook(payload, { mode: "enforce" });
+    expect(
+      exitCode,
+      'namespaced caller "capo:engineering-manager" → qa must be allowed in enforce mode (exit 0)'
+    ).toBe(0);
+  });
+
+  it('Bug1-NS-06: namespaced caller "capo:staff-engineer" with non-permitted target "qa" → would-block in observe mode (not blocked, but not silently allowed)', () => {
+    // staff-engineer can only spawn software-engineer, not qa.
+    // After fix: stripped to "staff-engineer" → found in allowlist → target check → qa not permitted
+    //   → observe mode: exit 0 + would-block log entry.
+    // Before fix: "capo:staff-engineer" not in allowlist → would-block for wrong reason (caller not found).
+    // Either way exits 0 in observe, but the log verdict must be "would-block".
+    const payload = makePayloadReal("Agent", "qa", "capo:staff-engineer");
+    const { exitCode } = runHook(payload, { mode: "observe" });
+    expect(
+      exitCode,
+      'namespaced caller "capo:staff-engineer" → qa must exit 0 in observe mode (would-block, not hard block)'
+    ).toBe(0);
+
+    const log = readSpawnLog();
+    if (log !== null && log.length > 0) {
+      const entry = log[log.length - 1];
+      const verdict = String(entry["verdict"] ?? "");
+      expect(
+        verdict === "would-block" || verdict.includes("would") || verdict.includes("block"),
+        `verdict must be "would-block" for disallowed target, got: "${verdict}"`
+      ).toBe(true);
+    }
+  });
+
+  it('Bug1-NS-07: namespaced caller "capo:staff-engineer" with non-permitted target "qa" → BLOCKED in enforce mode (exit 2)', () => {
+    // After fix: stripped to "staff-engineer" → found → qa not in permitted list → exit 2.
+    // Before fix: "capo:staff-engineer" not in allowlist → exit 2 (for wrong reason — caller not found).
+    // Both produce exit 2 but for different reasons; the log must reflect the correct reason post-fix.
+    const payload = makePayloadReal("Agent", "qa", "capo:staff-engineer");
+    const { exitCode } = runHook(payload, { mode: "enforce" });
+    expect(
+      exitCode,
+      'namespaced caller "capo:staff-engineer" → qa must be blocked in enforce mode (exit 2)'
+    ).toBe(2);
+  });
+
+  it("Bug1-NS-08: log entry caller field is the STRIPPED name, not the raw namespaced value", () => {
+    // After fix: log entry caller = "capo", not "capo:capo".
+    // This test specifically validates the stripping behavior is applied before logging.
+    const payload = makePayloadReal("Agent", "qa", "capo:capo");
+    runHook(payload, { mode: "observe" });
+
+    const log = readSpawnLog();
+    if (log !== null && log.length > 0) {
+      const entry = log[log.length - 1];
+      const caller = String(entry["caller"] ?? "");
+      expect(caller, 'log entry caller must be stripped name "capo", not raw "capo:capo"').toBe(
+        "capo"
+      );
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // Bug 2 — Target field name: tool_input.subagent_type (not tool_input.agent)
+  // ---------------------------------------------------------------------------
+
+  it("Bug2-TF-01: target read from tool_input.subagent_type (bare name) with allowed caller → ALLOWED in observe mode", () => {
+    // Real payload has tool_input.subagent_type, NOT tool_input.agent.
+    // Before fix: .tool_input.agent is empty → TARGET="" → falls through (empty target check).
+    // After fix: .tool_input.subagent_type read correctly → TARGET="qa" → capo wildcard → allowed.
+    // Using bare caller "capo" (not namespaced) to isolate Bug 2 from Bug 1.
+    const payload = makePayloadReal("Agent", "qa", "capo");
+    const { exitCode } = runHook(payload, { mode: "observe" });
+    expect(
+      exitCode,
+      "target from tool_input.subagent_type must be read and capo → qa must be allowed (observe, exit 0)"
+    ).toBe(0);
+  });
+
+  it("Bug2-TF-02: target read from tool_input.subagent_type with allowed caller → logs correct target name", () => {
+    // After fix: log entry target = "qa" (read from subagent_type).
+    // Before fix: target = "" (tool_input.agent is empty).
+    const payload = makePayloadReal("Agent", "qa", "capo");
+    runHook(payload, { mode: "observe" });
+
+    const log = readSpawnLog();
+    expect(log, "spawn-log must be created").not.toBeNull();
+
+    if (log !== null && log.length > 0) {
+      const entry = log[log.length - 1];
+      const target = String(entry["target"] ?? "");
+      expect(
+        target,
+        'log entry target must be "qa" (read from tool_input.subagent_type, not tool_input.agent)'
+      ).toBe("qa");
+    }
+  });
+
+  it("Bug2-TF-03: target read from tool_input.subagent_type with allowed caller → ALLOWED in enforce mode", () => {
+    const payload = makePayloadReal("Agent", "qa", "capo");
+    const { exitCode } = runHook(payload, { mode: "enforce" });
+    expect(
+      exitCode,
+      "capo → qa via subagent_type field must be allowed in enforce mode (exit 0)"
+    ).toBe(0);
+  });
+
+  it("Bug2-TF-04: namespaced target tool_input.subagent_type = 'capo:qa' with bare allowed caller → TARGET stripped to 'qa' → ALLOWED", () => {
+    // Real payload may also namespace-prefix the target: subagent_type = "capo:qa".
+    // After fix: read subagent_type → get "capo:qa" → strip → "qa" → capo wildcard → allowed.
+    // Before fix: reads tool_input.agent (empty) → TARGET="" → different code path entirely.
+    const payload = makePayloadReal("Agent", "capo:qa", "capo");
+    const { exitCode } = runHook(payload, { mode: "observe" });
+    expect(
+      exitCode,
+      'namespaced target "capo:qa" must be stripped to "qa" and allowed by capo wildcard (observe, exit 0)'
+    ).toBe(0);
+  });
+
+  it("Bug2-TF-05: namespaced target 'capo:qa' with bare allowed caller → logs stripped target name 'qa'", () => {
+    const payload = makePayloadReal("Agent", "capo:qa", "capo");
+    runHook(payload, { mode: "observe" });
+
+    const log = readSpawnLog();
+    if (log !== null && log.length > 0) {
+      const entry = log[log.length - 1];
+      const target = String(entry["target"] ?? "");
+      expect(target, 'log entry target must be stripped name "qa", not raw "capo:qa"').toBe("qa");
+    }
+  });
+
+  it("Bug2-TF-06: namespaced target 'capo:qa' with bare allowed caller → ALLOWED in enforce mode (exit 0)", () => {
+    const payload = makePayloadReal("Agent", "capo:qa", "capo");
+    const { exitCode } = runHook(payload, { mode: "enforce" });
+    expect(
+      exitCode,
+      'namespaced target "capo:qa" must be stripped and allowed by capo wildcard in enforce mode (exit 0)'
+    ).toBe(0);
+  });
+
+  it("Bug2-TF-07: namespaced target 'capo:software-engineer' with caller 'staff-engineer' (permitted) → ALLOWED in enforce mode", () => {
+    // staff-engineer is allowed to spawn software-engineer.
+    // After fix: subagent_type="capo:software-engineer" → stripped → "software-engineer" → permitted → exit 0.
+    const payload = makePayloadReal("Agent", "capo:software-engineer", "staff-engineer");
+    const { exitCode } = runHook(payload, { mode: "enforce" });
+    expect(
+      exitCode,
+      'namespaced target "capo:software-engineer" stripped to "software-engineer" must be allowed by staff-engineer (enforce, exit 0)'
+    ).toBe(0);
+  });
+
+  it("Bug2-TF-08: namespaced target 'capo:qa' with caller 'staff-engineer' (NOT permitted for qa) → BLOCKED in enforce mode (exit 2)", () => {
+    // staff-engineer can only spawn software-engineer, not qa.
+    // After fix: subagent_type="capo:qa" → stripped → "qa" → not in staff-engineer list → exit 2.
+    const payload = makePayloadReal("Agent", "capo:qa", "staff-engineer");
+    const { exitCode } = runHook(payload, { mode: "enforce" });
+    expect(
+      exitCode,
+      'namespaced target "capo:qa" stripped to "qa" must be blocked for caller "staff-engineer" (enforce, exit 2)'
+    ).toBe(2);
+  });
+
+  // ---------------------------------------------------------------------------
+  // Combined Bug 1 + Bug 2 — both namespace stripping required simultaneously
+  // ---------------------------------------------------------------------------
+
+  it("Bug1+2-COMBO-01: agent_type='capo:engineering-manager' + subagent_type='capo:qa' → both stripped → ALLOWED in observe mode", () => {
+    // Exact shape from real empirical payload capture (both fields namespace-prefixed).
+    // After fix: CALLER="engineering-manager", TARGET="qa" → em is in allowlist, qa is permitted → allowed.
+    // Before fix: Bug 1 causes CALLER="capo:engineering-manager" (not in allowlist) → would-block.
+    //   Bug 2 causes TARGET="" (tool_input.agent missing) → different broken path.
+    const payload = makePayloadReal("Agent", "capo:qa", "capo:engineering-manager");
+    const { exitCode } = runHook(payload, { mode: "observe" });
+    expect(
+      exitCode,
+      'both "capo:engineering-manager" (caller) and "capo:qa" (target) must be stripped and allowed (observe, exit 0)'
+    ).toBe(0);
+  });
+
+  it("Bug1+2-COMBO-02: agent_type='capo:engineering-manager' + subagent_type='capo:qa' → ALLOWED in enforce mode (exit 0)", () => {
+    const payload = makePayloadReal("Agent", "capo:qa", "capo:engineering-manager");
+    const { exitCode } = runHook(payload, { mode: "enforce" });
+    expect(
+      exitCode,
+      'stripped caller "engineering-manager" + stripped target "qa" must be allowed in enforce mode (exit 0)'
+    ).toBe(0);
+  });
+
+  it("Bug1+2-COMBO-03: log entry records STRIPPED caller and target (not raw namespaced values)", () => {
+    const payload = makePayloadReal("Agent", "capo:qa", "capo:engineering-manager");
+    runHook(payload, { mode: "observe" });
+
+    const log = readSpawnLog();
+    if (log !== null && log.length > 0) {
+      const entry = log[log.length - 1];
+      const caller = String(entry["caller"] ?? "");
+      const target = String(entry["target"] ?? "");
+      expect(
+        caller,
+        'log caller must be stripped to "engineering-manager", not raw "capo:engineering-manager"'
+      ).toBe("engineering-manager");
+      expect(target, 'log target must be stripped to "qa", not raw "capo:qa"').toBe("qa");
+    }
+  });
+
+  it("Bug1+2-COMBO-04: agent_type='capo:capo' + subagent_type='capo:staff-engineer' → capo wildcard allows any target → ALLOWED in enforce mode", () => {
+    // Mirrors the exact shape from the empirical capture session.
+    // After fix: CALLER="capo" (wildcard ["*"]) → TARGET="staff-engineer" → always allowed.
+    const payload = makePayloadReal("Agent", "capo:staff-engineer", "capo:capo");
+    const { exitCode } = runHook(payload, { mode: "enforce" });
+    expect(
+      exitCode,
+      "capo:capo (wildcard) spawning capo:staff-engineer must be allowed in enforce mode (exit 0)"
+    ).toBe(0);
+  });
+
+  it("Bug1+2-COMBO-05: agent_type='capo:staff-engineer' + subagent_type='capo:qa' → stripped: staff-engineer cannot spawn qa → BLOCKED in enforce (exit 2)", () => {
+    // Both fields namespaced. After fix: caller="staff-engineer", target="qa" → not permitted → exit 2.
+    const payload = makePayloadReal("Agent", "capo:qa", "capo:staff-engineer");
+    const { exitCode } = runHook(payload, { mode: "enforce" });
+    expect(
+      exitCode,
+      'stripped caller "staff-engineer" → stripped target "qa" must be blocked in enforce mode (exit 2)'
+    ).toBe(2);
   });
 });

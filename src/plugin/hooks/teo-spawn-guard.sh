@@ -4,27 +4,27 @@
 #
 # PURPOSE
 #   Checks caller → target spawn pairs against a build-time allowlist.
-#   Operates in log-only mode by default (TEO_SPAWN_GUARD_MODE=observe).
-#   Only blocks in TEO_SPAWN_GUARD_MODE=enforce.
+#   Enforces spawn permissions by default (TEO_SPAWN_GUARD_MODE=enforce).
+#   Operates in log-only observe mode when TEO_SPAWN_GUARD_MODE=observe.
 #
 # KEY DESIGN DECISIONS
 #   D1 — Root/main session: when agent_type (top-level field) is absent (main/root
 #        session), always ALLOW + log "root-session-allow". Fail-open for root.
-#   D2 — Log-only default: TEO_SPAWN_GUARD_MODE defaults to "observe".
+#   D2 — Enforce default: TEO_SPAWN_GUARD_MODE defaults to "enforce".
 #        In observe mode: log everything, never exit 2.
 #   D3 — Allowlist at TEO_SPAWN_ALLOWLIST path.
 #
 # ENV VARS
 #   TEO_SPAWN_ALLOWLIST        Path to spawn-allowlist.json
 #                              (default: ${CLAUDE_PLUGIN_ROOT}/spawn-allowlist.json)
-#   TEO_SPAWN_GUARD_MODE       "observe" (default) or "enforce"
+#   TEO_SPAWN_GUARD_MODE       "enforce" (default) or "observe"
 #   TEO_HOOK_LOG_DIR_OVERRIDE  Override directory for spawn-log-YYYY-MM-DD.json
 #   TEO_PROJECT_ROOT           Override project root (for git-free test environments)
 #
 # STDIN JSON SHAPE (Claude Code PreToolUse/Agent)
 #   {
 #     "tool_name": "Agent" | "Task",
-#     "tool_input": { "agent": "<name>" },
+#     "tool_input": { "subagent_type": "<name>" },   // real Claude Code payload field
 #     "agent_type": "<caller-agent-name>",    // optional — absent in root/main session
 #     "agent_id": "<caller-agent-id>"         // optional — absent in root/main session
 #   }
@@ -158,15 +158,19 @@ fi
 # ---------------------------------------------------------------------------
 # Extract target and caller
 # ---------------------------------------------------------------------------
-TARGET="$(echo "${STDIN_CONTENT}" | jq -r '.tool_input.agent // empty')"
+TARGET="$(echo "${STDIN_CONTENT}" | jq -r '.tool_input.subagent_type // .tool_input.agent // empty')"
+# Strip namespace prefix from target too (e.g. "capo:qa" → "qa")
+TARGET="${TARGET#*:}"
 
 # agent_type (top-level) is the caller; absent for root/main session
 CALLER="$(echo "${STDIN_CONTENT}" | jq -r '.agent_type // empty')"
+# Strip namespace prefix (e.g. "capo:capo" → "capo", "capo:engineering-manager" → "engineering-manager")
+CALLER="${CALLER#*:}"
 
 # ---------------------------------------------------------------------------
 # Resolve mode and log dir early (needed for all log calls)
 # ---------------------------------------------------------------------------
-MODE="${TEO_SPAWN_GUARD_MODE:-observe}"
+MODE="${TEO_SPAWN_GUARD_MODE:-enforce}"
 
 resolve_project_root
 resolve_log_dir

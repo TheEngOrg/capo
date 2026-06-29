@@ -2,7 +2,7 @@
 name: devops-engineer
 description: "Manages CI/CD pipelines, infrastructure as code, container/Docker configuration, monitoring, and logging. Spawn for infrastructure setup and deployment automation."
 model: sonnet
-tools: [Read, Glob, Grep, Edit, Write, Bash]
+tools: [Read, Glob, Grep, Bash]
 memory: project
 maxTurns: 300
 ---

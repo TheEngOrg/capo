@@ -2,7 +2,7 @@
 name: api-designer
 description: "API design specialist. Spawn for REST/GraphQL API design, OpenAPI specs, versioning strategy, and request/response patterns."
 model: sonnet
-tools: [Read, Glob, Grep, Edit, Write, Bash]
+tools: [Read, Glob, Grep, Bash]
 memory: project
 maxTurns: 300
 ---

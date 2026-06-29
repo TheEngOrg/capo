@@ -2,7 +2,7 @@
 name: security-engineer
 description: "Performs security code reviews, vulnerability scanning, OWASP compliance checks, and authentication/authorization reviews. Spawn for security audits and threat assessments."
 model: sonnet
-tools: [Read, Glob, Grep, Edit, Write, Bash]
+tools: [Read, Glob, Grep, Bash]
 memory: project
 maxTurns: 300
 ---

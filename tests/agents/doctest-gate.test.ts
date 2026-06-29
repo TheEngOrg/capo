@@ -550,8 +550,8 @@ describe("boundary(WS-SHARED-FILES): studio-director.md shared-file links carry 
 // =============================================================================
 // ADR-075 PR2 — Revoke Edit+Write from memory-only writer agents
 //
-// These tests are RED by design. Dev removes Edit and Write from the tools:
-// frontmatter of the 5 memory-only writer agents to make them green.
+// These tests are GREEN — implementation complete (ADR-075 PR2). Dev removed
+// Edit and Write from the tools: frontmatter of the 5 memory-only writer agents.
 //
 // Decision Q3=B: restriction is per-agent toolset COMPOSITION — the tools:
 // frontmatter line is the authoritative capability gate, not path allowlists.
@@ -885,6 +885,261 @@ describe("golden(ADR-075-PR2): agent count unchanged — no agents added or remo
     // GOLDEN: PR2 only modifies tools: frontmatter in 5 existing agents.
     // The total agent count must remain 23. A change in count indicates an
     // accidental deletion, rename, or addition outside the PR2 scope.
+    const agentsDir = root("src", "plugin", "agents");
+    const files = fs.readdirSync(agentsDir).filter((f) => f.endsWith(".md"));
+    expect(files.length).toBe(23);
+  });
+});
+
+// =============================================================================
+// ADR-075 PR3 — Revoke Edit+Write from scoped-domain writer agents
+//
+// These tests are GREEN — implementation complete (ADR-075 PR3). Dev removed
+// Edit and Write from the tools: frontmatter of the 6 scoped-domain agents.
+//
+// Decision Q3=B: restriction is per-agent toolset COMPOSITION — the tools:
+// frontmatter line is the authoritative capability gate. Scoped-domain agents
+// create new files via teo-apply-edit (not direct Write) and apply edits via
+// teo-apply-edit (not direct Edit). Bash is retained where it existed for
+// teo-agent-toolset + domain CLIs; WebFetch is retained for the one agent that
+// had it. No tool is ADDED — only Edit and Write are removed.
+//
+// The 6 agents under test and their required post-change tools: lines:
+//   api-designer:                  [Read, Glob, Grep, Bash]
+//   data-engineer:                 [Read, Glob, Grep, Bash]
+//   devops-engineer:               [Read, Glob, Grep, Bash]
+//   gcp-infra-specialist:          [Read, Glob, Grep, Bash]
+//   security-engineer:             [Read, Glob, Grep, Bash]
+//   system-integration-specialist: [Read, Glob, Grep, WebFetch]
+//
+// Ordering: misuse → boundary → golden path (ADR-064 critical-path policy)
+// =============================================================================
+
+// ---------------------------------------------------------------------------
+// MISUSE — Edit and Write must be ABSENT from all 6 agents after the change
+// (12 tests: 2 per agent × 6 agents)
+// ---------------------------------------------------------------------------
+
+describe("misuse(ADR-075-PR3): api-designer must NOT have Edit or Write in tools:", () => {
+  it("api-designer.md tools: does NOT contain Edit", () => {
+    // MISUSE: api-designer outputs OpenAPI specs that flow through teo-apply-edit.
+    // Direct Edit access is revoked by ADR-075 Q3=B. If Edit appears, the
+    // capability gate is incomplete and the agent can bypass teo-apply-edit.
+    const content = readFile("src/plugin/agents/api-designer.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    expect(hasTool(tokens, "Edit")).toBe(false);
+  });
+
+  it("api-designer.md tools: does NOT contain Write", () => {
+    // MISUSE: new spec files go through teo-apply-edit file-create path.
+    // Direct Write is revoked. If Write remains, the capability gate is open.
+    const content = readFile("src/plugin/agents/api-designer.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    expect(hasTool(tokens, "Write")).toBe(false);
+  });
+});
+
+describe("misuse(ADR-075-PR3): data-engineer must NOT have Edit or Write in tools:", () => {
+  it("data-engineer.md tools: does NOT contain Edit", () => {
+    // MISUSE: schema/migration files go through teo-apply-edit. Direct Edit
+    // access is revoked by ADR-075 Q3=B.
+    const content = readFile("src/plugin/agents/data-engineer.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    expect(hasTool(tokens, "Edit")).toBe(false);
+  });
+
+  it("data-engineer.md tools: does NOT contain Write", () => {
+    const content = readFile("src/plugin/agents/data-engineer.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    expect(hasTool(tokens, "Write")).toBe(false);
+  });
+});
+
+describe("misuse(ADR-075-PR3): devops-engineer must NOT have Edit or Write in tools:", () => {
+  it("devops-engineer.md tools: does NOT contain Edit", () => {
+    // MISUSE: IaC/CI config writes go through teo-apply-edit. Direct Edit
+    // access is revoked by ADR-075 Q3=B.
+    const content = readFile("src/plugin/agents/devops-engineer.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    expect(hasTool(tokens, "Edit")).toBe(false);
+  });
+
+  it("devops-engineer.md tools: does NOT contain Write", () => {
+    const content = readFile("src/plugin/agents/devops-engineer.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    expect(hasTool(tokens, "Write")).toBe(false);
+  });
+});
+
+describe("misuse(ADR-075-PR3): gcp-infra-specialist must NOT have Edit or Write in tools:", () => {
+  it("gcp-infra-specialist.md tools: does NOT contain Edit", () => {
+    // MISUSE: Terraform/IaC files go through teo-apply-edit. Direct Edit
+    // is revoked by ADR-075 Q3=B.
+    const content = readFile("src/plugin/agents/gcp-infra-specialist.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    expect(hasTool(tokens, "Edit")).toBe(false);
+  });
+
+  it("gcp-infra-specialist.md tools: does NOT contain Write", () => {
+    const content = readFile("src/plugin/agents/gcp-infra-specialist.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    expect(hasTool(tokens, "Write")).toBe(false);
+  });
+});
+
+describe("misuse(ADR-075-PR3): security-engineer must NOT have Edit or Write in tools:", () => {
+  it("security-engineer.md tools: does NOT contain Edit", () => {
+    // MISUSE: security-engineer's output is advisory memos to .claude/memory/.
+    // It has no legitimate reason to directly Edit source files. If Edit remains,
+    // the agent can make unreviewed mutations to source code during audits.
+    const content = readFile("src/plugin/agents/security-engineer.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    expect(hasTool(tokens, "Edit")).toBe(false);
+  });
+
+  it("security-engineer.md tools: does NOT contain Write", () => {
+    const content = readFile("src/plugin/agents/security-engineer.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    expect(hasTool(tokens, "Write")).toBe(false);
+  });
+});
+
+describe("misuse(ADR-075-PR3): system-integration-specialist must NOT have Edit or Write in tools:", () => {
+  it("system-integration-specialist.md tools: does NOT contain Edit", () => {
+    // MISUSE: integration specs/contracts go through teo-apply-edit. Direct Edit
+    // is revoked by ADR-075 Q3=B.
+    const content = readFile("src/plugin/agents/system-integration-specialist.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    expect(hasTool(tokens, "Edit")).toBe(false);
+  });
+
+  it("system-integration-specialist.md tools: does NOT contain Write", () => {
+    const content = readFile("src/plugin/agents/system-integration-specialist.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    expect(hasTool(tokens, "Write")).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// BOUNDARY — correct token count after the strip (6 tests: 1 per agent)
+// ---------------------------------------------------------------------------
+
+describe("boundary(ADR-075-PR3): each agent has the exact expected tool count after revocation", () => {
+  it("api-designer.md tools: exactly 4 tokens [Read, Glob, Grep, Bash]", () => {
+    // BOUNDARY: 6 tokens before (Read, Glob, Grep, Edit, Write, Bash) → 4 after.
+    // A count != 4 means either Edit/Write were not removed or a different tool
+    // was accidentally dropped or added during the change.
+    const content = readFile("src/plugin/agents/api-designer.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    expect(tokens).toHaveLength(4);
+  });
+
+  it("data-engineer.md tools: exactly 4 tokens [Read, Glob, Grep, Bash]", () => {
+    // BOUNDARY: 6 tokens before → 4 after.
+    const content = readFile("src/plugin/agents/data-engineer.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    expect(tokens).toHaveLength(4);
+  });
+
+  it("devops-engineer.md tools: exactly 4 tokens [Read, Glob, Grep, Bash]", () => {
+    const content = readFile("src/plugin/agents/devops-engineer.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    expect(tokens).toHaveLength(4);
+  });
+
+  it("gcp-infra-specialist.md tools: exactly 4 tokens [Read, Glob, Grep, Bash]", () => {
+    const content = readFile("src/plugin/agents/gcp-infra-specialist.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    expect(tokens).toHaveLength(4);
+  });
+
+  it("security-engineer.md tools: exactly 4 tokens [Read, Glob, Grep, Bash]", () => {
+    const content = readFile("src/plugin/agents/security-engineer.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    expect(tokens).toHaveLength(4);
+  });
+
+  it("system-integration-specialist.md tools: exactly 4 tokens [Read, Glob, Grep, WebFetch]", () => {
+    // BOUNDARY: 6 tokens before (Read, Glob, Grep, Edit, Write, WebFetch) → 4 after.
+    // WebFetch takes the slot Edit+Write occupied; Bash was never present and
+    // must NOT be added per Q3=B (only tools explicitly permitted by the agent's
+    // purpose are kept — system-integration-specialist never had Bash).
+    const content = readFile("src/plugin/agents/system-integration-specialist.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    expect(tokens).toHaveLength(4);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GOLDEN PATH — retained tools are present; full composition is exact
+// (6 tests: retained key tools per agent)
+// ---------------------------------------------------------------------------
+
+describe("golden(ADR-075-PR3): Bash retained on the 5 agents that had it", () => {
+  it("api-designer.md tools: retains Bash", () => {
+    // GOLDEN: Bash is retained for invoking teo-agent-toolset. Stripping it
+    // would eliminate the only tool-invocation path available after Edit+Write
+    // are revoked.
+    const content = readFile("src/plugin/agents/api-designer.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    expect(hasTool(tokens, "Bash")).toBe(true);
+  });
+
+  it("data-engineer.md tools: retains Bash", () => {
+    // GOLDEN: Bash retained for teo-agent-toolset + db CLI tools.
+    const content = readFile("src/plugin/agents/data-engineer.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    expect(hasTool(tokens, "Bash")).toBe(true);
+  });
+
+  it("devops-engineer.md tools: retains Bash", () => {
+    // GOLDEN: Bash retained for CLI ops (kubectl, terraform, gcloud, etc.)
+    const content = readFile("src/plugin/agents/devops-engineer.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    expect(hasTool(tokens, "Bash")).toBe(true);
+  });
+
+  it("gcp-infra-specialist.md tools: retains Bash", () => {
+    // GOLDEN: Bash retained for gcloud scripting and teo-agent-toolset.
+    const content = readFile("src/plugin/agents/gcp-infra-specialist.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    expect(hasTool(tokens, "Bash")).toBe(true);
+  });
+
+  it("security-engineer.md tools: retains Bash", () => {
+    // GOLDEN: Bash retained for teo-agent-toolset memory write subcommands
+    // (security audit memos route through Bash, not direct Write).
+    const content = readFile("src/plugin/agents/security-engineer.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    expect(hasTool(tokens, "Bash")).toBe(true);
+  });
+
+  it("system-integration-specialist.md tools: retains WebFetch", () => {
+    // GOLDEN: WebFetch is retained for API docs research — it is the primary
+    // non-file-reading capability this agent needs after Edit+Write are revoked.
+    const content = readFile("src/plugin/agents/system-integration-specialist.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    expect(hasTool(tokens, "WebFetch")).toBe(true);
+  });
+});
+
+describe("golden(ADR-075-PR3): system-integration-specialist does NOT have Bash", () => {
+  it("system-integration-specialist.md tools: does NOT contain Bash", () => {
+    // GOLDEN: system-integration-specialist never had Bash before ADR-075 PR3
+    // and must not gain it. The Q3=B rule is additive-only in intent — only
+    // tools explicitly permitted by the agent's purpose are kept. Bash was not
+    // part of this agent's purpose before the change, so it must not appear after.
+    const content = readFile("src/plugin/agents/system-integration-specialist.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    expect(hasTool(tokens, "Bash")).toBe(false);
+  });
+});
+
+describe("golden(ADR-075-PR3): agent count still 23 — no agents added or removed", () => {
+  it("agents/ directory still contains exactly 23 shipped agent files after PR3", () => {
+    // GOLDEN: PR3 only modifies tools: frontmatter in 6 existing agents.
+    // The total agent count must remain 23. A count change indicates an
+    // accidental deletion, rename, or addition outside PR3 scope.
     const agentsDir = root("src", "plugin", "agents");
     const files = fs.readdirSync(agentsDir).filter((f) => f.endsWith(".md"));
     expect(files.length).toBe(23);

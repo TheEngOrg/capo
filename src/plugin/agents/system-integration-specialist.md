@@ -2,7 +2,7 @@
 name: system-integration-specialist
 description: "Cross-system integration expert. Spawn for API contract design between services, event/message-bus schema, third-party SDK wiring, webhook receiver contracts, protocol translation, and integration runbooks. Do NOT spawn for full feature implementation (dev) or internal OpenAPI specs (api-designer)."
 model: sonnet
-tools: [Read, Glob, Grep, Edit, Write, WebFetch]
+tools: [Read, Glob, Grep, WebFetch]
 memory: project
 maxTurns: 50
 ---

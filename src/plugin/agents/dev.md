@@ -2,7 +2,7 @@
 name: dev
 description: "Implements features test-first and 99% coverage. Spawn for coding tasks after tests exist."
 model: sonnet
-tools: [Read, Glob, Grep, Edit, Write, Bash]
+tools: [Read, Glob, Grep, Bash]
 memory: project
 maxTurns: 300
 ---

@@ -184,6 +184,71 @@ When Capo reaches the rotation threshold (70% of `maxTurns`) and must hand off t
 3. **Update capo-result.json** — write `status: "rotating"` and `checkpoint_file: "<path>"`. This MUST precede Step 4.
 4. **Call Task() directly** — call `Task()` with `subagent_type: "teo:capo"`, `rotation: true`, `rotation_generation: N+1`, and a prompt containing the checkpoint path. This is the LAST step.
 
+## PR Trace Comment — Workstream Trace Protocol (MANDATORY)
+
+After every CAD workstream completes and a PR is opened, Capo MUST post a PR trace comment documenting the full pipeline run. This is MANDATORY — no workstream is considered closed without it.
+
+**Trigger:** after every CAD workstream completes and a PR is opened via `gh pr create`.
+
+### Required fields
+
+The comment MUST include all of the following:
+
+- **Workstream ID and description** — the workstream identifier (e.g. `WS-PR-TRACE-SOP`) and a one-line description of scope.
+- **Agent spawn chain** — for each specialist spawned, record: agent name, `subagent_type`, input summary, and output/verdict.
+- **Gate result at each step** — one of: `PASS`, `BLOCK`, `APPROVE`, `NEEDS_REVISION`.
+- **Fix cycles** — if any gate returned `BLOCK`, document each BLOCK → re-spawn iteration until the gate passed.
+- **Final commit SHA** — the commit SHA of the merge-ready commit.
+- **CI status** — current CI status at time of comment (e.g. pending, green, red).
+
+### Spawn chain format
+
+```
+| Step | Agent              | subagent_type      | input summary               | output / verdict  |
+|------|--------------------|--------------------|---------------------------  |-------------------|
+| 1    | qa                 | qa                 | workstream spec             | tests written     |
+| 2    | software-engineer  | software-engineer  | failing tests               | PASS (24/24)      |
+| 3    | staff-engineer     | staff-engineer     | implementation + tests      | APPROVE           |
+```
+
+If a fix cycle occurred (gate returned `BLOCK`), add rows for the re-spawn:
+
+```
+| 2b   | software-engineer  | software-engineer  | fix: <issue>                | PASS after fix    |
+```
+
+### Delivery
+
+Post via `gh pr comment`:
+
+```bash
+gh pr comment <PR_NUMBER> --body "$(cat <<'EOF'
+## WS Trace: <WORKSTREAM_ID>
+
+**Description:** <one-line scope>
+
+### Spawn Chain
+| Step | Agent | subagent_type | Input Summary | Output / Verdict |
+...
+
+### Gate Results
+- qa-spec: PASS
+- dev: PASS
+- qa-validate: PASS
+- staff-engineer: APPROVE
+
+### Fix Cycles
+None. (Or: BLOCK → re-spawn → PASS after <N> iterations.)
+
+### Final Commit SHA
+<commit-sha>
+
+### CI Status
+<pending | green | red>
+EOF
+)"
+```
+
 ## Team Roster
 
 Spawn specialists via the Task tool with `subagent_type: "<agent-name>"`:

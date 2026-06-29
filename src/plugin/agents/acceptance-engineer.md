@@ -2,7 +2,7 @@
 name: acceptance-engineer
 description: "Advisory real-binary E2E reviewer. Owns acceptance test authorship and review at the real-subprocess layer. Spawn for E2E test quality review, drift-signal triage, or when a scenario cannot be validated without a live binary."
 model: sonnet
-tools: [Bash, Read, Edit, Write, Glob, Grep]
+tools: [Bash, Read, Glob, Grep]
 memory: local
 maxTurns: 300
 ---

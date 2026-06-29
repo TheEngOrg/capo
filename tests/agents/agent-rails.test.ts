@@ -107,16 +107,16 @@ describe("misuse(AC-2a): staff-engineer plugin agent must not have Edit in tools
   });
 });
 
-describe("boundary(AC-2b): staff-engineer plugin agent must retain Write in tools", () => {
-  it("AC-2b: src/plugin/agents/staff-engineer.md tools: line DOES contain 'Write'", () => {
-    // BOUNDARY: Write must survive the Edit removal. staff-engineer needs Write
-    // to produce review artifacts and approval verdicts. A strip that accidentally
-    // removes Write breaks the agent's output capability.
+describe("boundary(AC-2b): staff-engineer plugin agent must NOT have Write in tools (ADR-075 PR2)", () => {
+  it("AC-2b: src/plugin/agents/staff-engineer.md tools: line does NOT contain 'Write'", () => {
+    // BOUNDARY: ADR-075 PR2 revokes Write from staff-engineer — memory writes now go
+    // through teo-agent-toolset subcommands via Bash. The original AC-2b (WS-AGENT-RAILS)
+    // retained Write; that decision is superseded by ADR-075 PR2 which removes it entirely.
     const content = readFile("src/plugin/agents/staff-engineer.md");
     const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
     const frontmatter = frontmatterMatch ? frontmatterMatch[1] : "";
     const toolsLine = frontmatter.split("\n").find((l) => l.startsWith("tools:")) ?? "";
-    expect(toolsLine).toContain("Write");
+    expect(toolsLine).not.toContain("Write");
   });
 });
 
@@ -318,12 +318,14 @@ describe("golden(WS-AGENT-RAILS): settings.json is clean — no permissions, req
 });
 
 describe("golden(WS-AGENT-RAILS): staff-engineer tool rails are consistent on both paths", () => {
-  it("golden: src/plugin/agents/staff-engineer.md has Write but not Edit in tools:", () => {
+  it("golden: src/plugin/agents/staff-engineer.md has neither Write nor Edit in tools: (ADR-075 PR2)", () => {
+    // ADR-075 PR2 supersedes WS-AGENT-RAILS: both Edit and Write are now revoked.
+    // staff-engineer retains Bash for teo-agent-toolset memory write subcommands.
     const content = readFile("src/plugin/agents/staff-engineer.md");
     const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
     const frontmatter = frontmatterMatch ? frontmatterMatch[1] : "";
     const toolsLine = frontmatter.split("\n").find((l) => l.startsWith("tools:")) ?? "";
-    expect(toolsLine).toContain("Write");
+    expect(toolsLine).not.toContain("Write");
     expect(toolsLine).not.toContain("Edit");
   });
 

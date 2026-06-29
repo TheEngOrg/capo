@@ -2,7 +2,7 @@
 name: engineering-manager
 description: "Manages team execution, assigns tasks, coordinates CAD development cycle. Spawn for task coordination, progress tracking, or team orchestration."
 model: sonnet
-tools: [Task(qa, software-engineer, staff-engineer), Read, Glob, Grep, Edit, Write, Bash]
+tools: [Task(qa, software-engineer, staff-engineer), Read, Glob, Grep, Bash]
 memory: project
 maxTurns: 300
 ---

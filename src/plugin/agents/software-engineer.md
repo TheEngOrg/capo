@@ -2,7 +2,7 @@
 name: software-engineer
 description: "Generates code to get QA AC Based Tests to 99% coverage. Spawn for development implementation tasks."
 model: sonnet
-tools: [Read, Glob, Grep, Edit, Write, Bash]
+tools: [Read, Glob, Grep, Bash]
 memory: project
 maxTurns: 300
 ---

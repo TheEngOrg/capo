@@ -2,7 +2,7 @@
 name: dev-haiku
 description: "Haiku-tier dev for MECHANICAL workstreams. Cascade fallback to software-engineer (Sonnet) after 2 failed attempts."
 model: haiku
-tools: [Read, Glob, Grep, Edit, Write, Bash]
+tools: [Read, Glob, Grep, Bash]
 memory: project
 maxTurns: 300
 ---

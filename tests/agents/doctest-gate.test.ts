@@ -1398,3 +1398,191 @@ describe("golden(ADR-075-PR5): agent count unchanged — still 23 shipped agents
     expect(files.length).toBe(23);
   });
 });
+
+// =============================================================================
+// ADR-075 PR6: dev/dev-haiku/software-engineer Edit+Write revocation (Q2=A)
+//
+// These tests are RED until implementation. Dev must remove Edit and Write from
+// the tools: frontmatter of dev.md, dev-haiku.md, and software-engineer.md.
+//
+// Decision Q2=A: dev/dev-haiku/software-engineer strip Edit entirely.
+// teo-apply-edit is the only edit path for existing files. file-create (via Bash)
+// handles new file creation. Write is also stripped — file-create covers new
+// files, teo-apply-edit covers existing file modifications.
+//
+//   Current tools for all three: [Read, Glob, Grep, Edit, Write, Bash]
+//   Target  tools for all three: [Read, Glob, Grep, Bash]
+//
+// Why drop Edit?  All modifications to existing files must route through
+//                 teo-apply-edit. Direct Edit bypasses that gate entirely.
+// Why drop Write? New file creation routes through Bash (file-create subcommand).
+//                 Direct Write bypasses the path-scoping constraint.
+// Why keep Bash?  Dev agents must run npm run test, invoke teo-apply-edit, and
+//                 invoke teo-agent-toolset for file-create. Bash is the shell
+//                 gateway to all three.
+//
+// Ordering: misuse → boundary → golden path (ADR-064 critical-path policy)
+// Expected: 9 RED (misuse × 6, boundary × 3), 4 GREEN (golden × 3, count × 1)
+// =============================================================================
+
+// ---------------------------------------------------------------------------
+// MISUSE — Edit and Write must be ABSENT from all 3 agents (6 tests: 2 per agent)
+// ---------------------------------------------------------------------------
+
+describe("misuse(ADR-075-PR6): dev must NOT have Edit in tools:", () => {
+  it("dev.md tools: does NOT contain Edit", () => {
+    // MISUSE: dev is the primary implementer agent. If Edit remains in its tools:
+    // line, it can mutate existing files directly — bypassing teo-apply-edit
+    // entirely. ADR-075 Q2=A mandates that teo-apply-edit is the ONLY path for
+    // modifying existing files. An Edit-capable dev defeats this gate and allows
+    // unreviewed, unlogged mutations to source. The misuse path is: dev receives
+    // a task, edits a file directly with Edit, and teo-apply-edit never fires.
+    const content = readFile("src/plugin/agents/dev.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    expect(hasTool(tokens, "Edit")).toBe(false);
+  });
+});
+
+describe("misuse(ADR-075-PR6): dev must NOT have Write in tools:", () => {
+  it("dev.md tools: does NOT contain Write", () => {
+    // MISUSE: Write allows dev to create files anywhere on disk without going
+    // through file-create's path allowlist. With Write present, dev can drop
+    // files outside the permitted directories. ADR-075 Q2=A replaces Write with
+    // Bash-based file-create to enforce path-scoped creation. If Write remains,
+    // the path-scoping constraint is unenforced and the misuse path is open.
+    const content = readFile("src/plugin/agents/dev.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    expect(hasTool(tokens, "Write")).toBe(false);
+  });
+});
+
+describe("misuse(ADR-075-PR6): dev-haiku must NOT have Edit in tools:", () => {
+  it("dev-haiku.md tools: does NOT contain Edit", () => {
+    // MISUSE: dev-haiku handles MECHANICAL workstreams — the majority of all
+    // workstreams. If Edit persists in dev-haiku while being removed from dev,
+    // the lower-cost agent retains the capability the ADR explicitly revokes.
+    // All file modifications must route through teo-apply-edit on BOTH tiers.
+    const content = readFile("src/plugin/agents/dev-haiku.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    expect(hasTool(tokens, "Edit")).toBe(false);
+  });
+});
+
+describe("misuse(ADR-075-PR6): dev-haiku must NOT have Write in tools:", () => {
+  it("dev-haiku.md tools: does NOT contain Write", () => {
+    // MISUSE: same path-bypass risk as dev. dev-haiku executing the majority of
+    // MECHANICAL workstreams while retaining Write is a higher-volume exposure
+    // than dev retaining it. Both must be stripped simultaneously.
+    const content = readFile("src/plugin/agents/dev-haiku.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    expect(hasTool(tokens, "Write")).toBe(false);
+  });
+});
+
+describe("misuse(ADR-075-PR6): software-engineer must NOT have Edit in tools:", () => {
+  it("software-engineer.md tools: does NOT contain Edit", () => {
+    // MISUSE: software-engineer is spawned by staff-engineer and engineering-manager
+    // for implementation tasks. If Edit survives in software-engineer after being
+    // stripped from dev and dev-haiku, the ADR-075 Q2=A revocation is incomplete —
+    // callers can route work to software-engineer to retain direct-Edit capability.
+    // All three implementer agents must be stripped in the same PR.
+    const content = readFile("src/plugin/agents/software-engineer.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    expect(hasTool(tokens, "Edit")).toBe(false);
+  });
+});
+
+describe("misuse(ADR-075-PR6): software-engineer must NOT have Write in tools:", () => {
+  it("software-engineer.md tools: does NOT contain Write", () => {
+    // MISUSE: software-engineer is a spawned sub-agent; if it retains Write while
+    // the top-level dev agents lose it, parent agents can delegate file-creation
+    // tasks to software-engineer to bypass the file-create path allowlist.
+    // All three agents must have an identical post-change toolset.
+    const content = readFile("src/plugin/agents/software-engineer.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    expect(hasTool(tokens, "Write")).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// BOUNDARY — exact token count after the strip (3 tests: 1 per agent)
+// ---------------------------------------------------------------------------
+
+describe("boundary(ADR-075-PR6): each agent has exactly 4 tools after Edit+Write revocation", () => {
+  it("dev.md tools: exactly 4 tokens [Read, Glob, Grep, Bash]", () => {
+    // BOUNDARY: dev had 6 tokens before PR6 (Read, Glob, Grep, Edit, Write, Bash).
+    // After removing Edit and Write the count must be exactly 4.
+    // Count < 4 means a retained tool (e.g. Glob) was accidentally dropped.
+    // Count > 4 means a net-new tool was added outside PR6 scope, or Edit/Write
+    // were not removed but something else was added to mask the failure.
+    const content = readFile("src/plugin/agents/dev.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    expect(tokens).toHaveLength(4);
+  });
+
+  it("dev-haiku.md tools: exactly 4 tokens [Read, Glob, Grep, Bash]", () => {
+    // BOUNDARY: dev-haiku had 6 tokens before PR6. Same invariant as dev.
+    // The count gate catches partial strips (only one of Edit/Write removed)
+    // and accidental collateral drops (Grep removed along with Write).
+    const content = readFile("src/plugin/agents/dev-haiku.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    expect(tokens).toHaveLength(4);
+  });
+
+  it("software-engineer.md tools: exactly 4 tokens [Read, Glob, Grep, Bash]", () => {
+    // BOUNDARY: software-engineer had 6 tokens before PR6. Same invariant.
+    // All three agents must land at exactly 4 — the target composition is
+    // identical across dev, dev-haiku, and software-engineer per Q2=A.
+    const content = readFile("src/plugin/agents/software-engineer.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    expect(tokens).toHaveLength(4);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GOLDEN PATH — Bash retained; agent count unchanged (4 tests)
+// ---------------------------------------------------------------------------
+
+describe("golden(ADR-075-PR6): all three agents retain Bash after Edit+Write revocation", () => {
+  it("dev.md tools: retains Bash", () => {
+    // GOLDEN: Bash is dev's only remaining write-capable shell after Edit and Write
+    // are revoked. It serves three purposes: (1) running npm run test and npm run
+    // test:cov for the coverage gate, (2) invoking teo-apply-edit for existing-file
+    // modifications, and (3) invoking file-create for new-file creation. Dropping
+    // Bash would eliminate all three paths and leave dev unable to implement code.
+    const content = readFile("src/plugin/agents/dev.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    expect(hasTool(tokens, "Bash")).toBe(true);
+  });
+
+  it("dev-haiku.md tools: retains Bash", () => {
+    // GOLDEN: dev-haiku has the same Bash dependency as dev — teo-apply-edit and
+    // file-create both invoke through Bash. Without Bash, dev-haiku cannot write
+    // any file (new or existing) after Edit+Write are stripped. Bash is the sole
+    // remaining write gateway and must be present in the target composition.
+    const content = readFile("src/plugin/agents/dev-haiku.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    expect(hasTool(tokens, "Bash")).toBe(true);
+  });
+
+  it("software-engineer.md tools: retains Bash", () => {
+    // GOLDEN: software-engineer is spawned for implementation tasks and must be
+    // able to invoke teo-apply-edit for edits and file-create for new files.
+    // Both are Bash-mediated. Without Bash, software-engineer is read-only —
+    // it becomes a code-review agent, not an implementer.
+    const content = readFile("src/plugin/agents/software-engineer.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    expect(hasTool(tokens, "Bash")).toBe(true);
+  });
+});
+
+describe("golden(ADR-075-PR6): agent count unchanged — still 23 shipped agents", () => {
+  it("agents/ directory still contains exactly 23 shipped agent files after PR6", () => {
+    // GOLDEN: PR6 only modifies tools: frontmatter in 3 existing agents.
+    // The total agent count must remain 23. A count change indicates an
+    // accidental deletion, rename, or addition outside PR6 scope.
+    const agentsDir = root("src", "plugin", "agents");
+    const files = fs.readdirSync(agentsDir).filter((f) => f.endsWith(".md"));
+    expect(files.length).toBe(23);
+  });
+});

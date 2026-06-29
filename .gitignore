@@ -38,6 +38,9 @@ HANDOFF.md
 docs/spikes/SPIKE-002/sandbox/dist/
 docs/spikes/SPIKE-002/sandbox/node_modules/
 
+# ADRs live in Brain (external), not the repo — local copies stay on disk, untracked (PR #88)
+docs/adr/
+
 # OQ-3 / spike probe binaries (derivable, large)
 /oq3-probe
 /oq3-case-*
@@ -47,6 +50,9 @@ docs/spikes/SPIKE-002/sandbox/node_modules/
 
 # Repo snapshot dumps — derivable, generated on demand
 /repomix-output.xml
+
+# Generated visualization / scratch HTML — not deliverables
+/*.html
 
 # Demo home — contains an HMAC signing key; never commit a key to a repo.
 # Regenerate locally with: TEO_HOME=demo/.teo-home npx tsx demo/build-plans.ts
@@ -60,6 +66,10 @@ settings.v4-snapshot.json
 # WS-GO-02: esbuild bundle artifact — built in CI, not committed
 bin/teo-run.js
 bin/teo-run.js.map
+
+# WS-ADR-075: teo-agent-toolset bundle artifact — built on demand, not committed
+bin/teo-agent-toolset.js
+bin/teo-agent-toolset.js.map
 
 # WS-BUILD-PLUGIN: build artifact — built on demand, not committed
 # Anchored to root so src/plugin/ (the source tree) is not affected

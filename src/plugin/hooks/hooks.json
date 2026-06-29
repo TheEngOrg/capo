@@ -31,6 +31,18 @@
             "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/pre-edit-write-guard.sh\""
           }
         ]
+      },
+      {
+        "matcher": "Task",
+        "hooks": [
+          { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/teo-spawn-guard.sh\"" }
+        ]
+      },
+      {
+        "matcher": "Agent",
+        "hooks": [
+          { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/teo-spawn-guard.sh\"" }
+        ]
       }
     ],
     "UserPromptSubmit": [

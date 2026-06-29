@@ -317,6 +317,8 @@ describe("hook-sync-guard — golden: hooks/ has exactly the expected set of hoo
     "pre-edit-write-guard.sh",
     "teo-post-spawn-citation-check.sh",
     "teo-prompt-router.sh",
+    "teo-spawn-guard-debug.sh",
+    "teo-spawn-guard.sh",
   ]);
 
   it("hooks/ contains no unexpected .sh files (no stale stubs)", () => {

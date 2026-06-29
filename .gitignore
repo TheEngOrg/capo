@@ -62,4 +62,5 @@ bin/teo-run.js
 bin/teo-run.js.map
 
 # WS-BUILD-PLUGIN: build artifact — built on demand, not committed
-plugin/
+# Anchored to root so src/plugin/ (the source tree) is not affected
+/plugin/

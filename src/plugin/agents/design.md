@@ -2,7 +2,7 @@
 name: design
 description: "Creates UI/UX designs and implements frontend. Spawn for wireframes, mockups, or component implementation."
 model: sonnet
-tools: [Read, Glob, Grep]
+tools: [Read, Glob, Grep, Bash]
 memory: project
 maxTurns: 300
 ---

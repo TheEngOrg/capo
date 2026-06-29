@@ -1153,7 +1153,7 @@ describe("golden(ADR-075-PR3): agent count still 23 — no agents added or remov
 // the tools: frontmatter of design.md and technical-writer.md.
 //
 // Post-change toolsets:
-//   design:           [Read, Glob, Grep]          (no Bash — never had it)
+//   design:           [Read, Glob, Grep, Bash]     (Bash added — CLI wireframe/SVG generation)
 //   technical-writer: [Read, Glob, Grep, Bash]    (Bash kept for teo-agent-toolset)
 //
 // Ordering: misuse → boundary → golden path (ADR-064 critical-path policy)
@@ -1206,13 +1206,13 @@ describe("misuse(ADR-075-PR4): technical-writer must NOT have Edit or Write in t
 // ---------------------------------------------------------------------------
 
 describe("boundary(ADR-075-PR4): exact token count after Edit+Write revocation", () => {
-  it("design.md tools: exactly 3 tokens [Read, Glob, Grep]", () => {
-    // BOUNDARY: 5 tokens before (Read, Glob, Grep, Edit, Write) → 3 after.
-    // Count != 3 means either Edit/Write were not fully removed, or a tool was
-    // accidentally added (e.g. Bash, which design never had).
+  it("design.md tools: exactly 4 tokens [Read, Glob, Grep, Bash]", () => {
+    // BOUNDARY: 5 tokens before (Read, Glob, Grep, Edit, Write) → 4 after.
+    // Count != 4 means either Edit/Write were not fully removed, or Bash was
+    // accidentally dropped (design now legitimately has Bash for CLI wireframe/SVG generation).
     const content = readFile("src/plugin/agents/design.md");
     const tokens = parseToolTokens(extractToolsLine(content));
-    expect(tokens).toHaveLength(3);
+    expect(tokens).toHaveLength(4);
   });
 
   it("technical-writer.md tools: exactly 4 tokens [Read, Glob, Grep, Bash]", () => {
@@ -1228,7 +1228,7 @@ describe("boundary(ADR-075-PR4): exact token count after Edit+Write revocation",
 // GOLDEN PATH — retained tools present; Bash disposition correct (3 tests)
 // ---------------------------------------------------------------------------
 
-describe("golden(ADR-075-PR4): technical-writer retains Bash; design does not gain Bash", () => {
+describe("golden(ADR-075-PR4): technical-writer retains Bash; design legitimately gains Bash", () => {
   it("technical-writer.md tools: retains Bash after Edit+Write revocation", () => {
     // GOLDEN: technical-writer must keep Bash to invoke teo-agent-toolset memory
     // write subcommands. Dropping Bash would eliminate the only tool-write path
@@ -1238,14 +1238,13 @@ describe("golden(ADR-075-PR4): technical-writer retains Bash; design does not ga
     expect(hasTool(tokens, "Bash")).toBe(true);
   });
 
-  it("design.md tools: does NOT contain Bash (design never had it; must not gain it)", () => {
-    // GOLDEN: design never had Bash before ADR-075 PR4 and must not gain it.
-    // The Q3=B rule is scope-limited — only tools explicitly permitted by the
-    // agent's purpose are kept. Bash was never part of design's toolset.
-    // Adding Bash would silently expand its capability beyond the intended set.
+  it("design.md tools: contains Bash (legitimate — design uses it for CLI wireframe/SVG generation)", () => {
+    // GOLDEN: design now has Bash as a deliberate policy decision.
+    // Bash is a legitimate tool for running generation scripts, creating SVG/HTML
+    // wireframes, and producing design artifacts via CLI tools.
     const content = readFile("src/plugin/agents/design.md");
     const tokens = parseToolTokens(extractToolsLine(content));
-    expect(hasTool(tokens, "Bash")).toBe(false);
+    expect(hasTool(tokens, "Bash")).toBe(true);
   });
 });
 
@@ -1253,14 +1252,14 @@ describe("golden(ADR-075-PR4): technical-writer retains Bash; design does not ga
 // GUARD — Bash-absence is a hard invariant for design (1 test, mirrors golden)
 // ---------------------------------------------------------------------------
 
-describe("golden(ADR-075-PR4): design Bash-absence guard — must never appear in post-PR4 state", () => {
-  it("design.md tools: Bash is absent (never-had, must-not-appear invariant)", () => {
-    // GUARD: design produces visual artifacts through prompts alone; it has no
-    // CLI or memory-write path that requires Bash. This test is a permanent
-    // guard — if any future PR adds Bash to design, it should fail here first.
+describe("golden(ADR-075-PR4): design Bash-presence guard — must remain in post-PR4 state", () => {
+  it("design.md tools: Bash is present (legitimately added; must not be removed)", () => {
+    // GUARD: design now legitimately has Bash for CLI wireframe/SVG generation and
+    // running design artifact scripts. This test is a permanent guard — if any
+    // future PR removes Bash from design, it should fail here first.
     const content = readFile("src/plugin/agents/design.md");
     const tokens = parseToolTokens(extractToolsLine(content));
-    expect(hasTool(tokens, "Bash")).toBe(false);
+    expect(hasTool(tokens, "Bash")).toBe(true);
   });
 });
 

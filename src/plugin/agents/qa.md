@@ -2,7 +2,7 @@
 name: qa
 description: "Writes misuse-first test specs and verifies implementations. Spawn for test creation, verification, or coverage checks."
 model: sonnet
-tools: [Read, Glob, Grep, Edit, Write, Bash]
+tools: [Read, Glob, Grep, Bash]
 memory: project
 maxTurns: 300
 ---

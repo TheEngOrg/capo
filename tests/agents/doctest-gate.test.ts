@@ -1296,3 +1296,105 @@ describe("golden(WS-SHARED-FILES): all 23 shipped agent files exist (no accident
     });
   }
 });
+
+// =============================================================================
+// ADR-075 PR5: qa agent Edit+Write revocation (Q1=A)
+//
+// These tests are RED until implementation. Dev must remove Edit and Write from
+// the tools: frontmatter of qa.md.
+//
+// Decision Q1=A: QA's only write action is creating test files via the
+// teo-agent-toolset file-create subcommand (path-scoped to tests/** and
+// src/**/*.test.ts). Direct Edit and Write are revoked.
+//
+//   Current qa tools: [Read, Glob, Grep, Edit, Write, Bash]
+//   Target  qa tools: [Read, Glob, Grep, Bash]
+//
+// Why drop Edit?  QA never edits existing source files — that routes to
+//                 software-engineer via teo-apply-edit.
+// Why drop Write? New test-file creation uses teo-agent-toolset file-create
+//                 (Bash subcommand) which enforces the tests/** + src/**/*.test.ts
+//                 path allowlist. Direct Write bypasses that gate.
+// Why keep Bash?  QA must be able to run npm run test and npm run test:cov.
+//                 Bash is also the shell that invokes teo-agent-toolset file-create.
+//
+// Ordering: misuse → boundary → golden path (ADR-064 critical-path policy)
+// Expected: 3 RED (misuse × 2, boundary × 1), 2 GREEN (golden × 1, count × 1)
+// =============================================================================
+
+// ---------------------------------------------------------------------------
+// MISUSE — Edit and Write must be ABSENT from qa after the change (2 tests)
+// ---------------------------------------------------------------------------
+
+describe("misuse(ADR-075-PR5): qa must NOT have Edit in tools:", () => {
+  it("qa.md tools: does NOT contain Edit", () => {
+    // MISUSE: qa never edits existing source files. If Edit appears in qa's
+    // tools: line, the agent can make unreviewed mutations to implementation
+    // code during its test-authorship or validation phase — directly
+    // violating the Q1=A boundary and the QA constitution ("I NEVER write
+    // implementation code"). Edit revocation is the enforcement gate; its
+    // absence means the gate is incomplete and the misuse path is open.
+    const content = readFile("src/plugin/agents/qa.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    expect(hasTool(tokens, "Edit")).toBe(false);
+  });
+});
+
+describe("misuse(ADR-075-PR5): qa must NOT have Write in tools:", () => {
+  it("qa.md tools: does NOT contain Write", () => {
+    // MISUSE: direct Write bypasses the path allowlist enforced by
+    // teo-agent-toolset file-create. With Write present, qa can create files
+    // anywhere on disk — not just tests/** and src/**/*.test.ts. The Q1=A
+    // decision replaces Write with file-create precisely to lock the allowed
+    // write destinations to test paths only. If Write remains, the path-scoping
+    // constraint is unenforced and the misuse path is open.
+    const content = readFile("src/plugin/agents/qa.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    expect(hasTool(tokens, "Write")).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// BOUNDARY — exact token count after the strip (1 test)
+// ---------------------------------------------------------------------------
+
+describe("boundary(ADR-075-PR5): qa has exactly 4 tools after Edit+Write revocation", () => {
+  it("qa.md tools: exactly 4 tokens [Read, Glob, Grep, Bash]", () => {
+    // BOUNDARY: qa had 6 tools before PR5 (Read, Glob, Grep, Edit, Write, Bash).
+    // After removing Edit and Write the count must be exactly 4.
+    // A count != 4 means either the removal was partial (one of Edit/Write still
+    // present), an unintended tool was dropped (e.g. Glob silently removed), or
+    // a net-new tool was added outside the PR5 scope.
+    const content = readFile("src/plugin/agents/qa.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    expect(tokens).toHaveLength(4);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GOLDEN PATH — Bash is retained; agent count unchanged (2 tests)
+// ---------------------------------------------------------------------------
+
+describe("golden(ADR-075-PR5): qa retains Bash after Edit+Write revocation", () => {
+  it("qa.md tools: retains Bash", () => {
+    // GOLDEN: Bash is qa's only remaining write-capable tool after Edit and Write
+    // are revoked. It serves two purposes: (1) running npm run test / npm run
+    // test:cov for coverage gate enforcement, and (2) invoking teo-agent-toolset
+    // file-create for path-scoped test-file creation. Dropping Bash would
+    // eliminate both capabilities and leave qa unable to execute its core duties.
+    const content = readFile("src/plugin/agents/qa.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    expect(hasTool(tokens, "Bash")).toBe(true);
+  });
+});
+
+describe("golden(ADR-075-PR5): agent count unchanged — still 23 shipped agents", () => {
+  it("agents/ directory still contains exactly 23 shipped agent files after PR5", () => {
+    // GOLDEN: PR5 only modifies the tools: frontmatter in qa.md. The total
+    // agent count must remain 23. A count change indicates an accidental
+    // deletion, rename, or addition outside PR5 scope.
+    const agentsDir = root("src", "plugin", "agents");
+    const files = fs.readdirSync(agentsDir).filter((f) => f.endsWith(".md"));
+    expect(files.length).toBe(23);
+  });
+});

@@ -2,7 +2,7 @@
 name: gcp-infra-specialist
 description: "GCP infrastructure specialist. Spawn for Terraform/IaC authoring for GCP resources (Cloud Run, GKE, Pub/Sub, Firestore, BigQuery, IAM, VPC), gcloud scripting, Cloud Monitoring/Logging observability setup, and GCP cost analysis. Do NOT spawn for cloud-agnostic CI/CD or Docker work (devops-engineer) or IAM threat modeling (security-engineer)."
 model: sonnet
-tools: [Read, Glob, Grep, Edit, Write, Bash]
+tools: [Read, Glob, Grep, Bash]
 memory: project
 maxTurns: 50
 ---

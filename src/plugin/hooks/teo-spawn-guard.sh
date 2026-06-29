@@ -8,7 +8,7 @@
 #   Only blocks in TEO_SPAWN_GUARD_MODE=enforce.
 #
 # KEY DESIGN DECISIONS
-#   D1 — Root/main session: when session_info.agent_type is absent (main/root
+#   D1 — Root/main session: when agent_type (top-level field) is absent (main/root
 #        session), always ALLOW + log "root-session-allow". Fail-open for root.
 #   D2 — Log-only default: TEO_SPAWN_GUARD_MODE defaults to "observe".
 #        In observe mode: log everything, never exit 2.
@@ -25,9 +25,8 @@
 #   {
 #     "tool_name": "Agent" | "Task",
 #     "tool_input": { "agent": "<name>" },
-#     "session_info": {          // optional — present in subagent sessions
-#       "agent_type": "<caller-agent-name>"
-#     }
+#     "agent_type": "<caller-agent-name>",    // optional — absent in root/main session
+#     "agent_id": "<caller-agent-id>"         // optional — absent in root/main session
 #   }
 #
 # EXIT CODES
@@ -161,8 +160,8 @@ fi
 # ---------------------------------------------------------------------------
 TARGET="$(echo "${STDIN_CONTENT}" | jq -r '.tool_input.agent // empty')"
 
-# session_info.agent_type is the caller; absent for root/main session
-CALLER="$(echo "${STDIN_CONTENT}" | jq -r '.session_info.agent_type // empty')"
+# agent_type (top-level) is the caller; absent for root/main session
+CALLER="$(echo "${STDIN_CONTENT}" | jq -r '.agent_type // empty')"
 
 # ---------------------------------------------------------------------------
 # Resolve mode and log dir early (needed for all log calls)
@@ -176,7 +175,7 @@ resolve_log_dir
 # D1: Root/main session handling — always fail-open
 # ---------------------------------------------------------------------------
 if [ -z "${CALLER}" ]; then
-  # No session_info.agent_type = root/main session; always allow
+  # No top-level agent_type = root/main session; always allow
   append_log_entry "root-session" "${TARGET}" "allowed" "${MODE}" "${TOOL_NAME}"
   exit 0
 fi

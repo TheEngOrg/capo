@@ -1,5 +1,7 @@
-// WS-SPAWN-GUARD — QA spec (post-impl, green)
-// Status: GREEN — implementation exists at src/plugin/hooks/teo-spawn-guard.sh
+// WS-SPAWN-GUARD — QA spec (post-impl, all green)
+// Status: GREEN — bug fixed: line 165 now reads .agent_type (top level).
+//   makePayload() updated to match real PreToolUse payload shape (top-level agent_type).
+//   STDIN JSON SHAPE comment in script header updated (session_info removed).
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { spawnSync } from "node:child_process";
@@ -40,9 +42,8 @@ import * as path from "node:path";
 //   {
 //     "tool_name": "Agent" | "Task",
 //     "tool_input": { "agent": "<name>" },
-//     "session_info": {          // optional — present in subagent sessions
-//       "agent_type": "<caller-agent-name>"
-//     }
+//     "agent_type": "<caller-agent-name>",    // optional — absent in root/main session
+//     "agent_id": "<caller-agent-id>"         // optional — absent in root/main session
 //   }
 //
 // EXIT CODES
@@ -107,11 +108,11 @@ afterEach(() => {
 
 /**
  * Build a PreToolUse payload as the hook receives it from Claude Code.
+ * Uses the correct real payload shape: agent_type is a TOP-LEVEL field.
  *
  * @param toolName   "Agent" or "Task"
  * @param target     Spawned agent name (tool_input.agent)
- * @param callerType The calling agent's name (session_info.agent_type).
- *                   Pass null to simulate the main/root session (no agent_type).
+ * @param callerType Top-level .agent_type value; pass null for root/main session (field absent).
  */
 function makePayload(
   toolName: "Agent" | "Task",
@@ -124,7 +125,7 @@ function makePayload(
     hook_event_name: "PreToolUse",
   };
   if (callerType !== null) {
-    base["session_info"] = { agent_type: callerType };
+    base["agent_type"] = callerType;
   }
   return JSON.stringify(base);
 }
@@ -771,6 +772,266 @@ describe("teo-spawn-guard.sh — COEXIST-01: PreToolUse guard and PostToolUse ci
     // The guard exits 0 on allowed spawns — PostToolUse citation-check runs AFTER, unaffected
     const { exitCode } = runHook(makePayload("Agent", "qa", "capo"));
     expect(exitCode, "spawn-guard must exit 0 for allowed spawn (capo → qa)").toBe(0);
+  });
+});
+
+// =============================================================================
+// BUG-FIX: CALLER FIELD — .agent_type at top level, NOT .session_info.agent_type
+//
+// Tracked as: WS-SPAWN-GUARD-CALLER-FIX
+//
+// Root cause: line 165 of teo-spawn-guard.sh reads
+//   CALLER="$(echo "${STDIN_CONTENT}" | jq -r '.session_info.agent_type // empty')"
+// but the real Claude Code PreToolUse payload has NO session_info wrapper.
+// Caller identity is a TOP-LEVEL field: .agent_type (optional string).
+//
+// Fix (one-liner): change that line to
+//   CALLER="$(echo "${STDIN_CONTENT}" | jq -r '.agent_type // empty')"
+//
+// These tests PASS after the fix (line 165 now reads .agent_type, not .session_info.agent_type).
+// makeTopLevelPayload() and makePayload() are now equivalent — both use top-level agent_type.
+// makeTopLevelPayload() is kept as a named alias for clarity in the BUG-FIX test cases.
+// =============================================================================
+
+/**
+ * Build a PreToolUse payload using the CORRECT real Claude Code shape:
+ * agent_type is a TOP-LEVEL field, no session_info wrapper.
+ *
+ * @param toolName   "Agent" or "Task"
+ * @param target     Spawned agent name (tool_input.agent)
+ * @param callerType Top-level .agent_type value; pass null for root/main session (field absent)
+ */
+function makeTopLevelPayload(
+  toolName: "Agent" | "Task",
+  target: string,
+  callerType: string | null
+): string {
+  const base: Record<string, unknown> = {
+    tool_name: toolName,
+    tool_input: { agent: target },
+    hook_event_name: "PreToolUse",
+  };
+  if (callerType !== null) {
+    base["agent_type"] = callerType;
+  }
+  return JSON.stringify(base);
+}
+
+// ---------------------------------------------------------------------------
+// MISUSE — BUG-FIX-01: session_info.agent_type set but NO top-level agent_type
+// Expected: caller must be treated as empty/root (D1 fires), NOT as the session_info value
+// Current (buggy) behavior: session_info.agent_type IS used, so the caller is identified
+// and allowlist enforcement runs — this is WRONG.
+// ---------------------------------------------------------------------------
+
+describe("teo-spawn-guard.sh — BUG-FIX-01 [MISUSE]: session_info.agent_type set, no top-level agent_type → root-session (D1)", () => {
+  it("exits 0 when only session_info.agent_type is set (no top-level agent_type) — must treat as root, not as named caller", () => {
+    // Payload has session_info.agent_type = "staff-engineer" (old wrong path)
+    // but NO top-level .agent_type field.
+    // After fix: script sees CALLER="" → D1 fires → root-session-allow, exit 0.
+    // Before fix (bug): script reads session_info.agent_type = "staff-engineer",
+    //   proceeds to allowlist check — wrong behavior.
+    const payload = JSON.stringify({
+      tool_name: "Agent",
+      tool_input: { agent: "qa" },
+      hook_event_name: "PreToolUse",
+      session_info: { agent_type: "staff-engineer" }, // old path only — no top-level agent_type
+    });
+    const { exitCode } = runHook(payload, { mode: "enforce" });
+    // Must exit 0: no top-level agent_type = root session = D1 always allows
+    expect(
+      exitCode,
+      "session_info.agent_type alone (no top-level agent_type) must be ignored — root session always exits 0"
+    ).toBe(0);
+  });
+
+  it("logs 'root-session-allow' (or similar) when only session_info.agent_type is set", () => {
+    const payload = JSON.stringify({
+      tool_name: "Agent",
+      tool_input: { agent: "qa" },
+      hook_event_name: "PreToolUse",
+      session_info: { agent_type: "staff-engineer" },
+    });
+    runHook(payload, { mode: "observe" });
+
+    const log = readSpawnLog();
+    // A log entry must exist and must NOT identify "staff-engineer" as the caller
+    if (log !== null && log.length > 0) {
+      const entry = log[log.length - 1];
+      const caller = String(entry["caller"] ?? "");
+      expect(
+        caller === "staff-engineer",
+        `caller must NOT be "staff-engineer" when only session_info.agent_type is set — got: "${caller}"`
+      ).toBe(false);
+      // Caller should be empty string, "root-session", or similar root indicator
+      const verdict = String(entry["verdict"] ?? "");
+      expect(
+        verdict === "allowed" || verdict.includes("allow"),
+        `verdict must be allowed (D1 root-session path), got: "${verdict}"`
+      ).toBe(true);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// MISUSE — BUG-FIX-02: both session_info.agent_type AND top-level agent_type set
+// Expected: top-level value wins; session_info is ignored entirely
+// ---------------------------------------------------------------------------
+
+describe("teo-spawn-guard.sh — BUG-FIX-02 [MISUSE]: both session_info.agent_type and top-level agent_type present → top-level wins", () => {
+  it("uses top-level agent_type and ignores session_info.agent_type when both are present", () => {
+    // Top-level: "capo" (wildcard in allowlist — any target allowed)
+    // session_info: "staff-engineer" (only allowed to spawn software-engineer)
+    // If top-level wins: capo → qa → allowed (exit 0 in enforce)
+    // If session_info wins (bug): staff-engineer → qa → blocked (exit 2 in enforce) — WRONG
+    const payload = JSON.stringify({
+      tool_name: "Agent",
+      tool_input: { agent: "qa" },
+      hook_event_name: "PreToolUse",
+      agent_type: "capo", // correct top-level path — wildcard caller
+      session_info: { agent_type: "staff-engineer" }, // wrong old path — restricted caller
+    });
+    const { exitCode } = runHook(payload, { mode: "enforce" });
+    // If top-level "capo" is used: capo has ["*"], qa is allowed → exit 0
+    // If session_info "staff-engineer" is used: staff-engineer cannot spawn qa → exit 2
+    expect(
+      exitCode,
+      "top-level agent_type='capo' must win over session_info.agent_type='staff-engineer' — capo wildcard allows qa, must exit 0"
+    ).toBe(0);
+  });
+
+  it("log entry records top-level agent_type value, not session_info.agent_type, when both are present", () => {
+    const payload = JSON.stringify({
+      tool_name: "Agent",
+      tool_input: { agent: "software-engineer" },
+      hook_event_name: "PreToolUse",
+      agent_type: "staff-engineer", // top-level: staff-engineer can spawn software-engineer
+      session_info: { agent_type: "qa" }, // session_info: qa cannot spawn anything
+    });
+    runHook(payload, { mode: "observe" });
+
+    const log = readSpawnLog();
+    if (log !== null && log.length > 0) {
+      const entry = log[log.length - 1];
+      const caller = String(entry["caller"] ?? "");
+      expect(
+        caller,
+        `spawn-log caller must be the top-level agent_type value "staff-engineer", not session_info value "qa"`
+      ).toBe("staff-engineer");
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GOLDEN PATH — BUG-FIX-03: top-level agent_type set, target NOT in allowlist (enforce mode)
+// Expected: correct caller identified from top level, allowlist enforced → exit 2
+// ---------------------------------------------------------------------------
+
+describe("teo-spawn-guard.sh — BUG-FIX-03 [GOLDEN]: top-level agent_type='capo', disallowed target in enforce → allowlist enforced correctly", () => {
+  it("identifies caller from top-level agent_type and applies allowlist when target not in caller's list", () => {
+    // staff-engineer (top-level) can only spawn software-engineer — NOT qa
+    // This must exit 2 in enforce mode, proving the correct field is being read
+    const payload = makeTopLevelPayload("Agent", "qa", "staff-engineer");
+    const { exitCode } = runHook(payload, { mode: "enforce" });
+    expect(
+      exitCode,
+      "top-level agent_type='staff-engineer' spawning 'qa' (not permitted) must exit 2 in enforce mode"
+    ).toBe(2);
+  });
+
+  it("log entry caller field equals the top-level agent_type value for a blocked spawn", () => {
+    const payload = makeTopLevelPayload("Agent", "qa", "staff-engineer");
+    runHook(payload, { mode: "enforce" });
+
+    const log = readSpawnLog();
+    if (log !== null && log.length > 0) {
+      const entry = log[log.length - 1];
+      const caller = String(entry["caller"] ?? "");
+      expect(caller, `spawn-log caller must be "staff-engineer" (from top-level agent_type)`).toBe(
+        "staff-engineer"
+      );
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GOLDEN PATH — BUG-FIX-04: NO agent_type at all → D1 root-session-allow
+// ---------------------------------------------------------------------------
+
+describe("teo-spawn-guard.sh — BUG-FIX-04 [GOLDEN]: no top-level agent_type at all (pure root session) → D1 fires, allowed + root-session log", () => {
+  it("exits 0 for a payload with no agent_type field anywhere (root session, enforce mode)", () => {
+    // Neither .agent_type nor .session_info.agent_type present
+    const payload = JSON.stringify({
+      tool_name: "Agent",
+      tool_input: { agent: "capo" },
+      hook_event_name: "PreToolUse",
+      // intentionally no agent_type at any level
+    });
+    const { exitCode } = runHook(payload, { mode: "enforce" });
+    expect(
+      exitCode,
+      "payload with no agent_type at all must exit 0 (D1 root-session fail-open)"
+    ).toBe(0);
+  });
+
+  it("logs a root-session-allow (or allowed) verdict when no agent_type present", () => {
+    const payload = JSON.stringify({
+      tool_name: "Agent",
+      tool_input: { agent: "software-engineer" },
+      hook_event_name: "PreToolUse",
+    });
+    runHook(payload, { mode: "observe" });
+
+    const log = readSpawnLog();
+    if (log !== null && log.length > 0) {
+      const entry = log[log.length - 1];
+      const caller = String(entry["caller"] ?? "");
+      const verdict = String(entry["verdict"] ?? "");
+      // caller should indicate root-session, not an empty-matched subagent
+      expect(
+        caller !== "staff-engineer" && caller !== "qa" && caller !== "capo",
+        `root-session spawn must not log a named subagent as caller, got: "${caller}"`
+      ).toBe(true);
+      expect(
+        verdict === "allowed" || verdict.includes("allow"),
+        `root-session spawn must log an allowed verdict, got: "${verdict}"`
+      ).toBe(true);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GOLDEN PATH — BUG-FIX-05: top-level agent_type='capo', allowed target → exit 0
+// ---------------------------------------------------------------------------
+
+describe("teo-spawn-guard.sh — BUG-FIX-05 [GOLDEN]: top-level agent_type='capo', allowed target → correctly identified and allowed", () => {
+  it("exits 0 when top-level agent_type='capo' spawns an allowed target (enforce mode)", () => {
+    // capo has ["*"] wildcard — can spawn anything; qa is a valid target
+    const payload = makeTopLevelPayload("Agent", "qa", "capo");
+    const { exitCode } = runHook(payload, { mode: "enforce" });
+    expect(
+      exitCode,
+      "top-level agent_type='capo' (wildcard) spawning 'qa' must exit 0 in enforce mode"
+    ).toBe(0);
+  });
+
+  it("logs caller='capo' and verdict='allowed' for a permitted top-level-field spawn", () => {
+    const payload = makeTopLevelPayload("Agent", "software-engineer", "capo");
+    runHook(payload, { mode: "observe" });
+
+    const log = readSpawnLog();
+    expect(log, "spawn-log must be created for top-level capo → software-engineer").not.toBeNull();
+
+    if (log !== null && log.length > 0) {
+      const entry = log[log.length - 1];
+      const caller = String(entry["caller"] ?? "");
+      const verdict = String(entry["verdict"] ?? "");
+      expect(caller, "log caller must be 'capo' (from top-level agent_type)").toBe("capo");
+      expect(
+        verdict === "allowed" || verdict.includes("allow"),
+        `log verdict must be allowed, got: "${verdict}"`
+      ).toBe(true);
+    }
   });
 });
 

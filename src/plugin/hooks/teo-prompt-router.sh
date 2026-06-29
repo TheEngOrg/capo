@@ -16,12 +16,18 @@ set -uo pipefail
 # Read stdin JSON
 input="$(cat)"
 
-# Extract prompt field — if jq not available, fail-open
+# Extract prompt field — use jq if available, fall back to pure-bash regex
 if ! command -v jq &>/dev/null; then
-  exit 0
+  # Bash fallback: extract "prompt":"..." from compact single-line JSON.
+  # Handles optional whitespace after the colon (e.g. "prompt": "value").
+  if [[ "$input" =~ \"prompt\":\ *\"([^\"]*)\" ]]; then
+    prompt="${BASH_REMATCH[1]}"
+  else
+    prompt=""
+  fi
+else
+  prompt="$(printf '%s' "$input" | jq -r '.prompt // empty' 2>/dev/null)"
 fi
-
-prompt="$(printf '%s' "$input" | jq -r '.prompt // empty' 2>/dev/null)"
 
 # Empty or null prompt — pass through
 if [ -z "$prompt" ]; then

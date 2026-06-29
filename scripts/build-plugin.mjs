@@ -23,6 +23,7 @@ import {
 } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { execFileSync } from "node:child_process";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(__dirname, "..");
@@ -119,6 +120,25 @@ const localMarketplaceJson = {
 };
 const dstMarketplaceJsonPath = join(dstClaudePluginDir, "marketplace.json");
 writeFileSync(dstMarketplaceJsonPath, JSON.stringify(localMarketplaceJson, null, 2) + "\n", "utf8");
+
+// ---------------------------------------------------------------------------
+// Step 7: Generate spawn-allowlist.json and copy to plugin/
+// ---------------------------------------------------------------------------
+const srcAllowlistOut = join(REPO_ROOT, "src", "plugin", "spawn-allowlist.json");
+execFileSync(
+  process.execPath,
+  [join(REPO_ROOT, "src", "plugin", "scripts", "generate-spawn-allowlist.js")],
+  {
+    stdio: "inherit",
+    env: {
+      ...process.env,
+      TEO_AGENTS_DIR: SRC_AGENTS_DIR,
+      TEO_ALLOWLIST_OUT: srcAllowlistOut,
+    },
+  }
+);
+cpSync(srcAllowlistOut, join(PLUGIN_DIR, "spawn-allowlist.json"));
+console.log("spawn-allowlist.json generated");
 
 console.log("build:plugin complete");
 console.log(`  agents : ${readdirSync(dstAgentsDir).length} files`);

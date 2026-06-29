@@ -1,0 +1,15 @@
+{
+  "generated_at": "2026-06-29T05:56:40.997Z",
+  "source": "src/plugin/agents/",
+  "allowlist": {
+    "art-director": ["design"],
+    "capo": ["*"],
+    "cto": ["staff-engineer", "engineering-director"],
+    "engineering-director": ["engineering-manager", "staff-engineer", "devops-engineer"],
+    "engineering-manager": ["qa", "software-engineer", "staff-engineer"],
+    "product-manager": ["qa", "design"],
+    "product-owner": ["product-manager"],
+    "staff-engineer": ["software-engineer"],
+    "studio-director": ["*"]
+  }
+}

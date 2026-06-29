@@ -1146,6 +1146,139 @@ describe("golden(ADR-075-PR3): agent count still 23 — no agents added or remov
   });
 });
 
+// =============================================================================
+// ADR-075 PR4 — Revoke Edit+Write from design + technical-writer agents
+//
+// These tests are RED until implementation. Dev must remove Edit and Write from
+// the tools: frontmatter of design.md and technical-writer.md.
+//
+// Post-change toolsets:
+//   design:           [Read, Glob, Grep]          (no Bash — never had it)
+//   technical-writer: [Read, Glob, Grep, Bash]    (Bash kept for teo-agent-toolset)
+//
+// Ordering: misuse → boundary → golden path (ADR-064 critical-path policy)
+// =============================================================================
+
+// ---------------------------------------------------------------------------
+// MISUSE — Edit and Write must be ABSENT after the change (4 tests)
+// ---------------------------------------------------------------------------
+
+describe("misuse(ADR-075-PR4): design must NOT have Edit or Write in tools:", () => {
+  it("design.md tools: does NOT contain Edit", () => {
+    // MISUSE: design produces wireframes/mockups via prompts — it never directly
+    // mutates files. Direct Edit is revoked by ADR-075 Q3=B. If Edit appears,
+    // the capability gate is incomplete and the agent can bypass the intent boundary.
+    const content = readFile("src/plugin/agents/design.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    expect(hasTool(tokens, "Edit")).toBe(false);
+  });
+
+  it("design.md tools: does NOT contain Write", () => {
+    // MISUSE: design has no legitimate file-write path — output is prompt-driven
+    // artifact descriptions, not source mutations. Write is revoked.
+    const content = readFile("src/plugin/agents/design.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    expect(hasTool(tokens, "Write")).toBe(false);
+  });
+});
+
+describe("misuse(ADR-075-PR4): technical-writer must NOT have Edit or Write in tools:", () => {
+  it("technical-writer.md tools: does NOT contain Edit", () => {
+    // MISUSE: technical-writer authors docs through teo-agent-toolset subcommands
+    // invoked via Bash. Direct Edit access is revoked by ADR-075 Q3=B.
+    // If Edit remains, the agent can mutate files outside the controlled path.
+    const content = readFile("src/plugin/agents/technical-writer.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    expect(hasTool(tokens, "Edit")).toBe(false);
+  });
+
+  it("technical-writer.md tools: does NOT contain Write", () => {
+    // MISUSE: new doc files are created through teo-agent-toolset, not direct
+    // Write. Write is revoked by ADR-075 Q3=B.
+    const content = readFile("src/plugin/agents/technical-writer.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    expect(hasTool(tokens, "Write")).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// BOUNDARY — exact token count after the strip (2 tests)
+// ---------------------------------------------------------------------------
+
+describe("boundary(ADR-075-PR4): exact token count after Edit+Write revocation", () => {
+  it("design.md tools: exactly 3 tokens [Read, Glob, Grep]", () => {
+    // BOUNDARY: 5 tokens before (Read, Glob, Grep, Edit, Write) → 3 after.
+    // Count != 3 means either Edit/Write were not fully removed, or a tool was
+    // accidentally added (e.g. Bash, which design never had).
+    const content = readFile("src/plugin/agents/design.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    expect(tokens).toHaveLength(3);
+  });
+
+  it("technical-writer.md tools: exactly 4 tokens [Read, Glob, Grep, Bash]", () => {
+    // BOUNDARY: 6 tokens before (Read, Glob, Grep, Edit, Write, Bash) → 4 after.
+    // Count != 4 means Edit/Write were not removed, or Bash was accidentally lost.
+    const content = readFile("src/plugin/agents/technical-writer.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    expect(tokens).toHaveLength(4);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GOLDEN PATH — retained tools present; Bash disposition correct (3 tests)
+// ---------------------------------------------------------------------------
+
+describe("golden(ADR-075-PR4): technical-writer retains Bash; design does not gain Bash", () => {
+  it("technical-writer.md tools: retains Bash after Edit+Write revocation", () => {
+    // GOLDEN: technical-writer must keep Bash to invoke teo-agent-toolset memory
+    // write subcommands. Dropping Bash would eliminate the only tool-write path
+    // available after Edit and Write are revoked.
+    const content = readFile("src/plugin/agents/technical-writer.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    expect(hasTool(tokens, "Bash")).toBe(true);
+  });
+
+  it("design.md tools: does NOT contain Bash (design never had it; must not gain it)", () => {
+    // GOLDEN: design never had Bash before ADR-075 PR4 and must not gain it.
+    // The Q3=B rule is scope-limited — only tools explicitly permitted by the
+    // agent's purpose are kept. Bash was never part of design's toolset.
+    // Adding Bash would silently expand its capability beyond the intended set.
+    const content = readFile("src/plugin/agents/design.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    expect(hasTool(tokens, "Bash")).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GUARD — Bash-absence is a hard invariant for design (1 test, mirrors golden)
+// ---------------------------------------------------------------------------
+
+describe("golden(ADR-075-PR4): design Bash-absence guard — must never appear in post-PR4 state", () => {
+  it("design.md tools: Bash is absent (never-had, must-not-appear invariant)", () => {
+    // GUARD: design produces visual artifacts through prompts alone; it has no
+    // CLI or memory-write path that requires Bash. This test is a permanent
+    // guard — if any future PR adds Bash to design, it should fail here first.
+    const content = readFile("src/plugin/agents/design.md");
+    const tokens = parseToolTokens(extractToolsLine(content));
+    expect(hasTool(tokens, "Bash")).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// STABILITY — agent count must remain 23 (1 test)
+// ---------------------------------------------------------------------------
+
+describe("golden(ADR-075-PR4): agent count unchanged — no agents added or removed", () => {
+  it("agents/ directory still contains exactly 23 shipped agent files after PR4", () => {
+    // GOLDEN: PR4 only modifies tools: frontmatter in 2 existing agents.
+    // The total agent count must remain 23. A count change indicates an
+    // accidental deletion, rename, or addition outside PR4 scope.
+    const agentsDir = root("src", "plugin", "agents");
+    const files = fs.readdirSync(agentsDir).filter((f) => f.endsWith(".md"));
+    expect(files.length).toBe(23);
+  });
+});
+
 describe("golden(WS-SHARED-FILES): all 23 shipped agent files exist (no accidental deletion)", () => {
   // GOLDEN: the strip operation must not delete any agent files. A count check
   // plus per-file existence check catches a dev who accidentally deleted or
